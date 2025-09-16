@@ -1,0 +1,24 @@
+# Node/Nest app
+app/node_modules/
+app/dist/
+app/package-lock.json
+
+# FreeSWITCH runtime data
+data/log/
+data/lib/
+data/recordings/
+
+# Environment & secrets
+.env
+
+# Docker artifacts
+*.tar
+
+# macOS / editor clutter
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
+

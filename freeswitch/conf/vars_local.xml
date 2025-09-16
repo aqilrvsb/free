@@ -1,0 +1,7 @@
+<include>
+  <X-PRE-PROCESS cmd="set" data="external_sip_ip=${env:EXT_SIP_IP}"/>
+  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=${env:EXT_RTP_IP}"/>
+  <!-- Vô hiệu hoá STUN mặc định -->
+  <X-PRE-PROCESS cmd="set" data="stun-set-external-sip-ip=false"/>
+  <X-PRE-PROCESS cmd="set" data="stun-set-external-rtp-ip=false"/>
+</include>

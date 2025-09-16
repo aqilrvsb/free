@@ -1,0 +1,62 @@
+version: "3.9"
+services:
+  app:
+    image: node:20-slim
+    container_name: fs-xml-app
+    working_dir: /app
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - APP_PORT=${APP_PORT:-3000}
+      - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
+    entrypoint: ["/usr/local/bin/app-entrypoint.sh"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./app:/app
+      - app-node-modules:/app/node_modules
+      - ./docker/app-entrypoint.sh:/usr/local/bin/app-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  freeswitch:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/freeswitch.Dockerfile
+      args:
+        - FS_TOKEN=${FS_TOKEN}
+    container_name: freeswitch-core
+    depends_on:
+      app:
+        condition: service_healthy
+    network_mode: host
+    environment:
+      - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
+      - EXT_SIP_IP=${EXT_SIP_IP:-auto}
+      - EXT_RTP_IP=${EXT_RTP_IP:-auto}
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      nice: -20
+    volumes:
+      # Mount only specific config files to avoid shadowing defaults
+      - ./freeswitch/conf/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml
+      - ./freeswitch/conf/autoload_configs/xml_curl.conf.xml:/etc/freeswitch/autoload_configs/xml_curl.conf.xml
+      - ./freeswitch/conf/vars_local.xml:/etc/freeswitch/vars_local.xml
+      - ./freeswitch/conf/sip_profiles/internal.xml:/etc/freeswitch/sip_profiles/internal.xml
+      # Bind-mount runtime data; entrypoint fixes ownership to freeswitch user
+      - ./data/recordings:/recordings
+      - ./data/log:/var/log/freeswitch
+      - ./data/lib:/var/lib/freeswitch
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "fs_cli -P 8022 -p ClueCon -x 'status' | grep -q UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  app-node-modules: {}
