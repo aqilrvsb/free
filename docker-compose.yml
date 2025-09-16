@@ -32,7 +32,6 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    network_mode: host
     environment:
       - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
       - EXT_SIP_IP=${EXT_SIP_IP:-auto}
@@ -53,6 +52,15 @@ services:
       - ./data/recordings:/recordings
       - ./data/log:/var/log/freeswitch
       - ./data/lib:/var/lib/freeswitch
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "5061:5061/tcp"
+      - "5080:5080/udp"
+      - "6080:6080/udp"
+      - "5066:5066/tcp"
+      - "7443:7443/tcp"
+      - "16384-16420:16384-16420/udp"
     healthcheck:
       test: ["CMD", "bash", "-lc", "fs_cli -P 8022 -p ClueCon -x 'status' | grep -q UP"]
       interval: 15s
