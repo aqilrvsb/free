@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { create } from 'xmlbuilder2';
+import { createHash } from 'crypto';
 import { Tenants, Users, Routing } from './data/store';
 
 interface DialplanParams {
@@ -79,6 +80,8 @@ export class FsService {
 
     const password = userRec?.password || '1234';
     const context = `context_${tenant?.id || 'tenant1'}`;
+    const realm = domain;
+    const a1Hash = createHash('md5').update(`${user}:${realm}:${password}`).digest('hex');
 
     const doc = create({ version: '1.0' })
       .ele('document', { type: 'freeswitch/xml' })
@@ -87,6 +90,7 @@ export class FsService {
       .ele('user', { id: user })
       .ele('params')
       .ele('param', { name: 'password', value: password }).up()
+      .ele('param', { name: 'a1-hash', value: a1Hash }).up()
       .ele('param', { name: 'dial-string', value: '{sip_invite_domain=${domain_name}}sofia/internal/${dialed_user}@${domain_name}' }).up()
       .up()
       .ele('variables')

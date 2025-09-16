@@ -46,6 +46,7 @@ services:
       # Mount only specific config files to avoid shadowing defaults
       - ./freeswitch/conf/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml
       - ./freeswitch/conf/autoload_configs/xml_curl.conf.xml:/etc/freeswitch/autoload_configs/xml_curl.conf.xml
+      - ./freeswitch/conf/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml
       - ./freeswitch/conf/vars_local.xml:/etc/freeswitch/vars_local.xml
       - ./freeswitch/conf/sip_profiles/internal.xml:/etc/freeswitch/sip_profiles/internal.xml
       # Bind-mount runtime data; entrypoint fixes ownership to freeswitch user
