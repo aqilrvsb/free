@@ -99,6 +99,7 @@
     <param name="sip-ip" value="$${local_ip_v4}"/>
     <param name="hold-music" value="$${hold_music}"/>
     <param name="apply-nat-acl" value="nat.auto"/>
+    <param name="auto-nat" value="true"/>
 
 
     <!-- (default true) set to false if you do not wish to have called party info in 1XX responses -->
@@ -107,7 +108,7 @@
     <!-- extended info parsing -->
     <!-- <param name="extended-info-parsing" value="true"/> -->
 
-    <!--<param name="aggressive-nat-detection" value="true"/>-->
+    <param name="aggressive-nat-detection" value="true"/>
     <!--
         There are known issues (asserts and segfaults) when 100rel is enabled.
         It is not recommended to enable 100rel at this time.
@@ -284,6 +285,8 @@
     <param name="inbound-reg-force-matching-username" value="true"/>
     <!-- on authed calls, authenticate *all* the packets not just invite -->
     <param name="auth-all-packets" value="false"/>
+    <param name="force-contact" value="sip:%(user)@$${external_sip_ip}:$${internal_sip_port}"/>
+    <param name="rewrite-contact" value="true"/>
 
     <!-- external_sip_ip
          Used as the public IP address for SDP.

@@ -18,32 +18,127 @@ interface DirectoryParams {
 export class FsService {
 
   dialplanXML(params: DialplanParams): string {
-    const context = params.context || 'default';
-    const dest = (params.destination_number || '').trim();
-    const domain = params.domain || 'default.local';
+    let domain = (params.domain || '').trim();
+    let tenant = Tenants.find(t => t.domain === domain);
+    let tenantId = tenant?.id;
 
-    // Simple demo rules:
-    // 1) 91xxx → bridge to user/1xxx@domain (internal)
-    // 2) 00E164 → bridge to sofia/gateway/pstn/E164 (PSTN)
-    // 3) Fallback: 9{ext} → user/{ext}@domain
+    const contextHint = params.context || '';
+    if (!tenantId && contextHint.startsWith('context_')) {
+      const ctxTenantId = contextHint.replace('context_', '');
+      const ctxTenant = Tenants.find(t => t.id === ctxTenantId);
+      if (ctxTenant) {
+        tenant = ctxTenant;
+        tenantId = ctxTenant.id;
+        domain = ctxTenant.domain;
+      }
+    }
+
+    const destRaw = (params.destination_number || '').trim();
+
+    if (!tenantId && destRaw) {
+      const destUser = Users.find(u => u.id === destRaw);
+      if (destUser) {
+        tenantId = destUser.tenantId;
+        const destTenant = Tenants.find(t => t.id === tenantId);
+        if (destTenant) {
+          tenant = destTenant;
+          domain = destTenant.domain;
+        }
+      }
+    }
+
+    if (!tenantId && domain) {
+      const fallbackTenant = Tenants.find(t => t.domain === domain);
+      if (fallbackTenant) {
+        tenant = fallbackTenant;
+        tenantId = fallbackTenant.id;
+      }
+    }
+
+    if (!tenantId) {
+      tenant = Tenants[0];
+      tenantId = tenant?.id || 'tenant1';
+      domain = tenant?.domain || 'default.local';
+    }
+
+    const routeCfg = Routing[tenantId] || {};
+    const context = params.context || `context_${tenantId}`;
+    const internalPrefix: string = routeCfg.internalPrefix || '9';
+    const vmPrefix: string = routeCfg.voicemailPrefix || '*9';
+    const pstnGateway: string = routeCfg.pstnGateway || 'pstn';
+
+    const dest = destRaw.replace(/\s+/g, '');
+
+    // Base actions for all routes
     let actions: Array<{ app: string; data?: string }> = [
       { app: 'set', data: 'ringback=${us-ring}' },
       { app: 'set', data: 'hangup_after_bridge=true' },
     ];
 
     let extBridge: string | null = null;
-    const mUser = dest.match(/^91(\d{3,5})$/);
-    const mPstn = dest.match(/^00(\d{6,15})$/);
+    const localUsers = Users.filter(u => u.tenantId === tenantId).map(u => u.id);
+    const hasLocalUser = (ext: string) => localUsers.includes(ext);
 
-    if (mUser) {
-      const ext = mUser[1];
-      extBridge = `user/${ext}@${domain}`;
-    } else if (mPstn) {
-      const e164 = mPstn[1];
-      extBridge = `sofia/gateway/pstn/${e164}`;
-    } else if (dest.startsWith('9') && dest.length >= 4) {
-      const ext = dest.substring(1);
-      extBridge = `user/${ext}@${domain}`;
+    // 1) direct extension (e.g., 1001)
+    if (!extBridge && /^\d{2,6}$/.test(dest) && hasLocalUser(dest)) {
+      extBridge = `user/${dest}@${domain}`;
+    }
+
+    // 2) prefixed internal call (default 9 + ext)
+    if (!extBridge && internalPrefix && dest.startsWith(internalPrefix)) {
+      const ext = dest.substring(internalPrefix.length);
+      if (ext && hasLocalUser(ext)) {
+        extBridge = `user/${ext}@${domain}`;
+      }
+    }
+
+    // 3) voicemail access prefix (optional)
+    if (!extBridge && vmPrefix && dest.startsWith(vmPrefix)) {
+      const ext = dest.substring(vmPrefix.length);
+      if (ext && hasLocalUser(ext)) {
+        actions.push({ app: 'lua', data: `voicemail.lua ${domain} ${ext}` });
+        const doc = create({ version: '1.0' })
+          .ele('document', { type: 'freeswitch/xml' })
+          .ele('section', { name: 'dialplan' })
+          .ele('context', { name: context })
+          .ele('extension', { name: `vm_${dest}` })
+          .ele('condition', { field: 'destination_number', expression: `^${dest}$` });
+        for (const a of actions) {
+          if (a.data) doc.ele('action', { application: a.app, data: a.data }).up();
+          else doc.ele('action', { application: a.app }).up();
+        }
+        return doc.end({ prettyPrint: true });
+      }
+    }
+
+    // 4) Dial other tenant via dest pattern user@otherdomain
+    if (!extBridge && dest.includes('@')) {
+      const [userPart, domainPart] = dest.split('@');
+      if (userPart && domainPart) {
+        extBridge = `user/${userPart}@${domainPart}`;
+      }
+    }
+
+    // 5) International / PSTN routing (E.164 or leading 00/+)
+    const normalizedDigits = dest.replace(/^\+/, '');
+    if (!extBridge && /^00\d{6,15}$/.test(dest)) {
+      extBridge = `sofia/gateway/${pstnGateway}/${dest.substring(2)}`;
+    } else if (!extBridge && /^\+?\d{6,15}$/.test(dest) && routeCfg.enableE164 !== false) {
+      extBridge = `sofia/gateway/${pstnGateway}/${normalizedDigits}`;
+    }
+
+    // 6) Custom routing hook: allow override via Routing config
+    if (!extBridge && typeof routeCfg.customHandler === 'function') {
+      try {
+        extBridge = routeCfg.customHandler({
+          tenantId,
+          domain,
+          destination: dest,
+        }) || null;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[dialplan customHandler error]', err);
+      }
     }
 
     if (!extBridge) {
@@ -73,9 +168,24 @@ export class FsService {
 
   directoryXML(params: DirectoryParams): string {
     const user = (params.user || '').trim();
-    const domain = params.domain || 'default.local';
+    let domain = (params.domain || '').trim();
+    let tenant = Tenants.find(t => t.domain === domain);
 
-    const tenant = Tenants.find(t => t.domain === domain);
+    if (!tenant && user) {
+      const userRec = Users.find(u => u.id === user);
+      if (userRec) {
+        tenant = Tenants.find(t => t.id === userRec.tenantId);
+        if (tenant) {
+          domain = tenant.domain;
+        }
+      }
+    }
+
+    if (!tenant) {
+      tenant = Tenants[0];
+      domain = tenant?.domain || 'default.local';
+    }
+
     const userRec = Users.find(u => u.id === user && u.tenantId === (tenant?.id || 'tenant1'));
 
     const password = userRec?.password || '1234';

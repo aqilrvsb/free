@@ -64,7 +64,7 @@ if [ -f /etc/freeswitch/vars.xml ]; then
   fi
 fi
 
-exec gosu freeswitch:freeswitch /usr/bin/freeswitch -nonat -nf
+exec gosu freeswitch:freeswitch /usr/bin/freeswitch -nf
 EOF
 RUN chmod +x /usr/local/bin/fs-entrypoint.sh
 

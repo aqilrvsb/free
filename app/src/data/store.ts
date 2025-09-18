@@ -15,9 +15,15 @@ export const Users = [
 // keep an object keyed by tenant.
 export const Routing = {
   tenant1: {
+    internalPrefix: '9',
+    voicemailPrefix: '*9',
     pstnGateway: 'pstn',
+    enableE164: true,
   },
   tenant2: {
+    internalPrefix: '8',
+    voicemailPrefix: '*8',
     pstnGateway: 'pstn',
+    enableE164: true,
   },
 };
