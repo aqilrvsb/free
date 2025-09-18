@@ -201,7 +201,11 @@ export class FsService {
       .ele('params')
       .ele('param', { name: 'password', value: password }).up()
       .ele('param', { name: 'a1-hash', value: a1Hash }).up()
-      .ele('param', { name: 'dial-string', value: '{sip_invite_domain=${domain_name}}sofia/internal/${dialed_user}@${domain_name}' }).up()
+      .ele('param', {
+        name: 'dial-string',
+        value:
+          '{sip_invite_domain=${domain_name},presence_id=${dialed_user}@${domain_name}}${sofia_contact(${dialed_user}@${domain_name})}',
+      }).up()
       .up()
       .ele('variables')
       .ele('variable', { name: 'user_context', value: context }).up()
