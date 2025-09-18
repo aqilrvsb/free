@@ -1,7 +1,7 @@
 <configuration name="xml_curl.conf" description="XML Fetch via HTTP">
   <bindings>
     <binding name="default">
-      <param name="gateway-url" value="http://app:3000/fs/xml"/>
+      <param name="gateway-url" value="http://localhost:3000/fs/xml"/>
       <param name="gateway-method" value="GET"/>
       <param name="gateway-timeout" value="2000"/>
       <param name="gateway-cache" value="false"/>
