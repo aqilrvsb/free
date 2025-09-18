@@ -22,7 +22,7 @@ services:
       retries: 10
 
   freeswitch:
-    platform: linux/amd64
+    # platform: linux/amd64
     build:
       context: .
       dockerfile: docker/freeswitch.Dockerfile
