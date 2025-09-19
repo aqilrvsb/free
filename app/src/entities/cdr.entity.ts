@@ -1,0 +1,51 @@
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+
+@Entity({ name: 'cdr_records' })
+@Index(['tenantId', 'startTime'])
+@Index(['callUuid'])
+export class CdrEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'call_uuid', type: 'varchar', length: 128 })
+  callUuid!: string;
+
+  @Column({ name: 'leg', type: 'varchar', length: 4, nullable: true })
+  leg?: string | null;
+
+  @Column({ name: 'direction', type: 'varchar', length: 32, nullable: true })
+  direction?: string | null;
+
+  @Column({ name: 'tenant_id', type: 'varchar', length: 64, nullable: true })
+  tenantId?: string | null;
+
+  @Column({ name: 'from_number', type: 'varchar', length: 64, nullable: true })
+  fromNumber?: string | null;
+
+  @Column({ name: 'to_number', type: 'varchar', length: 64, nullable: true })
+  toNumber?: string | null;
+
+  @Column({ name: 'duration_seconds', type: 'int', default: 0 })
+  durationSeconds!: number;
+
+  @Column({ name: 'bill_seconds', type: 'int', default: 0 })
+  billSeconds!: number;
+
+  @Column({ name: 'hangup_cause', type: 'varchar', length: 64, nullable: true })
+  hangupCause?: string | null;
+
+  @Column({ name: 'start_time', type: 'datetime', nullable: true })
+  startTime?: Date | null;
+
+  @Column({ name: 'answer_time', type: 'datetime', nullable: true })
+  answerTime?: Date | null;
+
+  @Column({ name: 'end_time', type: 'datetime', nullable: true })
+  endTime?: Date | null;
+
+  @Column({ name: 'raw_payload', type: 'longtext' })
+  rawPayload!: string;
+
+  @CreateDateColumn({ name: 'received_at' })
+  receivedAt!: Date;
+}

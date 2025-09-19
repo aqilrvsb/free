@@ -2,8 +2,8 @@
   <settings>
     <!-- Listen only on localhost for security; change if needed -->
     <param name="listen-ip" value="127.0.0.1"/>
-    <!-- Change ESL port from default 8021 to 8022 -->
-    <param name="listen-port" value="8022"/>
+    <!-- Default ESL port 8021; keep in sync with healthcheck -->
+    <param name="listen-port" value="8021"/>
     <!-- Default password ClueCon; align with fs_cli in healthcheck -->
     <param name="password" value="ClueCon"/>
     <param name="apply-inbound-acl" value="loopback.auto"/>

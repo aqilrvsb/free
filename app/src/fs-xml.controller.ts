@@ -1,6 +1,5 @@
 import { Controller, Get, Header, Query, Body, Post, HttpCode, Req } from '@nestjs/common';
 import { Request } from 'express';
-import { Users, Tenants } from './data/store';
 import { FsService } from './fs.service';
 
 @Controller()
@@ -14,14 +13,14 @@ export class FsXmlController {
 
   @Get('/fs/xml')
   @Header('Content-Type', 'application/xml')
-  handle(
+  async handle(
     @Query('section') section: string,
     @Query('context') context?: string,
     @Query('destination_number') destination_number?: string,
     @Query('domain') domain?: string,
     @Query('user') user?: string,
     @Req() req?: Request,
-  ): string {
+  ): Promise<string> {
     if (req) {
       // eslint-disable-next-line no-console
       console.log('[fs/xml][query]', req.query);
@@ -32,7 +31,7 @@ export class FsXmlController {
   @Post('/fs/xml')
   @HttpCode(200)
   @Header('Content-Type', 'application/xml')
-  handlePost(@Body() body: Record<string, string>, @Req() req: Request): string {
+  async handlePost(@Body() body: Record<string, string>, @Req() req: Request): Promise<string> {
     if (req?.body) {
       // eslint-disable-next-line no-console
       console.log('[fs/xml][body]', req.body);
@@ -40,7 +39,7 @@ export class FsXmlController {
     return this.handleRequest({ section: body?.section, context: body?.context, destination_number: body?.destination_number, domain: body?.domain, user: body?.user, body, query: req?.query as Record<string, any> });
   }
 
-  private handleRequest(payload: {
+  private async handleRequest(payload: {
     section?: string;
     context?: string;
     destination_number?: string;
@@ -49,7 +48,7 @@ export class FsXmlController {
     body?: Record<string, any>;
     source?: string;
     query?: Record<string, any>;
-  }): string {
+  }): Promise<string> {
     const { section, body, query = {} } = payload;
 
     const pickValue = (source: Record<string, any> | undefined, keys: string[]): string | undefined => {
@@ -67,24 +66,14 @@ export class FsXmlController {
     let domain = payload.domain || pickValue(body, ['domain', 'Caller-Domain', 'variable_domain_name', 'sip_auth_realm', 'variable_sip_auth_realm']) || pickValue(query, ['domain', 'Caller-Domain', 'sip_auth_realm']);
     let user = payload.user || pickValue(body, ['user', 'user_name', 'sip_auth_username', 'variable_user_name', 'Caller-Caller-ID-Number']) || pickValue(query, ['user', 'user_name', 'sip_auth_username']);
 
-    if (!domain && user) {
-      const userRec = Users.find(u => u.id === user);
-      if (userRec) {
-        const tenant = Tenants.find(t => t.id === userRec.tenantId);
-        if (tenant) domain = tenant.domain;
-      }
-    }
-
-    if (!context && domain) {
-      const tenant = Tenants.find(t => t.domain === domain);
-      if (tenant) context = `context_${tenant.id}`;
-    }
-
     // eslint-disable-next-line no-console
     console.log('[fs/xml]', { section: sectionNorm || section, context, destination_number: dest, domain, user });
 
     if (sectionNorm === 'directory') {
       return this.fsService.directoryXML({ user, domain });
+    }
+    if (sectionNorm === 'configuration') {
+      return this.fsService.configurationXML({ tagName: payload.body?.tag_name, keyValue: payload.body?.key_value });
     }
     return this.fsService.dialplanXML({ context, destination_number: dest, domain });
   }

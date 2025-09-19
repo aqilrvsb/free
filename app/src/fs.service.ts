@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { create } from 'xmlbuilder2';
 import { createHash } from 'crypto';
-import { Tenants, Users, Routing } from './data/store';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
 
 interface DialplanParams {
   context?: string;
@@ -14,111 +16,86 @@ interface DirectoryParams {
   domain?: string;
 }
 
+interface ConfigurationParams {
+  tagName?: string;
+  keyValue?: string;
+}
+
+interface ResolvedTenant {
+  tenant: TenantEntity | null;
+  domain: string;
+}
+
 @Injectable()
 export class FsService {
+  constructor(
+    @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
+    @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
+    @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
+  ) {}
 
-  dialplanXML(params: DialplanParams): string {
-    let domain = (params.domain || '').trim();
-    let tenant = Tenants.find(t => t.domain === domain);
-    let tenantId = tenant?.id;
-
-    const contextHint = params.context || '';
-    if (!tenantId && contextHint.startsWith('context_')) {
-      const ctxTenantId = contextHint.replace('context_', '');
-      const ctxTenant = Tenants.find(t => t.id === ctxTenantId);
-      if (ctxTenant) {
-        tenant = ctxTenant;
-        tenantId = ctxTenant.id;
-        domain = ctxTenant.domain;
-      }
-    }
-
+  async dialplanXML(params: DialplanParams): Promise<string> {
     const destRaw = (params.destination_number || '').trim();
+    const dest = destRaw.replace(/\s+/g, '');
 
-    if (!tenantId && destRaw) {
-      const destUser = Users.find(u => u.id === destRaw);
-      if (destUser) {
-        tenantId = destUser.tenantId;
-        const destTenant = Tenants.find(t => t.id === tenantId);
-        if (destTenant) {
-          tenant = destTenant;
-          domain = destTenant.domain;
-        }
-      }
-    }
+    const { tenant, domain } = await this.resolveTenant({
+      domain: params.domain,
+      context: params.context,
+      destination: dest,
+    });
 
-    if (!tenantId && domain) {
-      const fallbackTenant = Tenants.find(t => t.domain === domain);
-      if (fallbackTenant) {
-        tenant = fallbackTenant;
-        tenantId = fallbackTenant.id;
-      }
-    }
+    const fallbackDomain = domain || tenant?.domain || 'default.local';
+    const tenantId = tenant?.id || 'tenant1';
 
-    if (!tenantId) {
-      tenant = Tenants[0];
-      tenantId = tenant?.id || 'tenant1';
-      domain = tenant?.domain || 'default.local';
-    }
+    const routing = await this.routingRepo.findOne({ where: { tenantId } });
+    const routeCfg = routing || {
+      internalPrefix: '9',
+      voicemailPrefix: '*9',
+      pstnGateway: 'pstn',
+      enableE164: true,
+      codecString: 'PCMU,PCMA,G722,OPUS',
+    };
 
-    const routeCfg = Routing[tenantId] || {};
-    const codecString: string = typeof routeCfg.codecString === 'string' && routeCfg.codecString.trim()
-      ? routeCfg.codecString.trim()
-      : 'PCMU,PCMA,G722,OPUS';
+    const codecString = this.pickCodecString(routeCfg?.codecString);
     const context = params.context || `context_${tenantId}`;
     const internalPrefix: string = routeCfg.internalPrefix || '9';
     const vmPrefix: string = routeCfg.voicemailPrefix || '*9';
     const pstnGateway: string = routeCfg.pstnGateway || 'pstn';
 
-    const dest = destRaw.replace(/\s+/g, '');
-    const safeFilename = (value: string): string => {
-      const base = value || 'unknown';
-      return base.replace(/[^a-zA-Z0-9._-]/g, '_');
-    };
-
-    // Base actions for all routes
-    let actions: Array<{ app: string; data?: string }> = [
+    const actions: Array<{ app: string; data?: string }> = [
       { app: 'set', data: 'ringback=${us-ring}' },
       { app: 'set', data: 'hangup_after_bridge=true' },
     ];
 
     let extBridge: string | null = null;
-    const localUsers = Users.filter(u => u.tenantId === tenantId).map(u => u.id);
-    const hasLocalUser = (ext: string) => localUsers.includes(ext);
+    const localUsers = await this.userRepo.find({ where: { tenantId } });
+    const localUserSet = new Set(localUsers.map((u) => u.id));
+    const hasLocalUser = (ext: string) => localUserSet.has(ext);
 
-    // 1) direct extension (e.g., 1001)
     if (!extBridge && /^\d{2,6}$/.test(dest) && hasLocalUser(dest)) {
-      extBridge = `user/${dest}@${domain}`;
+      extBridge = `user/${dest}@${fallbackDomain}`;
     }
 
-    // 2) prefixed internal call (default 9 + ext)
     if (!extBridge && internalPrefix && dest.startsWith(internalPrefix)) {
       const ext = dest.substring(internalPrefix.length);
       if (ext && hasLocalUser(ext)) {
-        extBridge = `user/${ext}@${domain}`;
+        extBridge = `user/${ext}@${fallbackDomain}`;
       }
     }
 
-    // 3) voicemail access prefix (optional)
     if (!extBridge && vmPrefix && dest.startsWith(vmPrefix)) {
       const ext = dest.substring(vmPrefix.length);
       if (ext && hasLocalUser(ext)) {
-        actions.push({ app: 'lua', data: `voicemail.lua ${domain} ${ext}` });
-        const doc = create({ version: '1.0' })
-          .ele('document', { type: 'freeswitch/xml' })
-          .ele('section', { name: 'dialplan' })
-          .ele('context', { name: context })
-          .ele('extension', { name: `vm_${dest}` })
-          .ele('condition', { field: 'destination_number', expression: `^${dest}$` });
-        for (const a of actions) {
-          if (a.data) doc.ele('action', { application: a.app, data: a.data }).up();
-          else doc.ele('action', { application: a.app }).up();
-        }
-        return doc.end({ prettyPrint: true });
+        actions.push({ app: 'lua', data: `voicemail.lua ${fallbackDomain} ${ext}` });
+        return this.buildDialplanXml({
+          context,
+          extensionName: `vm_${dest}`,
+          destination: dest,
+          actions,
+        });
       }
     }
 
-    // 4) Dial other tenant via dest pattern user@otherdomain
     if (!extBridge && dest.includes('@')) {
       const [userPart, domainPart] = dest.split('@');
       if (userPart && domainPart) {
@@ -126,7 +103,6 @@ export class FsService {
       }
     }
 
-    // 5) International / PSTN routing (E.164 or leading 00/+)
     const normalizedDigits = dest.replace(/^\+/, '');
     if (!extBridge && /^00\d{6,15}$/.test(dest)) {
       extBridge = `sofia/gateway/${pstnGateway}/${dest.substring(2)}`;
@@ -134,27 +110,12 @@ export class FsService {
       extBridge = `sofia/gateway/${pstnGateway}/${normalizedDigits}`;
     }
 
-    // 6) Custom routing hook: allow override via Routing config
-    if (!extBridge && typeof routeCfg.customHandler === 'function') {
-      try {
-        extBridge = routeCfg.customHandler({
-          tenantId,
-          domain,
-          destination: dest,
-        }) || null;
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[dialplan customHandler error]', err);
-      }
-    }
-
     if (!extBridge) {
-      // Not matched -> route to a demo IVR or reject
       actions.push({ app: 'answer' });
       actions.push({ app: 'playback', data: 'ivr/ivr-invalid_extension.wav' });
       actions.push({ app: 'hangup', data: 'NO_ROUTE_DESTINATION' });
     } else {
-      const filenameSuffix = safeFilename(dest || tenantId || 'dest');
+      const filenameSuffix = this.safeFilename(dest || tenantId || 'dest');
       const recordingFile = '$${recordings_dir}/${uuid}-' + filenameSuffix + '.wav';
       actions.push({ app: 'set', data: `recording_file=${recordingFile}` });
       actions.push({ app: 'record_session', data: recordingFile });
@@ -163,67 +124,181 @@ export class FsService {
       actions.push({ app: 'bridge', data: extBridge });
     }
 
-    const doc = create({ version: '1.0' })
-      .ele('document', { type: 'freeswitch/xml' })
-      .ele('section', { name: 'dialplan' })
-      .ele('context', { name: context })
-      .ele('extension', { name: `dyn_${dest || 'unknown'}` })
-      .ele('condition', { field: 'destination_number', expression: `^${dest}$` });
-
-    for (const a of actions) {
-      if (a.data) doc.ele('action', { application: a.app, data: a.data }).up();
-      else doc.ele('action', { application: a.app }).up();
-    }
-
-    const xml = doc.end({ prettyPrint: true });
-    return xml;
+    return this.buildDialplanXml({
+      context,
+      extensionName: `dyn_${dest || 'unknown'}`,
+      destination: dest,
+      actions,
+    });
   }
 
-  directoryXML(params: DirectoryParams): string {
-    const user = (params.user || '').trim();
-    let domain = (params.domain || '').trim();
-    let tenant = Tenants.find(t => t.domain === domain);
+  async directoryXML(params: DirectoryParams): Promise<string> {
+    const userIdRaw = (params.user || '').trim();
+    const userId = userIdRaw || 'unknown';
+    const { tenant, domain } = await this.resolveTenant({ domain: params.domain, userId: userIdRaw });
+    const tenantId = tenant?.id || 'tenant1';
+    const realm = tenant?.domain || domain || 'default.local';
+    const context = `context_${tenantId}`;
 
-    if (!tenant && user) {
-      const userRec = Users.find(u => u.id === user);
-      if (userRec) {
-        tenant = Tenants.find(t => t.id === userRec.tenantId);
+    let userRecord: UserEntity | null = null;
+    if (userIdRaw) {
+      userRecord = await this.userRepo.findOne({ where: { id: userIdRaw, tenantId } });
+    }
+
+    const password = userRecord?.password || '1234';
+    const a1Hash = createHash('md5').update(`${userId}:${realm}:${password}`).digest('hex');
+    const builder = create({ version: '1.0' });
+    const documentNode = builder.ele('document', { type: 'freeswitch/xml' });
+    const sectionNode = documentNode.ele('section', { name: 'directory' });
+    const domainNode = sectionNode.ele('domain', { name: realm });
+    const userNode = domainNode.ele('user', { id: userId });
+
+    const paramsNode = userNode.ele('params');
+    paramsNode.ele('param', { name: 'password', value: password });
+    paramsNode.ele('param', { name: 'a1-hash', value: a1Hash });
+    paramsNode.ele('param', {
+      name: 'dial-string',
+      value:
+        '{sip_invite_domain=${domain_name},presence_id=${dialed_user}@${domain_name}}${sofia_contact(${dialed_user}@${domain_name})}',
+    });
+
+    const variablesNode = userNode.ele('variables');
+    variablesNode.ele('variable', { name: 'user_context', value: context });
+    if (userRecord?.displayName) {
+      variablesNode.ele('variable', { name: 'effective_caller_id_name', value: userRecord.displayName });
+    }
+
+    return builder.end({ prettyPrint: true });
+  }
+
+  configurationXML(_params: ConfigurationParams = {}): string {
+    const builder = create({ version: '1.0' });
+    builder
+      .ele('document', { type: 'freeswitch/xml' })
+      .ele('section', { name: 'result' })
+      .ele('result', { status: 'not found' });
+
+    return builder.end({ prettyPrint: true });
+  }
+
+  private async resolveTenant(args: {
+    domain?: string;
+    context?: string;
+    destination?: string;
+    userId?: string;
+  }): Promise<ResolvedTenant> {
+    let normalizedDomain = (args.domain || '').trim();
+    let tenant: TenantEntity | null = null;
+
+    if (normalizedDomain) {
+      tenant = await this.tenantRepo.findOne({ where: { domain: normalizedDomain } });
+      normalizedDomain = tenant?.domain || normalizedDomain;
+    }
+
+    if (!tenant && args.context?.startsWith('context_')) {
+      const ctxTenantId = args.context.replace('context_', '');
+      tenant = await this.tenantRepo.findOne({ where: { id: ctxTenantId } });
+      if (tenant) {
+        normalizedDomain = tenant.domain;
+      }
+    }
+
+    if (!tenant && args.destination) {
+      const destUser = await this.findUserForDestination(args.destination);
+      if (destUser) {
+        tenant = await this.tenantRepo.findOne({ where: { id: destUser.tenantId } });
         if (tenant) {
-          domain = tenant.domain;
+          normalizedDomain = tenant.domain;
+        }
+      }
+    }
+
+    if (!tenant && args.userId) {
+      const user = await this.userRepo.findOne({ where: { id: args.userId } });
+      if (user) {
+        tenant = await this.tenantRepo.findOne({ where: { id: user.tenantId } });
+        if (tenant) {
+          normalizedDomain = tenant.domain;
         }
       }
     }
 
     if (!tenant) {
-      tenant = Tenants[0];
-      domain = tenant?.domain || 'default.local';
+      const [firstTenant] = await this.tenantRepo.find({ order: { createdAt: 'ASC' }, take: 1 });
+      if (firstTenant) {
+        tenant = firstTenant;
+        normalizedDomain = firstTenant.domain;
+      }
     }
 
-    const userRec = Users.find(u => u.id === user && u.tenantId === (tenant?.id || 'tenant1'));
+    return { tenant, domain: normalizedDomain };
+  }
 
-    const password = userRec?.password || '1234';
-    const context = `context_${tenant?.id || 'tenant1'}`;
-    const realm = domain;
-    const a1Hash = createHash('md5').update(`${user}:${realm}:${password}`).digest('hex');
-
+  private buildDialplanXml(params: {
+    context: string;
+    extensionName: string;
+    destination: string;
+    actions: Array<{ app: string; data?: string }>;
+  }): string {
     const doc = create({ version: '1.0' })
       .ele('document', { type: 'freeswitch/xml' })
-      .ele('section', { name: 'directory' })
-      .ele('domain', { name: domain })
-      .ele('user', { id: user })
-      .ele('params')
-      .ele('param', { name: 'password', value: password }).up()
-      .ele('param', { name: 'a1-hash', value: a1Hash }).up()
-      .ele('param', {
-        name: 'dial-string',
-        value:
-          '{sip_invite_domain=${domain_name},presence_id=${dialed_user}@${domain_name}}${sofia_contact(${dialed_user}@${domain_name})}',
-      }).up()
-      .up()
-      .ele('variables')
-      .ele('variable', { name: 'user_context', value: context }).up()
-      .up().up().up().up();
+      .ele('section', { name: 'dialplan' })
+      .ele('context', { name: params.context })
+      .ele('extension', { name: params.extensionName })
+      .ele('condition', { field: 'destination_number', expression: `^${params.destination}$` });
+
+    for (const action of params.actions) {
+      if (action.data) {
+        doc.ele('action', { application: action.app, data: action.data }).up();
+      } else {
+        doc.ele('action', { application: action.app }).up();
+      }
+    }
 
     return doc.end({ prettyPrint: true });
+  }
+
+  private safeFilename(value: string): string {
+    const base = value || 'unknown';
+    return base.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  private pickCodecString(value?: string | null): string {
+    const fallback = 'PCMU,PCMA,G722,OPUS';
+    if (!value) {
+      return fallback;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  }
+
+  private async findUserForDestination(destination: string): Promise<UserEntity | null> {
+    const candidates: string[] = [];
+    const trimmed = destination.trim();
+    if (trimmed) {
+      candidates.push(trimmed);
+    }
+    const digitsOnly = trimmed.replace(/\D/g, '');
+    if (digitsOnly && digitsOnly !== trimmed) {
+      candidates.push(digitsOnly);
+    }
+
+    let stripIndex = 1;
+    while (digitsOnly && stripIndex < digitsOnly.length) {
+      candidates.push(digitsOnly.substring(stripIndex));
+      stripIndex += 1;
+    }
+
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const user = await this.userRepo.findOne({ where: { id: candidate } });
+      if (user) {
+        return user;
+      }
+    }
+
+    return null;
   }
 }

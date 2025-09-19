@@ -1,4 +1,4 @@
-# FreeSWITCH + NestJS (mod_xml_curl) — Multi-tenant Dynamic Dialplan/Directory
+# FreeSWITCH + NestJS (mod_xml_curl) — Multi-tenant Dynamic Dialplan/Directory + MySQL CDR
 
 This repo contains a **FreeSWITCH** container configured to fetch **dialplan & directory** over HTTP from a **NestJS** backend, enabling **dynamic extensions** per tenant.
 
@@ -7,7 +7,7 @@ This repo contains a **FreeSWITCH** container configured to fetch **dialplan & d
 ```bash
 # 1) Copy env template
 cp .env.example .env
-# Edit .env as needed (tenant info, IPs)
+# Edit .env as needed (tenant info, IPs, DB creds)
 
 # 2) Launch stack
 docker compose up --build
@@ -16,11 +16,13 @@ docker compose up --build
 > On macOS Docker Desktop, you can enable **host networking** in Settings (Docker Desktop ≥ 4.34). If it is unavailable, edit `docker-compose.yml` to replace the FreeSWITCH `network_mode: host` setting with explicit port mappings.
 
 ## What’s included
-- **FreeSWITCH** with `mod_xml_curl`, `mod_sofia`, `mod_lua`, `mod_opus`.
+- **MySQL 8** datastore managed via TypeORM (tenants, users, routing, CDR records).
+- **FreeSWITCH** with `mod_xml_curl`, `mod_xml_cdr`, `mod_sofia`, `mod_lua`, `mod_opus`.
 - **NestJS** app providing `/fs/xml` endpoint generating FreeSWITCH XML for:
   - `section=dialplan` → dynamic extensions (e.g., `9xxx` → `user/xxxx@domain`), PSTN routing
   - `section=directory` → dynamic SIP users per tenant
-- **Multi-tenant**-ready: tenants, users, and routes are stored in a simple in-memory `src/data/store.ts` to demo. Replace with DB later.
+- **CDR ingest**: FreeSWITCH posts JSON CDRs to `/fs/cdr` (shared-secret header), stored in MySQL.
+- **Demo data seeding**: optional bootstrap (`SEED_DEMO_DATA=true`) populates sample tenants/users/routing on first run.
 - **Compose setup**: FreeSWITCH runs with host networking by default; adapt the service definition if you need standard port mappings.
 
 ## Test it
@@ -37,6 +39,10 @@ docker compose up --build
 3. To see XML that FreeSWITCH fetches:
    - `curl 'http://localhost:3000/fs/xml?section=dialplan&destination_number=91001&context=context_tenant1&domain=tenant1.local'`
    - `curl 'http://localhost:3000/fs/xml?section=directory&user=1001&domain=tenant1.local'`
+4. Inspect stored CDRs (inside the MySQL container):
+   ```bash
+   docker exec -it fs-mysql mysql -ufsapp -pfsapp freeswitch -e "SELECT call_uuid, from_number, to_number, duration_seconds, hangup_cause, received_at FROM cdr_records ORDER BY received_at DESC LIMIT 5;"
+   ```
 
 > The above curl calls emulate what `mod_xml_curl` would request. Adjust parameters to your test scenario.
 
@@ -51,6 +57,9 @@ docker compose up --build
 ├── freeswitch
 │   └── conf
 │       ├── autoload_configs
+│       │   ├── event_socket.conf.xml
+│       │   ├── modules.conf.xml
+│       │   ├── xml_cdr.conf.xml
 │       │   └── xml_curl.conf.xml
 │       └── vars_local.xml
 └── app
@@ -58,16 +67,27 @@ docker compose up --build
     ├── tsconfig.json
     ├── nest-cli.json
     └── src
-        ├── main.ts
         ├── app.module.ts
+        ├── cdr.controller.ts
+        ├── cdr.service.ts
+        ├── demo-seed.service.ts
+        ├── entities/
+        │   ├── cdr.entity.ts
+        │   ├── index.ts
+        │   ├── routing-config.entity.ts
+        │   ├── tenant.entity.ts
+        │   └── user.entity.ts
         ├── fs-xml.controller.ts
         ├── fs.service.ts
-        └── data
-            └── store.ts
+        ├── main.ts
+        └── data/
+            └── seed-data.ts
 ```
 
 ## Notes
 - **External IPs**: We set `external_sip_ip` / `external_rtp_ip` via `vars_local.xml` to `auto`. For production, set explicit public IPs.
 - **Gateways**: PSTN examples use gateway `pstn` (configure under `conf/sip_profiles/external/` as needed).
-- **Security**: Lock down the Nest endpoint to internal network or mTLS. The demo runs without auth.
+- **Database config**: override DB settings via `.env` (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SYNC`, `DB_LOGGING`). Disable demo seed with `SEED_DEMO_DATA=false`.
+- **CDR security**: change `CDR_SHARED_SECRET` in `.env`; the value is exported to FreeSWITCH as `${cdr_auth_token}` and must match the `X-CDR-Token` header.
+- **API security**: lock down `/fs/xml` and `/fs/cdr` (network ACL, reverse proxy auth, or mTLS) before exposing publicly.
 - **Mac dev**: Docker Desktop may not support host networking; adjust `docker-compose.yml` to expose the needed UDP/TCP ports if you're not on Linux.

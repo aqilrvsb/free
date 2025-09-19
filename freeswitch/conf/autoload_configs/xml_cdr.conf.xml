@@ -1,0 +1,18 @@
+<configuration name="xml_cdr.conf" description="XML CDR via HTTP">
+  <profiles>
+    <profile name="default">
+      <settings>
+        <param name="url" value="http://127.0.0.1:3000/fs/cdr"/>
+        <param name="log-http-and-disk" value="false"/>
+        <param name="retries" value="3"/>
+        <param name="delay" value="0"/>
+        <param name="timeout" value="10"/>
+        <param name="format" value="json"/>
+        <param name="content-type" value="application/json"/>
+        <param name="prefix-a-leg" value="true"/>
+        <param name="prefix-b-leg" value="true"/>
+        <param name="http-headers" value="X-CDR-Token:${cdr_auth_token}"/>
+      </settings>
+    </profile>
+  </profiles>
+</configuration>
