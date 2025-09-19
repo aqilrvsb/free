@@ -1,6 +1,5 @@
 <include>
   <X-PRE-PROCESS cmd="set" data="auto_nat=true"/>
-  <X-PRE-PROCESS cmd="set" data="external_sip_ip=${env:EXT_SIP_IP}"/>
-  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=${env:EXT_RTP_IP}"/>
-  <X-PRE-PROCESS cmd="set" data="cdr_auth_token=${env:CDR_SHARED_SECRET}"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_ip=192.168.110.86"/>
+  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=192.168.110.86"/>
 </include>

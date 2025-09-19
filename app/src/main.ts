@@ -5,6 +5,16 @@ import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: ['error','warn','log'] });
+  app.use((req, _res, next) => {
+    const header = req.headers['content-type'];
+    if (typeof header === 'string') {
+      const baseType = header.split(';')[0].trim().toLowerCase();
+      if (baseType === 'application/x-www-form-plaintext') {
+        req.headers['content-type'] = 'application/x-www-form-urlencoded';
+      }
+    }
+    next();
+  });
   app.use(json({ limit: '5mb' }));
   app.use(urlencoded({ extended: true, limit: '5mb' }));
 

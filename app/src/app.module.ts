@@ -6,6 +6,10 @@ import { CdrService } from './cdr.service';
 import { DemoSeedService } from './demo-seed.service';
 import { FsXmlController } from './fs-xml.controller';
 import { FsService } from './fs.service';
+import { FsManagementController } from './fs-management.controller';
+import { FsManagementService } from './fs-management.service';
+import { RecordingsController } from './recordings.controller';
+import { RecordingsService } from './recordings.service';
 import { CdrEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
 
 @Module({
@@ -31,7 +35,7 @@ import { CdrEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './enti
     }),
     TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity]),
   ],
-  controllers: [FsXmlController, CdrController],
-  providers: [FsService, CdrService, DemoSeedService],
+  controllers: [FsXmlController, CdrController, FsManagementController, RecordingsController],
+  providers: [FsService, CdrService, DemoSeedService, FsManagementService, RecordingsService],
 })
 export class AppModule {}

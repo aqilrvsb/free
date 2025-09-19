@@ -1,11 +1,11 @@
 <configuration name="event_socket.conf" description="Socket Client">
   <settings>
-    <!-- Listen only on localhost for security; change if needed -->
-    <param name="listen-ip" value="127.0.0.1"/>
+    <!-- Bind on all interfaces so the Nest app can reach ESL from its container -->
+    <param name="listen-ip" value="0.0.0.0"/>
     <!-- Default ESL port 8021; keep in sync with healthcheck -->
     <param name="listen-port" value="8021"/>
     <!-- Default password ClueCon; align with fs_cli in healthcheck -->
     <param name="password" value="ClueCon"/>
-    <param name="apply-inbound-acl" value="loopback.auto"/>
+    <param name="apply-inbound-acl" value="any_v4.auto"/>
   </settings>
 </configuration>

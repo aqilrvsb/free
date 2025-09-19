@@ -15,8 +15,11 @@ services:
       - DB_NAME=${DB_NAME:-freeswitch}
       - DB_LOGGING=${DB_LOGGING:-false}
       - DB_SYNC=${DB_SYNC:-true}
-      - CDR_SHARED_SECRET=${CDR_SHARED_SECRET:-changeme}
       - SEED_DEMO_DATA=${SEED_DEMO_DATA:-true}
+      - FS_ESL_HOST=${FS_ESL_HOST:-127.0.0.1}
+      - FS_ESL_PORT=${FS_ESL_PORT:-8021}
+      - FS_ESL_PASSWORD=${FS_ESL_PASSWORD:-ClueCon}
+      - RECORDINGS_DIR=${RECORDINGS_DIR:-/recordings}
     entrypoint: ["/usr/local/bin/app-entrypoint.sh"]
     ports:
       - "3000:3000"
@@ -24,6 +27,7 @@ services:
       - ./app:/app
       - app-node-modules:/app/node_modules
       - ./docker/app-entrypoint.sh:/usr/local/bin/app-entrypoint.sh:ro
+      - ./data/recordings:/recordings:ro
     depends_on:
       mysql:
         condition: service_healthy
@@ -48,6 +52,7 @@ services:
       - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
       - EXT_SIP_IP=${EXT_SIP_IP:-auto}
       - EXT_RTP_IP=${EXT_RTP_IP:-auto}
+      - CDR_HTTP_HEADERS=${CDR_HTTP_HEADERS:-}
     network_mode: host
     cap_add:
       - SYS_NICE
@@ -62,6 +67,7 @@ services:
       - ./freeswitch/conf/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml
       - ./freeswitch/conf/vars_local.xml:/etc/freeswitch/vars_local.xml
       - ./freeswitch/conf/sip_profiles/internal.xml:/etc/freeswitch/sip_profiles/internal.xml
+      - ./docker/fs-entrypoint.sh:/usr/local/bin/fs-entrypoint.sh:ro
       # Bind-mount runtime data; entrypoint fixes ownership to freeswitch user
       - ./data/recordings:/var/lib/freeswitch/recordings
       - ./data/log:/var/log/freeswitch
