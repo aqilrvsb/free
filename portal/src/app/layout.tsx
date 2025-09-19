@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { MainNav } from "@/components/layout/main-nav";
+import { AppSidebar } from "@/components/layout/app-sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,25 +27,30 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
-        <div className="min-h-screen flex flex-col">
-          <header className="border-b bg-card/50 backdrop-blur">
-            <div className="container flex flex-col gap-4 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-xl font-semibold">PBX Portal</h1>
-                  <p className="text-sm text-muted-foreground">Theo dõi CDR, trạng thái FreeSWITCH và ghi âm cuộc gọi</p>
+        <SidebarProvider>
+          <AppSidebar />
+          <SidebarInset className="bg-[radial-gradient(120%_120%_at_50%_-20%,rgba(249,115,22,0.16),transparent)]">
+            <div className="flex min-h-screen flex-col">
+              <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
+                <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-6">
+                  <SidebarTrigger className="text-muted-foreground hover:text-primary" />
+                  <div className="flex flex-col">
+                    <h1 className="text-lg font-semibold">PBX Portal</h1>
+                    <p className="text-sm text-muted-foreground">
+                      Theo dõi CDR, trạng thái FreeSWITCH và ghi âm cuộc gọi
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <MainNav />
+              </header>
+              <main className="mx-auto w-full max-w-7xl flex-1 space-y-8 px-6 py-10">{children}</main>
+              <footer className="border-t bg-card/60">
+                <div className="mx-auto w-full max-w-7xl px-6 py-4 text-sm text-muted-foreground">
+                  Build bởi Next.js + shadcn/ui · {new Date().getFullYear()}
+                </div>
+              </footer>
             </div>
-          </header>
-          <main className="container flex-1 py-8 space-y-6">{children}</main>
-          <footer className="border-t bg-card/50">
-            <div className="container py-4 text-sm text-muted-foreground">
-              Build bởi Next.js + shadcn/ui · {new Date().getFullYear()}
-            </div>
-          </footer>
-        </div>
+          </SidebarInset>
+        </SidebarProvider>
       </body>
     </html>
   );

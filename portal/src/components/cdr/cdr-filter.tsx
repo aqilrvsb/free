@@ -79,7 +79,7 @@ export function CdrFilter({ className }: CdrFilterProps) {
           </SelectTrigger>
           <SelectContent>
             {DIRECTION_OPTIONS.map((option) => (
-              <SelectItem key={option.value || "all"} value={option.value}>
+              <SelectItem key={option.value || "all"} value={option.value || "all"}>
                 {option.label}
               </SelectItem>
             ))}

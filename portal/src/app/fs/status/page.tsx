@@ -2,6 +2,7 @@ import { apiFetch } from "@/lib/api";
 import type { CommandResult, FsStatusParsed, FsStatusResponse } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/common/page-header";
 
 export default async function FsStatusPage() {
   const [status, sofia] = await Promise.all([
@@ -13,6 +14,10 @@ export default async function FsStatusPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="Trạng thái FreeSWITCH"
+        description="Theo dõi thông số core và phản hồi từ lệnh sofia jsonstatus."
+      />
       <Card>
         <CardHeader>
           <CardTitle>Core status</CardTitle>

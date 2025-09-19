@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { CdrFilter } from "@/components/cdr/cdr-filter";
 import { PaginationControls } from "@/components/common/pagination";
+import { PageHeader } from "@/components/common/page-header";
 
 interface CdrPageProps {
   searchParams?: Record<string, string | string[]>;
@@ -43,6 +44,10 @@ export default async function CdrPage({ searchParams = {} }: CdrPageProps) {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="CDR"
+        description="Lọc và tra cứu lịch sử cuộc gọi được lưu trong MySQL."
+      />
       <Card>
         <CardHeader>
           <CardTitle>Bộ lọc</CardTitle>

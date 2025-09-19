@@ -7,6 +7,7 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PageHeader } from "@/components/common/page-header";
 
 function formatDate(input?: string | null) {
   if (!input) return "-";
@@ -28,6 +29,10 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="Dashboard"
+        description="Tổng quan nhanh về trạng thái FreeSWITCH, CDR và ghi âm."
+      />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">

@@ -3,6 +3,7 @@ import type { CommandResult } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RegistrationFilter } from "@/components/fs/registration-filter";
+import { PageHeader } from "@/components/common/page-header";
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -55,10 +56,11 @@ export default async function RegistrationsPage({ searchParams = {} }: { searchP
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Đăng ký SIP ({profile})</h2>
-        <RegistrationFilter />
-      </div>
+      <PageHeader
+        title={`Đăng ký SIP (${profile})`}
+        description="Giám sát thiết bị đăng ký vào profile FreeSWITCH."
+        actions={<RegistrationFilter />}
+      />
 
       <Card>
         <CardHeader>
