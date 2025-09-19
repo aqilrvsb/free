@@ -62,12 +62,19 @@ export class FsService {
     }
 
     const routeCfg = Routing[tenantId] || {};
+    const codecString: string = typeof routeCfg.codecString === 'string' && routeCfg.codecString.trim()
+      ? routeCfg.codecString.trim()
+      : 'PCMU,PCMA,G722,OPUS';
     const context = params.context || `context_${tenantId}`;
     const internalPrefix: string = routeCfg.internalPrefix || '9';
     const vmPrefix: string = routeCfg.voicemailPrefix || '*9';
     const pstnGateway: string = routeCfg.pstnGateway || 'pstn';
 
     const dest = destRaw.replace(/\s+/g, '');
+    const safeFilename = (value: string): string => {
+      const base = value || 'unknown';
+      return base.replace(/[^a-zA-Z0-9._-]/g, '_');
+    };
 
     // Base actions for all routes
     let actions: Array<{ app: string; data?: string }> = [
@@ -147,6 +154,12 @@ export class FsService {
       actions.push({ app: 'playback', data: 'ivr/ivr-invalid_extension.wav' });
       actions.push({ app: 'hangup', data: 'NO_ROUTE_DESTINATION' });
     } else {
+      const filenameSuffix = safeFilename(dest || tenantId || 'dest');
+      const recordingFile = '$${recordings_dir}/${uuid}-' + filenameSuffix + '.wav';
+      actions.push({ app: 'set', data: `recording_file=${recordingFile}` });
+      actions.push({ app: 'record_session', data: recordingFile });
+      actions.push({ app: 'export', data: `nolocal:absolute_codec_string=${codecString}` });
+      actions.push({ app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` });
       actions.push({ app: 'bridge', data: extBridge });
     }
 

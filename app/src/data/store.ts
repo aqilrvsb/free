@@ -19,11 +19,13 @@ export const Routing = {
     voicemailPrefix: '*9',
     pstnGateway: 'pstn',
     enableE164: true,
+    codecString: 'PCMU,PCMA,G722,OPUS',
   },
   tenant2: {
     internalPrefix: '8',
     voicemailPrefix: '*8',
     pstnGateway: 'pstn',
     enableE164: true,
+    codecString: 'PCMU,PCMA,G722,OPUS',
   },
 };
