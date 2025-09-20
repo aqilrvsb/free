@@ -4,6 +4,8 @@ services:
     image: node:20-slim
     container_name: fs-xml-app
     working_dir: /app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - APP_PORT=${APP_PORT:-3000}
@@ -16,7 +18,7 @@ services:
       - DB_LOGGING=${DB_LOGGING:-false}
       - DB_SYNC=${DB_SYNC:-true}
       - SEED_DEMO_DATA=${SEED_DEMO_DATA:-true}
-      - FS_ESL_HOST=${FS_ESL_HOST:-127.0.0.1}
+      - FS_ESL_HOST=${FS_ESL_HOST:-host.docker.internal}
       - FS_ESL_PORT=${FS_ESL_PORT:-8021}
       - FS_ESL_PASSWORD=${FS_ESL_PASSWORD:-ClueCon}
       - RECORDINGS_DIR=${RECORDINGS_DIR:-/recordings}
@@ -36,6 +38,28 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+
+  portal:
+    image: node:20-slim
+    container_name: fs-portal
+    working_dir: /portal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ./portal/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    command: ["/usr/local/bin/portal-entrypoint.sh"]
+    ports:
+      - "${PORTAL_HOST_PORT:-3001}:3001"
+    volumes:
+      - ./portal:/portal
+      - portal-node-modules:/portal/node_modules
+      - ./docker/portal-entrypoint.sh:/usr/local/bin/portal-entrypoint.sh:ro
+    depends_on:
+      app:
+        condition: service_started
 
   freeswitch:
     # platform: linux/amd64
@@ -111,3 +135,4 @@ services:
 volumes:
   app-node-modules: {}
   mysql-data: {}
+  portal-node-modules: {}

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Connection } from 'modesl';
+import { XMLParser } from 'fast-xml-parser';
 
 interface CommandResult<T = string> {
   raw: string;
@@ -14,6 +15,12 @@ export class FsManagementService {
   private readonly port: number;
   private readonly password: string;
   private readonly timeoutMs = 5000;
+  private readonly xmlParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    textNodeName: '#text',
+    trimValues: true,
+  });
 
   constructor(private readonly configService: ConfigService) {
     this.host = configService.get<string>('FS_ESL_HOST', '127.0.0.1');
@@ -53,14 +60,40 @@ export class FsManagementService {
   }
 
   async getSofiaRegistrations(profile: string): Promise<CommandResult<any>> {
-    const raw = await this.runCommand(`sofia jsonstatus profile ${profile} reg`);
+    const [jsonStatusRaw, xmlStatusRaw] = await Promise.all([
+      this.runCommand(`sofia jsonstatus profile ${profile}`),
+      this.runCommand(`sofia xmlstatus profile ${profile} reg`).catch((error) => {
+        this.logger.warn(
+          `Failed to fetch xmlstatus registrations for profile ${profile}: ${error instanceof Error ? error.message : error}`,
+        );
+        return '';
+      }),
+    ]);
+
+    let parsed: Record<string, any> = {};
     try {
-      const parsed = JSON.parse(raw || '{}');
-      return { raw, parsed };
+      parsed = JSON.parse(jsonStatusRaw || '{}');
     } catch (error) {
-      this.logger.warn(`Failed to parse sofia jsonstatus profile ${profile} reg`, error as Error);
-      return { raw };
+      this.logger.warn(`Failed to parse sofia jsonstatus profile ${profile}`, error as Error);
+      parsed = {};
     }
+
+    const registrations = this.parseRegistrationsXml(xmlStatusRaw);
+    if (!parsed.profiles || typeof parsed.profiles !== 'object') {
+      parsed.profiles = {};
+    }
+    const profileData = parsed.profiles[profile] && typeof parsed.profiles[profile] === 'object' ? parsed.profiles[profile] : {};
+    parsed.profiles[profile] = {
+      ...profileData,
+      registrations,
+    };
+
+    const combinedRawParts = [`[jsonstatus]\n${jsonStatusRaw}`];
+    if (xmlStatusRaw) {
+      combinedRawParts.push(`[xmlstatus]\n${xmlStatusRaw}`);
+    }
+
+    return { raw: combinedRawParts.join('\n\n'), parsed };
   }
 
   async getChannels(): Promise<CommandResult<any>> {
@@ -94,5 +127,71 @@ export class FsManagementService {
         reject(error);
       });
     });
+  }
+
+  private parseRegistrationsXml(xml: string): Array<Record<string, any>> {
+    if (!xml || !xml.trim()) {
+      return [];
+    }
+
+    try {
+      const parsed = this.xmlParser.parse(xml) as Record<string, any>;
+      const registrationsNode = parsed?.profile?.registrations;
+      if (!registrationsNode) {
+        return [];
+      }
+      const entries = Array.isArray(registrationsNode.registration)
+        ? registrationsNode.registration
+        : registrationsNode.registration
+        ? [registrationsNode.registration]
+        : [];
+
+      return entries
+        .map((entry: Record<string, any>) => this.normalizeRegistration(entry))
+        .filter((item): item is Record<string, any> => Boolean(item));
+    } catch (error) {
+      this.logger.warn('Failed to parse xmlstatus registrations', error as Error);
+      return [];
+    }
+  }
+
+  private normalizeRegistration(entry: Record<string, any> | undefined | null): Record<string, any> | null {
+    if (!entry || typeof entry !== 'object') {
+      return null;
+    }
+
+    const toStringValue = (value: unknown): string | undefined => {
+      if (value === undefined || value === null) return undefined;
+      const str = String(value).trim();
+      return str.length > 0 ? str : undefined;
+    };
+
+    const networkIp =
+      toStringValue(entry['network-ip']) || toStringValue(entry['network-ip-v4']) || toStringValue(entry['network-address']);
+
+    const networkPort = toStringValue(entry['network-port'] ?? entry.port);
+
+    const user = toStringValue(entry.user);
+    const realm = toStringValue(entry['sip-auth-realm']);
+    const authUser = toStringValue(entry['sip-auth-user']);
+
+    const aor =
+      toStringValue(entry.aor) ||
+      (authUser && realm ? `${authUser}@${realm}` : undefined) ||
+      user;
+
+    return {
+      aor,
+      user,
+      contact: toStringValue(entry.contact),
+      network_ip: networkIp,
+      network_port: networkPort,
+      status: toStringValue(entry.status),
+      rpid: toStringValue(entry.rpid),
+      agent: toStringValue(entry.agent),
+      ping_status: toStringValue(entry['ping-status']),
+      ping_time: toStringValue(entry['ping-time']),
+      host: toStringValue(entry.host),
+    };
   }
 }

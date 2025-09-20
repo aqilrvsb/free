@@ -1,0 +1,219 @@
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Observable, Subject } from 'rxjs';
+
+export interface RegistrationEvent {
+  action: 'register' | 'unregister' | 'expire' | 'reregister' | string;
+  profile: string;
+  username: string;
+  contact?: string;
+  networkIp?: string;
+  networkPort?: string;
+  userAgent?: string;
+  expires?: string;
+  timestamp: number;
+  eventId?: string;
+}
+
+const EVENT_MAP: Record<string, RegistrationEvent['action']> = {
+  'esl::event::CUSTOM::sofia::register': 'register',
+  'esl::event::CUSTOM::sofia::unregister': 'unregister',
+  'esl::event::CUSTOM::sofia::expire': 'expire',
+  'esl::event::CUSTOM::sofia::reregister': 'reregister',
+};
+
+@Injectable()
+export class FsEventsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(FsEventsService.name);
+  private readonly registrationSubject = new Subject<RegistrationEvent>();
+  private connection: any = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private destroyed = false;
+
+  constructor(private readonly configService: ConfigService) {}
+
+  onModuleInit(): void {
+    this.connect();
+  }
+
+  onModuleDestroy(): void {
+    this.destroyed = true;
+    this.registrationSubject.complete();
+    this.cleanupConnection();
+  }
+
+  get registration$(): Observable<RegistrationEvent> {
+    return this.registrationSubject.asObservable();
+  }
+
+  private connect(): void {
+    if (this.destroyed || this.connection) {
+      return;
+    }
+
+    const host = this.configService.get<string>('FS_ESL_HOST', '127.0.0.1');
+    const port = parseInt(String(this.configService.get('FS_ESL_PORT', 8021)), 10);
+    const password = this.configService.get<string>('FS_ESL_PASSWORD', 'ClueCon');
+
+    try {
+      // Lazy require to avoid type issues with modesl typings
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Connection } = require('modesl');
+      this.logger.log(`Connecting to FreeSWITCH ESL at ${host}:${port} for realtime events`);
+      const connection = new Connection(host, port, password, () => {
+        this.logger.log('Connected to FreeSWITCH ESL for realtime events');
+        connection.events(
+          'json',
+          'CUSTOM sofia::register CUSTOM sofia::unregister CUSTOM sofia::expire CUSTOM sofia::reregister',
+        );
+      });
+
+      Object.entries(EVENT_MAP).forEach(([eventKey, action]) => {
+        connection.on(eventKey, (event: any) => this.handleRegistrationEvent(action, event));
+      });
+
+      connection.on('error', (error: Error) => {
+        this.logger.error('ESL connection error', error.stack || error.message);
+        this.scheduleReconnect();
+      });
+
+      connection.on('end', () => {
+        this.logger.warn('ESL connection ended');
+        this.scheduleReconnect();
+      });
+
+      connection.on('disconnect', () => {
+        this.logger.warn('ESL connection disconnected');
+        this.scheduleReconnect();
+      });
+
+      this.connection = connection;
+    } catch (error) {
+      this.logger.error('Failed to connect to FreeSWITCH ESL', (error as Error).stack || String(error));
+      this.scheduleReconnect();
+    }
+  }
+
+  private handleRegistrationEvent(action: RegistrationEvent['action'], event: any): void {
+    if (!event || typeof event.getHeader !== 'function') {
+      return;
+    }
+
+    const profileRaw =
+      event.getHeader('profile-name') ||
+      event.getHeader('profile') ||
+      event.getHeader('sofia-profile') ||
+      event.getHeader('context') ||
+      '';
+    this.logger.log(`[ESL] raw profile: ${profileRaw}`);
+
+    const profile = this.normalizeProfile(profileRaw);
+
+    const username =
+      event.getHeader('username') ||
+      event.getHeader('from-user') ||
+      event.getHeader('user') ||
+      '';
+
+    const contact = event.getHeader('contact') || event.getHeader('network-addr') || '';
+    const networkIp =
+      event.getHeader('network-ip') ||
+      event.getHeader('network-ip-v4') ||
+      event.getHeader('network-address') ||
+      '';
+    const networkPort = event.getHeader('network-port') || '';
+    const userAgent = event.getHeader('user-agent') || '';
+    const expires = event.getHeader('expires') || event.getHeader('expires-in') || '';
+    const timestampHeader = event.getHeader('Event-Date-Timestamp');
+    const eventId = event.getHeader('unique-id') || event.getHeader('Event-UUID') || undefined;
+
+    const timestamp = timestampHeader ? Number(timestampHeader) : Date.now();
+
+    const payload: RegistrationEvent = {
+      action,
+      profile,
+      username,
+      contact,
+      networkIp,
+      networkPort,
+      userAgent,
+      expires,
+      timestamp,
+      eventId,
+    };
+
+    const subclass = event.getHeader('Event-Subclass');
+    this.logger.log(
+      `[ESL event] subclass=${subclass} action=${payload.action} raw=${profileRaw} normalized=${payload.profile} user=${payload.username} contact=${payload.contact} ip=${payload.networkIp}:${payload.networkPort}`,
+    );
+    this.logger.debug(
+      `[ESL event raw] ${JSON.stringify({
+        action,
+        subclass,
+        profileRaw,
+        normalized: payload.profile,
+        username,
+        contact,
+        networkIp,
+        networkPort,
+        userAgent,
+        expires,
+        eventId,
+        timestamp,
+      })}`,
+    );
+
+    this.registrationSubject.next(payload);
+  }
+
+  private scheduleReconnect(): void {
+    if (this.destroyed || this.reconnectTimer) {
+      return;
+    }
+
+    this.cleanupConnection();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, 3000);
+  }
+
+  private cleanupConnection(): void {
+    if (this.connection) {
+      try {
+        this.connection.removeAllListeners();
+        this.connection.disconnect();
+      } catch (error) {
+        this.logger.warn(`Error while cleaning ESL connection: ${error}`);
+      }
+      this.connection = null;
+    }
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private normalizeProfile(value: string | null | undefined): string {
+    const trimmed = (value ?? '').trim();
+    if (!trimmed) {
+      return 'internal';
+    }
+    const lowered = trimmed.toLowerCase();
+    if (lowered.includes('internal')) {
+      return 'internal';
+    }
+    if (lowered.endsWith('.local')) {
+      return 'internal';
+    }
+    if (lowered.includes('@')) {
+      const [local] = lowered.split('@');
+      if (local === 'internal') {
+        return 'internal';
+      }
+      return local || 'internal';
+    }
+    return trimmed;
+  }
+}

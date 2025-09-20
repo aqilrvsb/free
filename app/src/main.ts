@@ -5,6 +5,7 @@ import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: ['error','warn','log'] });
+  app.enableCors({ origin: true, credentials: true });
   app.use((req, _res, next) => {
     const header = req.headers['content-type'];
     if (typeof header === 'string') {

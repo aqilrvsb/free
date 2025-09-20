@@ -11,6 +11,8 @@ import { FsManagementService } from './fs-management.service';
 import { RecordingsController } from './recordings.controller';
 import { RecordingsService } from './recordings.service';
 import { CdrEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import { FsEventsService } from './fs-events.service';
+import { FsRegistrationsGateway } from './fs-registrations.gateway';
 
 @Module({
   imports: [
@@ -36,6 +38,14 @@ import { CdrEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './enti
     TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity]),
   ],
   controllers: [FsXmlController, CdrController, FsManagementController, RecordingsController],
-  providers: [FsService, CdrService, DemoSeedService, FsManagementService, RecordingsService],
+  providers: [
+    FsService,
+    CdrService,
+    DemoSeedService,
+    FsManagementService,
+    RecordingsService,
+    FsEventsService,
+    FsRegistrationsGateway,
+  ],
 })
 export class AppModule {}

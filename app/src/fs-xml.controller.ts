@@ -1,10 +1,11 @@
 import { Controller, Get, Header, Query, Body, Post, HttpCode, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { FsService } from './fs.service';
+import { FsRegistrationsGateway } from './fs-registrations.gateway';
 
 @Controller()
 export class FsXmlController {
-  constructor(private readonly fsService: FsService) {}
+  constructor(private readonly fsService: FsService, private readonly registrationsGateway: FsRegistrationsGateway) {}
 
   @Get('/health')
   health() {
@@ -70,11 +71,43 @@ export class FsXmlController {
     console.log('[fs/xml]', { section: sectionNorm || section, context, destination_number: dest, domain, user });
 
     if (sectionNorm === 'directory') {
+      this.triggerProfileRefresh(domain, context);
       return this.fsService.directoryXML({ user, domain });
     }
     if (sectionNorm === 'configuration') {
       return this.fsService.configurationXML({ tagName: payload.body?.tag_name, keyValue: payload.body?.key_value });
     }
+    this.triggerProfileRefresh(domain, context);
     return this.fsService.dialplanXML({ context, destination_number: dest, domain });
+  }
+
+  private triggerProfileRefresh(domain?: string, context?: string): void {
+    const profile = this.normalizeProfileIdentifier(domain, context);
+    Promise.resolve(this.registrationsGateway.refreshProfile(profile)).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.warn('[fs/xml] refreshProfile error', profile, error);
+    });
+  }
+
+  private normalizeProfileIdentifier(domain?: string | null, context?: string | null): string {
+    const domainValue = domain?.trim().toLowerCase();
+    if (domainValue) {
+      if (domainValue === 'internal' || domainValue.endsWith('.local')) {
+        return 'internal';
+      }
+      if (domainValue === 'external' || domainValue.endsWith('.external')) {
+        return 'external';
+      }
+    }
+
+    const contextValue = context?.trim().toLowerCase();
+    if (contextValue && contextValue.includes('internal')) {
+      return 'internal';
+    }
+    if (contextValue && contextValue.includes('external')) {
+      return 'external';
+    }
+
+    return 'internal';
   }
 }
