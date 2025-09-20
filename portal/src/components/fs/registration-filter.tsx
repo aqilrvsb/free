@@ -4,13 +4,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
-const PROFILES = ["internal", "external"];
+const DEFAULT_PROFILES = ["internal", "external"];
 
-export function RegistrationFilter() {
+interface RegistrationFilterProps {
+  profiles?: string[];
+  currentProfile?: string;
+}
+
+export function RegistrationFilter({ profiles = DEFAULT_PROFILES, currentProfile }: RegistrationFilterProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  const currentProfile = searchParams.get("profile") ?? "internal";
+  const selectedProfile = currentProfile ?? searchParams.get("profile") ?? profiles[0] ?? "internal";
+
+  const uniqueProfiles = Array.from(new Set(profiles.length ? profiles : DEFAULT_PROFILES));
 
   const handleChange = (nextProfile: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -21,12 +28,12 @@ export function RegistrationFilter() {
   };
 
   return (
-    <Select value={currentProfile} onValueChange={handleChange} disabled={isPending}>
+    <Select value={selectedProfile} onValueChange={handleChange} disabled={isPending}>
       <SelectTrigger className="w-[200px]">
         <SelectValue placeholder="Chọn profile" />
       </SelectTrigger>
       <SelectContent>
-        {PROFILES.map((profile) => (
+        {uniqueProfiles.map((profile) => (
           <SelectItem key={profile} value={profile}>
             {profile}
           </SelectItem>
