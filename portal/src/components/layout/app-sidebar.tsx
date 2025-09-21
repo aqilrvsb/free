@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   RadioTower,
   ScrollText,
+  UserCog,
   Waves,
 } from "lucide-react"
 
@@ -89,6 +90,17 @@ const NAV_SECTIONS: Array<{
         description: "Tệp lưu lại",
         href: "/recordings",
         icon: FileAudio,
+      },
+    ],
+  },
+  {
+    label: "Quản trị",
+    items: [
+      {
+        title: "Domain & Extension",
+        description: "Thiết lập tenant và máy nhánh",
+        href: "/fs/manage",
+        icon: UserCog,
       },
     ],
   },

@@ -70,6 +70,32 @@ export interface RecordingMetadata {
   path: string;
 }
 
+export interface RoutingConfig {
+  internalPrefix?: string;
+  voicemailPrefix?: string;
+  pstnGateway?: string;
+  enableE164?: boolean;
+  codecString?: string | null;
+  updatedAt?: string;
+}
+
+export interface TenantSummary {
+  id: string;
+  name: string;
+  domain: string;
+  createdAt?: string;
+  updatedAt?: string;
+  routing?: RoutingConfig | null;
+}
+
+export interface ExtensionSummary {
+  id: string;
+  tenantId: string;
+  displayName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface CallEvent {
   eventName: string;
   callUuid: string;

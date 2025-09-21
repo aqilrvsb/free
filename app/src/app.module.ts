@@ -14,6 +14,8 @@ import { CdrEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './enti
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
 import { FsCallsGateway } from './fs-calls.gateway';
+import { TenantManagementController } from './tenant-management.controller';
+import { TenantManagementService } from './tenant-management.service';
 
 @Module({
   imports: [
@@ -38,7 +40,7 @@ import { FsCallsGateway } from './fs-calls.gateway';
     }),
     TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity]),
   ],
-  controllers: [FsXmlController, CdrController, FsManagementController, RecordingsController],
+  controllers: [FsXmlController, CdrController, FsManagementController, RecordingsController, TenantManagementController],
   providers: [
     FsService,
     CdrService,
@@ -48,6 +50,7 @@ import { FsCallsGateway } from './fs-calls.gateway';
     FsEventsService,
     FsRegistrationsGateway,
     FsCallsGateway,
+    TenantManagementService,
   ],
 })
 export class AppModule {}

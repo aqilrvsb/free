@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Connection } from 'modesl';
 import { XMLParser } from 'fast-xml-parser';
+import { TenantManagementService } from './tenant-management.service';
 
 interface CommandResult<T = string> {
   raw: string;
@@ -22,7 +23,10 @@ export class FsManagementService {
     trimValues: true,
   });
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly tenantManagementService: TenantManagementService,
+  ) {
     this.host = configService.get<string>('FS_ESL_HOST', '127.0.0.1');
     this.port = parseInt(String(configService.get('FS_ESL_PORT', 8021)), 10);
     this.password = configService.get<string>('FS_ESL_PASSWORD', 'ClueCon');
@@ -59,7 +63,7 @@ export class FsManagementService {
     }
   }
 
-  async getSofiaRegistrations(profile: string): Promise<CommandResult<any>> {
+  async getSofiaRegistrations(profile: string, tenantId?: string): Promise<CommandResult<any>> {
     const [jsonStatusRaw, xmlStatusRaw] = await Promise.all([
       this.runCommand(`sofia jsonstatus profile ${profile}`),
       this.runCommand(`sofia xmlstatus profile ${profile} reg`).catch((error) => {
@@ -79,6 +83,42 @@ export class FsManagementService {
     }
 
     const registrations = this.parseRegistrationsXml(xmlStatusRaw);
+    const registeredIds = new Map<string, Record<string, any>>();
+    registrations.forEach((registration) => {
+      const primary = (registration.user || registration.aor || '').toLowerCase();
+      if (primary) {
+        registeredIds.set(primary, registration);
+        if (primary.includes('@')) {
+          registeredIds.set(primary.split('@')[0], registration);
+        }
+      }
+    });
+
+    let extensionPresence: Array<Record<string, any>> = [];
+    try {
+      const extensions = await this.tenantManagementService.listExtensions(tenantId?.trim() || undefined);
+      extensionPresence = extensions.map((extension) => {
+        const normalizedId = extension.id.toLowerCase();
+        const match = registeredIds.get(normalizedId) || null;
+        return {
+          id: extension.id,
+          tenantId: extension.tenantId,
+          displayName: extension.displayName ?? null,
+          online: Boolean(match),
+          contact: match?.contact ?? null,
+          network_ip: match?.network_ip ?? null,
+          network_port: match?.network_port ?? null,
+          agent: match?.agent ?? null,
+          status: match?.status ?? match?.rpid ?? null,
+          ping_status: match?.ping_status ?? null,
+          ping_time: match?.ping_time ?? null,
+        };
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to load extensions for comparison: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     if (!parsed.profiles || typeof parsed.profiles !== 'object') {
       parsed.profiles = {};
     }
@@ -86,6 +126,14 @@ export class FsManagementService {
     parsed.profiles[profile] = {
       ...profileData,
       registrations,
+      extensionPresence,
+      extensionStats: extensionPresence.length
+        ? {
+            total: extensionPresence.length,
+            online: extensionPresence.filter((item) => item.online).length,
+            offline: extensionPresence.filter((item) => !item.online).length,
+          }
+        : undefined,
     };
 
     const combinedRawParts = [`[jsonstatus]\n${jsonStatusRaw}`];

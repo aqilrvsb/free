@@ -16,6 +16,26 @@ export interface SofiaProfile {
   status?: { type?: string; state?: string };
   info?: Record<string, unknown>;
   registrations?: SofiaRegistration[] | { registrations?: SofiaRegistration[] };
+  extensionPresence?: ExtensionPresence[];
+  extensionStats?: {
+    total: number;
+    online: number;
+    offline: number;
+  };
+}
+
+export interface ExtensionPresence {
+  id: string;
+  tenantId: string;
+  displayName?: string | null;
+  online: boolean;
+  contact?: string | null;
+  network_ip?: string | null;
+  network_port?: string | null;
+  agent?: string | null;
+  status?: string | null;
+  ping_status?: string | null;
+  ping_time?: string | null;
 }
 
 export interface SofiaRegistrationsPayload {
