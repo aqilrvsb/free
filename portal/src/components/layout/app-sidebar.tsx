@@ -73,6 +73,12 @@ const NAV_SECTIONS: Array<{
         icon: Waves,
       },
       {
+        title: "Cuộc gọi",
+        description: "Theo dõi realtime",
+        href: "/fs/calls",
+        icon: Activity,
+      },
+      {
         title: "Đăng ký",
         description: "Thiết bị SIP",
         href: "/fs/registrations",

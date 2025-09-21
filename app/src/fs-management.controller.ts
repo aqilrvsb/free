@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, HttpCode, HttpStatus, Body } from '@nestjs/common';
 import { FsManagementService } from './fs-management.service';
 
 @Controller('fs')
@@ -23,5 +23,12 @@ export class FsManagementController {
   @Get('channels')
   async channels() {
     return this.fsManagementService.getChannels();
+  }
+
+  @Post('channels/:uuid/hangup')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async hangup(@Param('uuid') uuid: string) {
+    await this.fsManagementService.hangupCall(uuid);
+    return { success: true };
   }
 }

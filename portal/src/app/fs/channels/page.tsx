@@ -1,8 +1,9 @@
 import { apiFetch } from "@/lib/api";
-import type { CommandResult, FsChannel } from "@/lib/types";
+import type { CommandResult, FsChannelList } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/common/page-header";
+import { extractChannelRows, extractChannelCount } from "@/lib/channels";
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -12,8 +13,9 @@ function formatDate(value?: string) {
 }
 
 export default async function ChannelsPage() {
-  const channels = await apiFetch<CommandResult<FsChannel[]>>("/fs/channels", { revalidate: 5 });
-  const items = Array.isArray(channels.parsed) ? channels.parsed : [];
+  const channels = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", { revalidate: 5 });
+  const items = extractChannelRows(channels.parsed);
+  const total = extractChannelCount(channels.parsed);
 
   return (
     <div className="space-y-6">
@@ -24,7 +26,7 @@ export default async function ChannelsPage() {
       <Card>
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <CardTitle>Kênh đang hoạt động</CardTitle>
-          <div className="text-sm text-muted-foreground">{items.length} kênh</div>
+          <div className="text-sm text-muted-foreground">{total} kênh</div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

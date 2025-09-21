@@ -41,6 +41,8 @@ export default async function CdrPage({ searchParams = {} }: CdrPageProps) {
   }
 
   const cdr = await apiFetch<PaginatedCdrResponse>(`/cdr?${query.toString()}`, { revalidate: 5 });
+  const recordingsBaseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || "http://localhost:3000";
 
   return (
     <div className="space-y-6">
@@ -76,6 +78,7 @@ export default async function CdrPage({ searchParams = {} }: CdrPageProps) {
                   <TableHead>Bắt đầu</TableHead>
                   <TableHead>Trả lời</TableHead>
                   <TableHead>Kết thúc</TableHead>
+                  <TableHead>Ghi âm</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -101,11 +104,27 @@ export default async function CdrPage({ searchParams = {} }: CdrPageProps) {
                     <TableCell>{formatDate(item.startTime)}</TableCell>
                     <TableCell>{formatDate(item.answerTime)}</TableCell>
                     <TableCell>{formatDate(item.endTime)}</TableCell>
+                    <TableCell>
+                      {item.recordingUrl ? (
+                        <audio
+                          controls
+                          preload="none"
+                          className="h-8 max-w-[220px]"
+                          src={new URL(item.recordingUrl, recordingsBaseUrl).toString()}
+                        >
+                          <Link href={new URL(item.recordingUrl, recordingsBaseUrl).toString()} target="_blank">
+                            Tải xuống
+                          </Link>
+                        </audio>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {cdr.items.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground">
                       Không có dữ liệu.
                     </TableCell>
                   </TableRow>

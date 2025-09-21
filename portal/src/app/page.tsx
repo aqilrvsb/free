@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import type { FsStatusResponse, PaginatedCdrResponse, RecordingMetadata, CommandResult, FsChannel } from "@/lib/types";
+import type { FsStatusResponse, PaginatedCdrResponse, RecordingMetadata, CommandResult, FsChannelList } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/common/page-header";
+import { extractChannelCount } from "@/lib/channels";
 
 function formatDate(input?: string | null) {
   if (!input) return "-";
@@ -21,10 +22,10 @@ export default async function DashboardPage() {
     apiFetch<PaginatedCdrResponse>(`/cdr?page=1&pageSize=5`, { revalidate: 5 }),
     apiFetch<FsStatusResponse>(`/fs/status`, { revalidate: 10 }),
     apiFetch<RecordingMetadata[]>(`/recordings`, { revalidate: 30 }),
-    apiFetch<CommandResult<FsChannel[]>>(`/fs/channels`, { revalidate: 5 }),
+    apiFetch<CommandResult<FsChannelList>>(`/fs/channels`, { revalidate: 5 }),
   ]);
 
-  const activeChannels = Array.isArray(channels.parsed) ? channels.parsed.length : 0;
+  const activeChannels = extractChannelCount(channels.parsed);
   const latestRecordings = recordings.slice(0, 5);
 
   return (
@@ -91,6 +92,7 @@ export default async function DashboardPage() {
                     <TableHead>Đến</TableHead>
                     <TableHead>Thời lượng</TableHead>
                     <TableHead>Thời điểm</TableHead>
+                    <TableHead>Ghi âm</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -118,11 +120,20 @@ export default async function DashboardPage() {
                         ) : null}
                       </TableCell>
                       <TableCell>{formatDate(item.startTime)}</TableCell>
+                      <TableCell>
+                        {item.recordingUrl ? (
+                          <Link href={item.recordingUrl} target="_blank" className="text-primary hover:underline">
+                            Nghe
+                          </Link>
+                        ) : (
+                          '-'
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {cdr.items.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
                         Chưa có bản ghi nào.
                       </TableCell>
                     </TableRow>

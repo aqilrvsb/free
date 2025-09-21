@@ -13,6 +13,7 @@ import { RecordingsService } from './recordings.service';
 import { CdrEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
+import { FsCallsGateway } from './fs-calls.gateway';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { FsRegistrationsGateway } from './fs-registrations.gateway';
     RecordingsService,
     FsEventsService,
     FsRegistrationsGateway,
+    FsCallsGateway,
   ],
 })
 export class AppModule {}

@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
@@ -30,9 +31,14 @@ export class CdrService {
     trimValues: false,
   });
 
+  private readonly recordingsDir: string;
+
   constructor(
     @InjectRepository(CdrEntity) private readonly cdrRepo: Repository<CdrEntity>,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.recordingsDir = this.normalizeDirectory(configService.get<string>('RECORDINGS_DIR', '/recordings'));
+  }
 
   async ingestCdr(payload: any): Promise<void> {
     const parsed = this.normalizePayload(payload);
@@ -51,6 +57,8 @@ export class CdrService {
   async listCdrs(query: CdrQuery) {
     const qb = this.cdrRepo.createQueryBuilder('cdr').orderBy('cdr.startTime', 'DESC');
 
+    qb.andWhere('cdr.leg = :leg', { leg: 'B' });
+
     if (query.tenantId) {
       qb.andWhere('cdr.tenantId = :tenantId', { tenantId: query.tenantId });
     }
@@ -67,10 +75,33 @@ export class CdrService {
       qb.andWhere('cdr.startTime <= :toDate', { toDate: query.toDate });
     }
 
-    const [items, total] = await qb
+    const [rawItems, total] = await qb
       .skip((query.page - 1) * query.pageSize)
       .take(query.pageSize)
       .getManyAndCount();
+
+    const callUuidSet = new Set<string>();
+    const bridgeUuidMap = new Map<string, string | null>();
+
+    for (const item of rawItems) {
+      if (item.callUuid) {
+        callUuidSet.add(item.callUuid);
+      }
+      const bridgeUuid = this.extractBridgeUuid(item.rawPayload);
+      if (bridgeUuid) {
+        bridgeUuidMap.set(item.id, bridgeUuid);
+        callUuidSet.add(bridgeUuid);
+      }
+    }
+
+    const recordingHints = await this.fetchRecordingHints(Array.from(callUuidSet));
+
+    const items = rawItems.map((item) => {
+      const direct = item.callUuid ? recordingHints.get(item.callUuid) : undefined;
+      const bridgeUuid = bridgeUuidMap.get(item.id) ?? this.extractBridgeUuid(item.rawPayload ?? undefined);
+      const fallback = direct ?? (bridgeUuid ? recordingHints.get(bridgeUuid) : undefined);
+      return this.withRecordingInfo(item, fallback);
+    });
 
     return {
       items,
@@ -85,11 +116,23 @@ export class CdrService {
     if (!entity) {
       throw new NotFoundException('CDR not found');
     }
-    return entity;
+    const bridgeUuid = this.extractBridgeUuid(entity.rawPayload);
+    const hints = await this.fetchRecordingHints(
+      [entity.callUuid, bridgeUuid].filter((value): value is string => Boolean(value)),
+    );
+    const fallback = (entity.callUuid && hints.get(entity.callUuid)) || (bridgeUuid ? hints.get(bridgeUuid) : undefined);
+    return this.withRecordingInfo(entity, fallback);
   }
 
   async getByCallUuid(callUuid: string): Promise<CdrEntity | null> {
-    return this.cdrRepo.findOne({ where: { callUuid } });
+    const entity = await this.cdrRepo.findOne({ where: { callUuid, leg: 'B' } });
+    if (!entity) {
+      return null;
+    }
+    const bridgeUuid = this.extractBridgeUuid(entity.rawPayload);
+    const hints = await this.fetchRecordingHints([callUuid, bridgeUuid].filter((value): value is string => Boolean(value)));
+    const fallback = hints.get(callUuid) ?? (bridgeUuid ? hints.get(bridgeUuid) : undefined);
+    return this.withRecordingInfo(entity, fallback);
   }
 
   private mapPayload(payload: any, rawPayload: string): Partial<CdrEntity> {
@@ -335,5 +378,115 @@ export class CdrService {
       return num;
     }
     return undefined;
+  }
+
+  private withRecordingInfo<T extends CdrEntity>(
+    record: T,
+    fallbackRecording?: string | undefined,
+  ): T & { recordingFilename?: string | null; recordingUrl?: string | null } {
+    const relativePath = this.extractRecordingInfo(record.rawPayload) ?? fallbackRecording ?? null;
+    if (!relativePath) {
+      return { ...record, recordingFilename: null, recordingUrl: null };
+    }
+
+    const encoded = relativePath
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+    return {
+      ...record,
+      recordingFilename: relativePath,
+      recordingUrl: `/recordings/${encoded}`,
+    };
+  }
+
+  private extractRecordingInfo(rawPayload: string | undefined | null): string | null {
+    if (!rawPayload || typeof rawPayload !== 'string') {
+      return null;
+    }
+
+    const match = rawPayload.match(/<recording_file>([^<]+)<\/recording_file>/i);
+    if (!match) {
+      return null;
+    }
+
+    let fullPath = match[1]?.trim();
+    if (!fullPath) {
+      return null;
+    }
+
+    if (fullPath.includes('$${recordings_dir}')) {
+      fullPath = fullPath.replace('$${recordings_dir}/', '').replace('$${recordings_dir}', '');
+      return fullPath.replace(/^\//, '');
+    }
+
+    if (this.recordingsDir && fullPath.startsWith(this.recordingsDir)) {
+      return fullPath.slice(this.recordingsDir.length).replace(/^\//, '');
+    }
+
+    const marker = '/recordings/';
+    const legacyIndex = fullPath.indexOf(marker);
+    if (legacyIndex >= 0) {
+      return fullPath.slice(legacyIndex + marker.length);
+    }
+
+    return fullPath;
+  }
+
+  private normalizeDirectory(input: string | undefined | null): string {
+    if (!input) {
+      return '';
+    }
+    const trimmed = input.trim();
+    if (!trimmed) {
+      return '';
+    }
+    return trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
+  }
+
+  private async fetchRecordingHints(callUuids: string[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (callUuids.length === 0) {
+      return result;
+    }
+
+    const hints = await this.cdrRepo
+      .createQueryBuilder('cdr')
+      .select(['cdr.callUuid AS callUuid', 'cdr.rawPayload AS rawPayload'])
+      .where('cdr.callUuid IN (:...uuids)', { uuids: callUuids })
+      .andWhere("cdr.rawPayload LIKE '%record_session%' OR cdr.rawPayload LIKE '%recording_file%'")
+      .getRawMany<{ callUuid: string; rawPayload: string }>();
+
+    for (const hint of hints) {
+      if (!hint.callUuid) {
+        continue;
+      }
+      const info = this.extractRecordingInfo(hint.rawPayload);
+      if (info) {
+        result.set(hint.callUuid, info);
+      }
+    }
+
+    return result;
+  }
+
+  private extractBridgeUuid(rawPayload: string | undefined | null): string | null {
+    if (!rawPayload) {
+      return null;
+    }
+    const match = rawPayload.match(/<bridge_uuid>([^<]+)<\/bridge_uuid>/i);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    const alt = rawPayload.match(/<other_loopback_leg_uuid>([^<]+)<\/other_loopback_leg_uuid>/i);
+    if (alt && alt[1]) {
+      return alt[1].trim();
+    }
+    const bond = rawPayload.match(/<signal_bond>([^<]+)<\/signal_bond>/i);
+    if (bond && bond[1]) {
+      return bond[1].trim();
+    }
+    return null;
   }
 }

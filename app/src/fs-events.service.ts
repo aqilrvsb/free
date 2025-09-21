@@ -15,17 +15,43 @@ export interface RegistrationEvent {
   eventId?: string;
 }
 
-const EVENT_MAP: Record<string, RegistrationEvent['action']> = {
-  'esl::event::CUSTOM::sofia::register': 'register',
-  'esl::event::CUSTOM::sofia::unregister': 'unregister',
-  'esl::event::CUSTOM::sofia::expire': 'expire',
-  'esl::event::CUSTOM::sofia::reregister': 'reregister',
+export interface CallEvent {
+  eventName: string;
+  callUuid: string;
+  direction?: string | null;
+  callerNumber?: string | null;
+  destinationNumber?: string | null;
+  callerName?: string | null;
+  channelState?: string | null;
+  answerState?: string | null;
+  hangupCause?: string | null;
+  bridgeUuid?: string | null;
+  timestamp: number;
+  raw: Record<string, string>;
+}
+
+const CUSTOM_EVENT_ACTIONS: Record<string, RegistrationEvent['action']> = {
+  'sofia::register': 'register',
+  'sofia::unregister': 'unregister',
+  'sofia::expire': 'expire',
+  'sofia::reregister': 'reregister',
 };
+
+const CALL_EVENT_NAMES = [
+  'CHANNEL_CREATE',
+  'CHANNEL_ANSWER',
+  'CHANNEL_BRIDGE',
+  'CHANNEL_UNBRIDGE',
+  'CHANNEL_HANGUP',
+  'CHANNEL_HANGUP_COMPLETE',
+  'CHANNEL_DESTROY',
+];
 
 @Injectable()
 export class FsEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(FsEventsService.name);
   private readonly registrationSubject = new Subject<RegistrationEvent>();
+  private readonly callSubject = new Subject<CallEvent>();
   private connection: any = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
@@ -39,11 +65,16 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     this.destroyed = true;
     this.registrationSubject.complete();
+    this.callSubject.complete();
     this.cleanupConnection();
   }
 
   get registration$(): Observable<RegistrationEvent> {
     return this.registrationSubject.asObservable();
+  }
+
+  get call$(): Observable<CallEvent> {
+    return this.callSubject.asObservable();
   }
 
   private connect(): void {
@@ -62,15 +93,11 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Connecting to FreeSWITCH ESL at ${host}:${port} for realtime events`);
       const connection = new Connection(host, port, password, () => {
         this.logger.log('Connected to FreeSWITCH ESL for realtime events');
-        connection.events(
-          'json',
-          'CUSTOM sofia::register CUSTOM sofia::unregister CUSTOM sofia::expire CUSTOM sofia::reregister',
-        );
+        const subscriptions = ['CUSTOM', ...CALL_EVENT_NAMES].join(' ');
+        connection.events('json', subscriptions);
       });
 
-      Object.entries(EVENT_MAP).forEach(([eventKey, action]) => {
-        connection.on(eventKey, (event: any) => this.handleRegistrationEvent(action, event));
-      });
+      connection.on('esl::event::*', (event: any) => this.handleGenericEvent(event));
 
       connection.on('error', (error: Error) => {
         this.logger.error('ESL connection error', error.stack || error.message);
@@ -91,6 +118,28 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error('Failed to connect to FreeSWITCH ESL', (error as Error).stack || String(error));
       this.scheduleReconnect();
+    }
+  }
+
+  private handleGenericEvent(event: any): void {
+    if (!event || typeof event.getHeader !== 'function') {
+      return;
+    }
+    const eventNameRaw = event.getHeader('Event-Name');
+    if (!eventNameRaw) {
+      return;
+    }
+    const eventName = String(eventNameRaw).toUpperCase();
+    if (eventName === 'CUSTOM') {
+      const subclass = String(event.getHeader('Event-Subclass') || '').toLowerCase();
+      const action = CUSTOM_EVENT_ACTIONS[subclass];
+      if (action) {
+        this.handleRegistrationEvent(action, event);
+      }
+      return;
+    }
+    if (CALL_EVENT_NAMES.includes(eventName)) {
+      this.handleCallEvent(eventName, event);
     }
   }
 
@@ -166,6 +215,53 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
     this.registrationSubject.next(payload);
   }
 
+  private handleCallEvent(eventName: string, event: any): void {
+    if (!event || typeof event.getHeader !== 'function') {
+      return;
+    }
+
+    const callUuid =
+      event.getHeader('Channel-Call-UUID') ||
+      event.getHeader('Unique-ID') ||
+      event.getHeader('Other-Leg-Unique-ID') ||
+      '';
+
+    if (!callUuid) {
+      return;
+    }
+
+    const payload: CallEvent = {
+      eventName,
+      callUuid,
+      direction: event.getHeader('Call-Direction') || event.getHeader('Caller-Direction') || null,
+      callerNumber:
+        event.getHeader('Caller-Caller-ID-Number') ||
+        event.getHeader('Effective-Caller-ID-Number') ||
+        event.getHeader('variable_sip_from_user') ||
+        null,
+      destinationNumber:
+        event.getHeader('Caller-Destination-Number') ||
+        event.getHeader('variable_sip_req_user') ||
+        event.getHeader('variable_dialed_number') ||
+        null,
+      callerName:
+        event.getHeader('Caller-Caller-ID-Name') ||
+        event.getHeader('Effective-Caller-ID-Name') ||
+        null,
+      channelState: event.getHeader('Channel-State') || null,
+      answerState: event.getHeader('Answer-State') || null,
+      hangupCause: event.getHeader('Hangup-Cause') || null,
+      bridgeUuid: event.getHeader('Other-Leg-Unique-ID') || event.getHeader('variable_bridge_uuid') || null,
+      timestamp: this.parseTimestamp(event.getHeader('Event-Date-Timestamp')),
+      raw: event.headers || {},
+    };
+
+    this.logger.log(
+      `[ESL call] event=${payload.eventName} uuid=${payload.callUuid} direction=${payload.direction} caller=${payload.callerNumber} dest=${payload.destinationNumber} state=${payload.channelState}`,
+    );
+    this.callSubject.next(payload);
+  }
+
   private scheduleReconnect(): void {
     if (this.destroyed || this.reconnectTimer) {
       return;
@@ -215,5 +311,22 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
       return local || 'internal';
     }
     return trimmed;
+  }
+
+  private parseTimestamp(value?: string | null): number {
+    if (!value) {
+      return Date.now();
+    }
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      if (numeric > 1e15) {
+        return Math.floor(numeric / 1000);
+      }
+      if (numeric > 1e12) {
+        return numeric;
+      }
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? Date.now() : date.getTime();
   }
 }

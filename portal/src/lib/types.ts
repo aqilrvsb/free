@@ -14,6 +14,8 @@ export interface CdrRecord {
   endTime?: string | null;
   receivedAt: string;
   rawPayload?: string;
+  recordingFilename?: string | null;
+  recordingUrl?: string | null;
 }
 
 export interface PaginatedCdrResponse {
@@ -55,9 +57,30 @@ export interface FsChannel {
   application?: string;
 }
 
+export interface FsChannelList {
+  row_count: number;
+  rows: FsChannel[];
+  [key: string]: unknown;
+}
+
 export interface RecordingMetadata {
   name: string;
   size: number;
   modifiedAt: string;
   path: string;
+}
+
+export interface CallEvent {
+  eventName: string;
+  callUuid: string;
+  direction?: string | null;
+  callerNumber?: string | null;
+  destinationNumber?: string | null;
+  callerName?: string | null;
+  channelState?: string | null;
+  answerState?: string | null;
+  hangupCause?: string | null;
+  bridgeUuid?: string | null;
+  timestamp: number;
+  raw?: Record<string, string>;
 }

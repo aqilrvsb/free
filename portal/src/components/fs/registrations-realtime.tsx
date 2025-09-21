@@ -124,7 +124,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
   }, [initialSnapshot]);
 
   useEffect(() => {
-    const resolvedWsBase = wsBase || apiBase;
+    const resolvedWsBase = wsBase || apiBase || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
     if (!resolvedWsBase) {
       return;
     }

@@ -96,14 +96,28 @@ export class FsManagementService {
     return { raw: combinedRawParts.join('\n\n'), parsed };
   }
 
-  async getChannels(): Promise<CommandResult<any>> {
+  async getChannels(): Promise<CommandResult<Record<string, any>>> {
     const raw = await this.runCommand('show channels as json');
     try {
-      const parsed = JSON.parse(raw || '[]');
-      return { raw, parsed };
+      const parsed = JSON.parse(raw || '{}');
+      const normalized = this.normalizeChannelsPayload(parsed);
+      return { raw, parsed: normalized };
     } catch (error) {
       this.logger.warn('Failed to parse channel list', error as Error);
-      return { raw };
+      return { raw, parsed: this.normalizeChannelsPayload(null) };
+    }
+  }
+
+  async hangupCall(callUuid: string): Promise<void> {
+    const trimmed = callUuid.trim();
+    if (!trimmed) {
+      throw new Error('Call UUID trống');
+    }
+    try {
+      await this.runCommand(`uuid_kill ${trimmed}`);
+    } catch (error) {
+      this.logger.warn(`Failed to hangup call ${trimmed}`, error as Error);
+      throw error;
     }
   }
 
@@ -193,5 +207,63 @@ export class FsManagementService {
       ping_time: toStringValue(entry['ping-time']),
       host: toStringValue(entry.host),
     };
+  }
+
+  private normalizeChannelsPayload(parsed: unknown): { row_count: number; rows: Array<Record<string, any>> } & Record<string, any> {
+    const baseRows: Array<Record<string, any>> = Array.isArray(parsed)
+      ? (parsed as Array<Record<string, any>>)
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as Record<string, any>).rows)
+      ? ((parsed as Record<string, any>).rows as Array<Record<string, any>>)
+      : [];
+
+    const hasNonLoopback = baseRows.some((row) => typeof row.name === 'string' && !row.name.startsWith('loopback/'));
+    const candidateRows = hasNonLoopback
+      ? baseRows.filter((row) => typeof row.name !== 'string' || !row.name.startsWith('loopback/'))
+      : baseRows;
+
+    const preferredByCall = new Map<string, { row: Record<string, any>; score: number }>();
+
+    for (const row of candidateRows) {
+      const callUuid = String(row.call_uuid || row.uuid || '').trim();
+      const score = this.channelPriority(row);
+      const key = callUuid || `__no_uuid__${preferredByCall.size}`;
+      const existing = preferredByCall.get(key);
+      if (!existing || score < existing.score) {
+        preferredByCall.set(key, { row, score });
+      }
+    }
+
+    const rows = Array.from(preferredByCall.values()).map((item) => item.row);
+
+    const baseObject = parsed && typeof parsed === 'object' ? (parsed as Record<string, any>) : {};
+    const rowCount = typeof baseObject.row_count === 'number' ? baseObject.row_count : rows.length;
+
+    return {
+      ...baseObject,
+      row_count: rows.length,
+      rows,
+      original_row_count: rowCount,
+    };
+  }
+
+  private channelPriority(row: Record<string, any>): number {
+    let score = 0;
+    const name = typeof row.name === 'string' ? row.name : '';
+    const application = typeof row.application === 'string' ? row.application : '';
+    const presenceId = typeof row.presence_id === 'string' ? row.presence_id : '';
+
+    if (!name || name.startsWith('loopback/')) {
+      score += 5;
+    }
+    if (application === 'bridge') {
+      score += 3;
+    }
+    if (!row.dest && !row.callee_num && !presenceId) {
+      score += 2;
+    }
+    if (typeof row.direction === 'string' && row.direction.toLowerCase() === 'outbound') {
+      score += 1;
+    }
+    return score;
   }
 }
