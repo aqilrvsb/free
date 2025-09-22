@@ -16,8 +16,13 @@ export class FsManagementController {
   }
 
   @Get('sofia/:profile/registrations')
-  async sofiaRegistrations(@Param('profile') profile: string, @Query('tenantId') tenantId?: string) {
-    return this.fsManagementService.getSofiaRegistrations(profile, tenantId);
+  async sofiaRegistrations(
+    @Param('profile') profile: string,
+    @Query('tenantId') tenantId?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.fsManagementService.getSofiaRegistrations(profile, { tenantId, status, search });
   }
 
   @Get('channels')

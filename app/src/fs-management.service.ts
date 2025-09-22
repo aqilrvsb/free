@@ -63,7 +63,14 @@ export class FsManagementService {
     }
   }
 
-  async getSofiaRegistrations(profile: string, tenantId?: string): Promise<CommandResult<any>> {
+  async getSofiaRegistrations(
+    profile: string,
+    options?: { tenantId?: string; status?: string; search?: string },
+  ): Promise<CommandResult<any>> {
+    const statusFilter = (options?.status ?? 'all').toLowerCase();
+    const tenantId = options?.tenantId?.trim() || undefined;
+    const searchTerm = options?.search?.trim()?.toLowerCase() ?? '';
+
     const [jsonStatusRaw, xmlStatusRaw] = await Promise.all([
       this.runCommand(`sofia jsonstatus profile ${profile}`),
       this.runCommand(`sofia xmlstatus profile ${profile} reg`).catch((error) => {
@@ -96,7 +103,7 @@ export class FsManagementService {
 
     let extensionPresence: Array<Record<string, any>> = [];
     try {
-      const extensions = await this.tenantManagementService.listExtensions(tenantId?.trim() || undefined);
+      const extensions = await this.tenantManagementService.listExtensions(tenantId);
       extensionPresence = extensions.map((extension) => {
         const normalizedId = extension.id.toLowerCase();
         const match = registeredIds.get(normalizedId) || null;
@@ -119,21 +126,121 @@ export class FsManagementService {
         `Failed to load extensions for comparison: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+
+    const overallStats = extensionPresence.length
+      ? {
+          total: extensionPresence.length,
+          online: extensionPresence.filter((item) => item.online).length,
+          offline: extensionPresence.filter((item) => !item.online).length,
+        }
+      : undefined;
+
+    const filteredPresence = extensionPresence.filter((item) => {
+      if (statusFilter === 'online' && !item.online) {
+        return false;
+      }
+      if (statusFilter === 'offline' && item.online) {
+        return false;
+      }
+      if (searchTerm) {
+        const haystack = [
+          item.id,
+          item.displayName ?? undefined,
+          item.contact ?? undefined,
+          item.network_ip ?? undefined,
+          item.network_port ?? undefined,
+          item.agent ?? undefined,
+          item.status ?? undefined,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(searchTerm)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const filteredOnline = filteredPresence.filter((item) => item.online).length;
+    const hasPresenceData = extensionPresence.length > 0;
+    const filteredStats = hasPresenceData
+      ? {
+          total: filteredPresence.length,
+          online: filteredOnline,
+          offline: Math.max(filteredPresence.length - filteredOnline, 0),
+        }
+      : undefined;
+
+    let filteredRegistrations = registrations;
+    if (extensionPresence.length > 0) {
+      const allowedIds = new Set(
+        filteredPresence
+          .filter((item) => item.online)
+          .map((item) => item.id.toLowerCase()),
+      );
+      if (statusFilter === 'offline') {
+        filteredRegistrations = [];
+      } else {
+        filteredRegistrations = registrations.filter((item) => {
+          const identifier = (item.user || item.aor || item.contact || '').toLowerCase();
+          const normalizedIdentifier = identifier.includes('@') ? identifier.split('@')[0] : identifier;
+          if (allowedIds.size > 0 && !allowedIds.has(normalizedIdentifier)) {
+            return false;
+          }
+          if (searchTerm) {
+            const haystack = [
+              item.user,
+              item.aor,
+              item.contact,
+              item.network_ip,
+              item.network_port,
+              item.agent,
+              item.status,
+              item.rpid,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase();
+            if (!haystack.includes(searchTerm)) {
+              return false;
+            }
+          }
+          return true;
+        });
+      }
+    } else if (searchTerm) {
+      filteredRegistrations = registrations.filter((item) => {
+        const haystack = [
+          item.user,
+          item.aor,
+          item.contact,
+          item.network_ip,
+          item.network_port,
+          item.agent,
+          item.status,
+          item.rpid,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(searchTerm);
+      });
+    } else if (statusFilter === 'offline') {
+      filteredRegistrations = [];
+    }
+
     if (!parsed.profiles || typeof parsed.profiles !== 'object') {
       parsed.profiles = {};
     }
-    const profileData = parsed.profiles[profile] && typeof parsed.profiles[profile] === 'object' ? parsed.profiles[profile] : {};
+    const profileData =
+      parsed.profiles[profile] && typeof parsed.profiles[profile] === 'object' ? parsed.profiles[profile] : {};
     parsed.profiles[profile] = {
       ...profileData,
-      registrations,
-      extensionPresence,
-      extensionStats: extensionPresence.length
-        ? {
-            total: extensionPresence.length,
-            online: extensionPresence.filter((item) => item.online).length,
-            offline: extensionPresence.filter((item) => !item.online).length,
-          }
-        : undefined,
+      registrations: filteredRegistrations,
+      extensionPresence: filteredPresence,
+      extensionStats: filteredStats,
+      extensionStatsOverall: overallStats,
     };
 
     const combinedRawParts = [`[jsonstatus]\n${jsonStatusRaw}`];
@@ -143,7 +250,6 @@ export class FsManagementService {
 
     return { raw: combinedRawParts.join('\n\n'), parsed };
   }
-
   async getChannels(): Promise<CommandResult<Record<string, any>>> {
     const raw = await this.runCommand('show channels as json');
     try {

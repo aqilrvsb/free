@@ -22,6 +22,11 @@ export interface SofiaProfile {
     online: number;
     offline: number;
   };
+  extensionStatsOverall?: {
+    total: number;
+    online: number;
+    offline: number;
+  };
 }
 
 export interface ExtensionPresence {

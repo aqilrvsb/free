@@ -129,6 +129,8 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "online" | "offline">("all");
   const [showRaw, setShowRaw] = useState(false);
+  const isRefreshingRef = useRef(false);
+  const filterStateRef = useRef({ status: statusFilter, search: searchTerm.trim() });
   const socketRef = useRef<Socket | null>(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -141,15 +143,53 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     [],
   );
 
+  const socketTarget = useMemo(() => {
+    const base =
+      wsBase ||
+      apiBase ||
+      (typeof window !== "undefined"
+        ? `${window.location.protocol}//${window.location.host}`
+        : "");
+    if (!base) return "";
+    try {
+      const baseUrl = new URL(base, typeof window !== "undefined" ? window.location.href : undefined);
+      const namespacePath = `${baseUrl.pathname.replace(/\/$/, "")}/registrations`;
+      baseUrl.pathname = namespacePath;
+      if (baseUrl.protocol === "ws:" || baseUrl.protocol === "wss:") {
+        return baseUrl.toString();
+      }
+      const isSecurePage = typeof window !== "undefined" && window.location.protocol === "https:";
+      if (baseUrl.protocol !== "http:" && baseUrl.protocol !== "https:") {
+        baseUrl.protocol = isSecurePage ? "https:" : "http:";
+      } else if (isSecurePage) {
+        baseUrl.protocol = "https:";
+      } else {
+        baseUrl.protocol = "http:";
+      }
+      return baseUrl.toString();
+    } catch (error) {
+      console.warn("Invalid WS base URL", error);
+      return "";
+    }
+  }, [apiBase, wsBase]);
+
   const fetchSnapshot = useCallback(async () => {
     if (!apiBase) {
       return;
     }
     setIsRefreshing(true);
     try {
-      const response = await fetch(`${apiBase}/fs/sofia/${profile}/registrations`, {
-        cache: "no-store",
-      });
+      const params = new URLSearchParams();
+      const trimmedSearch = searchTerm.trim();
+      if (trimmedSearch.length > 0) {
+        params.set("search", trimmedSearch);
+      }
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter);
+      }
+      const query = params.toString();
+      const url = `${apiBase}/fs/sofia/${profile}/registrations${query ? `?${query}` : ''}`;
+      const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`Failed to fetch registrations (status ${response.status})`);
       }
@@ -165,16 +205,33 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     } finally {
       setIsRefreshing(false);
     }
-  }, [apiBase, profile]);
+  }, [apiBase, profile, searchTerm, statusFilter]);
+
+  const fetchSnapshotRef = useRef<() => Promise<void>>();
+
+  useEffect(() => {
+    fetchSnapshotRef.current = fetchSnapshot;
+  }, [fetchSnapshot]);
+
+  useEffect(() => {
+    isRefreshingRef.current = isRefreshing;
+  }, [isRefreshing]);
+
+  useEffect(() => {
+    filterStateRef.current = { status: statusFilter, search: searchTerm.trim().toLowerCase() };
+  }, [statusFilter, searchTerm]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
     }
     refreshTimerRef.current = setTimeout(() => {
-      void fetchSnapshot();
+      refreshTimerRef.current = null;
+      if (fetchSnapshotRef.current) {
+        void fetchSnapshotRef.current();
+      }
     }, 350);
-  }, [fetchSnapshot]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -190,17 +247,21 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
   }, [initialSnapshot]);
 
   useEffect(() => {
-    const resolvedWsBase = wsBase || apiBase || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
-    if (!resolvedWsBase) {
+    void fetchSnapshot();
+  }, [fetchSnapshot]);
+
+  useEffect(() => {
+    if (!socketTarget) {
       return;
     }
 
-    const socket = io(`${resolvedWsBase}/registrations`, {
-      transports: ["websocket"],
+    const socket = io(socketTarget, {
       autoConnect: true,
       withCredentials: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
+      upgrade: false,
+      transports: ['polling'],
     });
     socketRef.current = socket;
 
@@ -225,6 +286,14 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     socket.on("registrations:snapshot", (data: RegistrationSnapshot) => {
       console.log('[ws] snapshot', data.profile, Array.isArray(data.registrations) ? data.registrations.length : 'n/a', data);
       if (data.profile !== profile) return;
+      const currentFilters = filterStateRef.current;
+      const hasActiveFilter = currentFilters.status !== 'all' || currentFilters.search.length > 0;
+      if (hasActiveFilter) {
+        if (!isRefreshingRef.current && fetchSnapshotRef.current) {
+          void fetchSnapshotRef.current();
+        }
+        return;
+      }
       setSnapshot({
         ...data,
         registrations: extractRegistrations(data.profileData),
@@ -250,7 +319,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [apiBase, profile, scheduleRefresh, wsBase]);
+  }, [profile, scheduleRefresh, socketTarget]);
 
   const lastActionLabel = useMemo(() => {
     if (!lastEvent) return null;
@@ -305,30 +374,10 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     });
   }, [presence, registrations]);
 
-  const filteredRegistrations = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return dataset.filter((item) => {
-      if (statusFilter === "online" && !item.online) return false;
-      if (statusFilter === "offline" && item.online) return false;
-      if (!term) return true;
-      const haystack = [
-        item.id,
-        item.displayName ?? undefined,
-        item.contact ?? undefined,
-        item.network_ip ?? undefined,
-        item.agent ?? undefined,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(term);
-    });
-  }, [dataset, searchTerm, statusFilter]);
-
   const stats = useMemo(() => {
     const statsFromBackend = profileData?.extensionStats;
-    if (statsFromBackend && presence.length > 0) {
-      const uniqueCount = new Set(presence.map((item) => (item.id || '').toLowerCase())).size;
+    if (statsFromBackend) {
+      const uniqueCount = new Set(dataset.map((item) => item.id || 'unknown')).size;
       return {
         total: statsFromBackend.total,
         online: statsFromBackend.online,
@@ -346,7 +395,9 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
       offline: Math.max(offline, 0),
       uniqueUsers,
     };
-  }, [dataset, presence, profileData?.extensionStats]);
+  }, [dataset, profileData?.extensionStats]);
+
+  const overallStats = profileData?.extensionStatsOverall;
 
   const highlightedRowKey = useMemo(() => {
     if (!lastEvent?.username) return null;
@@ -419,7 +470,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
           <div className="space-y-1">
             <CardTitle>Danh sách đăng ký</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Hiển thị {filteredRegistrations.length}/{dataset.length} thiết bị
+              Hiển thị {dataset.length}/{overallStats?.total ?? dataset.length} thiết bị
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -455,7 +506,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRegistrations.map((item) => {
+                {dataset.map((item) => {
                   const normalizedId = (item.id || '').toString().toLowerCase();
                   return (
                     <TableRow
@@ -493,7 +544,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
                     </TableRow>
                   );
                 })}
-                {filteredRegistrations.length === 0 && (
+                {dataset.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground">
                       Không có thiết bị phù hợp tiêu chí.

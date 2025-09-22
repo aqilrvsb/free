@@ -31,6 +31,34 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   second: "2-digit",
   hour12: false,
 });
+function stateLabel(state?: string | null) {
+  const value = (state || '').toUpperCase();
+  switch (value) {
+    case 'CS_NEW':
+      return 'Khởi tạo';
+    case 'CS_INIT':
+      return 'Chuẩn bị';
+    case 'CS_ROUTING':
+      return 'Định tuyến';
+    case 'CS_CONSUME_MEDIA':
+      return 'Nhận media';
+    case 'CS_SOFT_EXECUTE':
+      return 'Thực thi (soft)';
+    case 'CS_EXCHANGE_MEDIA':
+      return 'Đang thoại';
+    case 'CS_EXECUTE':
+      return 'Thực thi';
+    case 'CS_HANGUP':
+      return 'Đang ngắt';
+    case 'CS_REPORTING':
+      return 'Báo cáo';
+    case 'CS_DESTROY':
+      return 'Kết thúc';
+    default:
+      return state || 'Không xác định';
+  }
+}
+
 
 function resolveBaseUrl(envValue?: string) {
   if (envValue && envValue.length > 0) {
@@ -60,6 +88,36 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
     () => resolveBaseUrl(process.env.NEXT_PUBLIC_WS_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
+
+  const socketTarget = useMemo(() => {
+    const base =
+      wsBase ||
+      apiBase ||
+      (typeof window !== "undefined"
+        ? `${window.location.protocol}//${window.location.host}`
+        : "");
+    if (!base) return "";
+    try {
+      const baseUrl = new URL(base, typeof window !== "undefined" ? window.location.href : undefined);
+      const namespacePath = `${baseUrl.pathname.replace(/\/$/, "")}/calls`;
+      baseUrl.pathname = namespacePath;
+      if (baseUrl.protocol === "ws:" || baseUrl.protocol === "wss:") {
+        return baseUrl.toString();
+      }
+      const isSecurePage = typeof window !== "undefined" && window.location.protocol === "https:";
+      if (baseUrl.protocol !== "http:" && baseUrl.protocol !== "https:") {
+        baseUrl.protocol = isSecurePage ? "https:" : "http:";
+      } else if (isSecurePage) {
+        baseUrl.protocol = "https:";
+      } else {
+        baseUrl.protocol = "http:";
+      }
+      return baseUrl.toString();
+    } catch (error) {
+      console.warn("Invalid WS base URL", error);
+      return "";
+    }
+  }, [apiBase, wsBase]);
 
   const fetchSnapshot = useCallback(async () => {
     if (!apiBase) return;
@@ -126,17 +184,17 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
   );
 
   useEffect(() => {
-    const resolvedWsBase = wsBase || apiBase || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
-    if (!resolvedWsBase) {
+    if (!socketTarget) {
       return;
     }
 
-    const socket = io(`${resolvedWsBase}/calls`, {
-      transports: ["websocket"],
+    const socket = io(socketTarget, {
       autoConnect: true,
       withCredentials: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
+      upgrade: false,
+      transports: ['polling'],
     });
     socketRef.current = socket;
 
@@ -173,7 +231,7 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [apiBase, wsBase, scheduleSnapshotRefresh]);
+  }, [socketTarget, scheduleSnapshotRefresh]);
 
   const formatDateTime = useCallback((value?: string) => {
     if (!value) return "-";
@@ -259,7 +317,7 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
                         <div className="flex flex-wrap gap-2">
                           <Badge variant="secondary" className="uppercase">{direction || 'unknown'}</Badge>
                           <Badge variant={channel.state === 'CS_EXCHANGE_MEDIA' ? 'default' : 'outline'}>
-                            {channel.state || 'N/A'}
+                            {stateLabel(channel.state)}
                           </Badge>
                         </div>
                       </div>
