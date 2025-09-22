@@ -26,6 +26,7 @@ import {
   ScrollText,
   UserCog,
   Waves,
+  Globe2,
 } from "lucide-react"
 
 interface NavItem {
@@ -101,6 +102,12 @@ const NAV_SECTIONS: Array<{
         description: "Thiết lập tenant và máy nhánh",
         href: "/fs/manage",
         icon: UserCog,
+      },
+      {
+        title: "Gateway / Trunk",
+        description: "Kết nối Telco bên ngoài",
+        href: "/fs/gateways",
+        icon: Globe2,
       },
     ],
   },

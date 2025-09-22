@@ -10,12 +10,14 @@ import { FsManagementController } from './fs-management.controller';
 import { FsManagementService } from './fs-management.service';
 import { RecordingsController } from './recordings.controller';
 import { RecordingsService } from './recordings.service';
-import { CdrEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import { CdrEntity, GatewayEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
 import { FsCallsGateway } from './fs-calls.gateway';
 import { TenantManagementController } from './tenant-management.controller';
 import { TenantManagementService } from './tenant-management.service';
+import { GatewayManagementController } from './gateway-management.controller';
+import { GatewayManagementService } from './gateway-management.service';
 
 @Module({
   imports: [
@@ -29,7 +31,7 @@ import { TenantManagementService } from './tenant-management.service';
         username: config.get('DB_USER', 'fsapp'),
         password: config.get('DB_PASSWORD', 'fsapp'),
         database: config.get('DB_NAME', 'freeswitch'),
-        entities: [TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity],
+        entities: [TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity, GatewayEntity],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
         timezone: 'Z',
@@ -38,9 +40,16 @@ import { TenantManagementService } from './tenant-management.service';
         },
       }),
     }),
-    TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity]),
+    TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity, GatewayEntity]),
   ],
-  controllers: [FsXmlController, CdrController, FsManagementController, RecordingsController, TenantManagementController],
+  controllers: [
+    FsXmlController,
+    CdrController,
+    FsManagementController,
+    RecordingsController,
+    TenantManagementController,
+    GatewayManagementController,
+  ],
   providers: [
     FsService,
     CdrService,
@@ -51,6 +60,7 @@ import { TenantManagementService } from './tenant-management.service';
     FsRegistrationsGateway,
     FsCallsGateway,
     TenantManagementService,
+    GatewayManagementService,
   ],
 })
 export class AppModule {}

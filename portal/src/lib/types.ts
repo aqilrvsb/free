@@ -110,3 +110,23 @@ export interface CallEvent {
   timestamp: number;
   raw?: Record<string, string>;
 }
+
+export interface GatewaySummary {
+  id: string;
+  name: string;
+  profile: string;
+  description?: string | null;
+  username?: string | null;
+  realm?: string | null;
+  proxy?: string | null;
+  register: boolean;
+  enabled: boolean;
+  transport?: string | null;
+  expireSeconds?: number | null;
+  retrySeconds?: number | null;
+  callerIdInFrom?: string | null;
+  callerIdName?: string | null;
+  callerIdNumber?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}

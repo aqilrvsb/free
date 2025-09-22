@@ -250,6 +250,27 @@ export class FsManagementService {
 
     return { raw: combinedRawParts.join('\n\n'), parsed };
   }
+
+  async rescanProfile(profile: string): Promise<void> {
+    try {
+      await this.runCommand(`sofia profile ${profile} rescan`);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to rescan profile ${profile}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  async killGateway(profile: string, name: string): Promise<void> {
+    try {
+      await this.runCommand(`sofia profile ${profile} killgw ${name}`);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to kill gateway ${name} on profile ${profile}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   async getChannels(): Promise<CommandResult<Record<string, any>>> {
     const raw = await this.runCommand('show channels as json');
     try {
