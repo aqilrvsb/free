@@ -10,7 +10,7 @@ import { FsManagementController } from './fs-management.controller';
 import { FsManagementService } from './fs-management.service';
 import { RecordingsController } from './recordings.controller';
 import { RecordingsService } from './recordings.service';
-import { CdrEntity, GatewayEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import { CdrEntity, GatewayEntity, OutboundRuleEntity, RoutingConfigEntity, SettingEntity, TenantEntity, UserEntity } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
 import { FsCallsGateway } from './fs-calls.gateway';
@@ -18,6 +18,10 @@ import { TenantManagementController } from './tenant-management.controller';
 import { TenantManagementService } from './tenant-management.service';
 import { GatewayManagementController } from './gateway-management.controller';
 import { GatewayManagementService } from './gateway-management.service';
+import { OutboundRoutingService } from './outbound-routing.service';
+import { OutboundRoutingController } from './outbound-routing.controller';
+import { SettingsService } from './settings.service';
+import { SettingsController } from './settings.controller';
 
 @Module({
   imports: [
@@ -31,7 +35,15 @@ import { GatewayManagementService } from './gateway-management.service';
         username: config.get('DB_USER', 'fsapp'),
         password: config.get('DB_PASSWORD', 'fsapp'),
         database: config.get('DB_NAME', 'freeswitch'),
-        entities: [TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity, GatewayEntity],
+        entities: [
+          TenantEntity,
+          UserEntity,
+          RoutingConfigEntity,
+          CdrEntity,
+          GatewayEntity,
+          OutboundRuleEntity,
+          SettingEntity,
+        ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
         timezone: 'Z',
@@ -40,7 +52,7 @@ import { GatewayManagementService } from './gateway-management.service';
         },
       }),
     }),
-    TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity, GatewayEntity]),
+    TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity, GatewayEntity, OutboundRuleEntity, SettingEntity]),
   ],
   controllers: [
     FsXmlController,
@@ -49,6 +61,8 @@ import { GatewayManagementService } from './gateway-management.service';
     RecordingsController,
     TenantManagementController,
     GatewayManagementController,
+    OutboundRoutingController,
+    SettingsController,
   ],
   providers: [
     FsService,
@@ -61,6 +75,8 @@ import { GatewayManagementService } from './gateway-management.service';
     FsCallsGateway,
     TenantManagementService,
     GatewayManagementService,
+    OutboundRoutingService,
+    SettingsService,
   ],
 })
 export class AppModule {}

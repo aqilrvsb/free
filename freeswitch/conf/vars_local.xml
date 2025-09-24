@@ -1,5 +1,6 @@
 <include>
   <X-PRE-PROCESS cmd="set" data="auto_nat=true"/>
-  <X-PRE-PROCESS cmd="set" data="external_sip_ip=192.168.110.86"/>
-  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=192.168.110.86"/>
+  <X-PRE-PROCESS cmd="set" data="sip_tls_version=tlsv1_2"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_ip=auto-nat"/>
+  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=auto-nat"/>
 </include>

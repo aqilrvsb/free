@@ -109,6 +109,12 @@ const NAV_SECTIONS: Array<{
         href: "/fs/gateways",
         icon: Globe2,
       },
+      {
+        title: "Outbound Routing",
+        description: "Quy tắc gọi ra ngoài",
+        href: "/fs/outbound",
+        icon: RadioTower,
+      },
     ],
   },
 ]

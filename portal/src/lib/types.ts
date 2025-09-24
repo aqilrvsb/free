@@ -130,3 +130,36 @@ export interface GatewaySummary {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface OutboundRouteSummary {
+  id: string;
+  tenantId: string;
+  tenantName?: string;
+  gatewayId?: string | null;
+  gatewayName?: string;
+  name: string;
+  description?: string | null;
+  matchPrefix?: string | null;
+  priority: number;
+  stripDigits?: number;
+  prepend?: string;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RecordingStorageAwsConfig {
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  endpoint?: string;
+  cdnEndpoint?: string;
+  region?: string;
+  bucketName?: string;
+}
+
+export interface RecordingStorageConfig {
+  mode: 'local' | 'cdn';
+  cdnBaseUrl?: string;
+  provider?: 's3' | null;
+  aws?: RecordingStorageAwsConfig;
+}

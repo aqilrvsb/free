@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { RecordingMetadata } from "@/lib/types";
+import type { RecordingMetadata, RecordingStorageConfig } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 interface RecordingsTableProps {
   recordings: RecordingMetadata[];
   apiBaseUrl: string;
+  storageConfig: RecordingStorageConfig;
 }
 
 function formatDate(value: string) {
@@ -36,20 +37,35 @@ function formatSize(bytes: number) {
   return `${megaBytes.toFixed(2)} MB`;
 }
 
-export function RecordingsTable({ recordings, apiBaseUrl }: RecordingsTableProps) {
+export function RecordingsTable({ recordings, apiBaseUrl, storageConfig }: RecordingsTableProps) {
   const [open, setOpen] = useState(false);
   const [activeRecording, setActiveRecording] = useState<RecordingMetadata | null>(null);
 
   const baseUrl = useMemo(() => apiBaseUrl.replace(/\/$/, ""), [apiBaseUrl]);
+  const cdnBase = useMemo(() => {
+    if (storageConfig.mode !== 'cdn' || !storageConfig.cdnBaseUrl) {
+      return null;
+    }
+    return storageConfig.cdnBaseUrl.replace(/\/$/, "");
+  }, [storageConfig]);
+
+  const buildUrl = (path: string) => {
+    if (cdnBase) {
+      const normalized = path.replace(/^\/+/, '');
+      return `${cdnBase}/${encodeURI(normalized)}`;
+    }
+    return `${baseUrl}/recordings/${encodeURIComponent(path)}`;
+  };
 
   const handlePreview = (recording: RecordingMetadata) => {
     setActiveRecording(recording);
     setOpen(true);
   };
 
-  const playbackUrl = activeRecording
-    ? `${baseUrl}/recordings/${encodeURIComponent(activeRecording.path)}`
-    : "";
+  const playbackUrl = activeRecording ? buildUrl(activeRecording.path) : "";
+  const storageDescription = cdnBase
+    ? 'Ghi âm được phục vụ qua CDN.'
+    : 'Ghi âm được lưu tại FreeSWITCH và phục vụ trực tiếp qua API backend.';
 
   return (
     <Dialog
@@ -73,7 +89,7 @@ export function RecordingsTable({ recordings, apiBaseUrl }: RecordingsTableProps
           </TableHeader>
           <TableBody>
             {recordings.map((recording) => {
-              const downloadUrl = `${baseUrl}/recordings/${encodeURIComponent(recording.path)}`;
+              const downloadUrl = buildUrl(recording.path);
 
               return (
                 <TableRow key={recording.path}>
@@ -130,7 +146,7 @@ export function RecordingsTable({ recordings, apiBaseUrl }: RecordingsTableProps
             </div>
             <DialogFooter className="sm:justify-between">
               <p className="text-xs text-muted-foreground">
-                Ghi âm được lưu tại FreeSWITCH và phục vụ trực tiếp qua API backend.
+                {storageDescription}
               </p>
               <Button asChild>
                 <a href={playbackUrl} download>

@@ -3,7 +3,7 @@ import { create } from 'xmlbuilder2';
 import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import { RoutingConfigEntity, TenantEntity, UserEntity, OutboundRuleEntity } from './entities';
 
 interface DialplanParams {
   context?: string;
@@ -32,6 +32,7 @@ export class FsService {
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
+    @InjectRepository(OutboundRuleEntity) private readonly outboundRepo: Repository<OutboundRuleEntity>,
   ) {}
 
   async dialplanXML(params: DialplanParams): Promise<string> {
@@ -56,6 +57,12 @@ export class FsService {
       codecString: 'PCMU,PCMA,G722,OPUS',
     };
 
+    const outboundRules = await this.outboundRepo.find({
+      where: { tenantId, enabled: true },
+      order: { priority: 'ASC', createdAt: 'ASC' },
+      relations: ['gateway'],
+    });
+
     const codecString = this.pickCodecString(routeCfg?.codecString);
     const context = params.context || `context_${tenantId}`;
     const internalPrefix: string = routeCfg.internalPrefix || '9';
@@ -68,6 +75,35 @@ export class FsService {
     ];
 
     let extBridge: string | null = null;
+
+    if (!extBridge && outboundRules.length > 0) {
+      const matched = outboundRules.find((rule) => {
+        const prefix = rule.matchPrefix || '';
+        if (!prefix) return true;
+        return dest.startsWith(prefix);
+      });
+
+      if (matched) {
+        let dialNumber = dest;
+
+        if (matched.stripDigits && matched.stripDigits > 0) {
+          if (matched.stripDigits >= dialNumber.length) {
+            dialNumber = '';
+          } else {
+            dialNumber = dialNumber.substring(matched.stripDigits);
+          }
+        }
+
+        if (matched.prepend) {
+          dialNumber = `${matched.prepend}${dialNumber}`;
+        }
+
+        const gwName = matched.gateway?.name || pstnGateway || null;
+        if (gwName && dialNumber) {
+          extBridge = `sofia/gateway/${gwName}/${dialNumber}`;
+        }
+      }
+    }
     const localUsers = await this.userRepo.find({ where: { tenantId } });
     const localUserSet = new Set(localUsers.map((u) => u.id));
     const hasLocalUser = (ext: string) => localUserSet.has(ext);
