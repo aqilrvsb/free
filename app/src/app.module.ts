@@ -10,7 +10,17 @@ import { FsManagementController } from './fs-management.controller';
 import { FsManagementService } from './fs-management.service';
 import { RecordingsController } from './recordings.controller';
 import { RecordingsService } from './recordings.service';
-import { CdrEntity, GatewayEntity, OutboundRuleEntity, RoutingConfigEntity, SettingEntity, TenantEntity, UserEntity } from './entities';
+import {
+  CdrEntity,
+  DialplanActionEntity,
+  DialplanRuleEntity,
+  GatewayEntity,
+  OutboundRuleEntity,
+  RoutingConfigEntity,
+  SettingEntity,
+  TenantEntity,
+  UserEntity,
+} from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
 import { FsCallsGateway } from './fs-calls.gateway';
@@ -22,6 +32,8 @@ import { OutboundRoutingService } from './outbound-routing.service';
 import { OutboundRoutingController } from './outbound-routing.controller';
 import { SettingsService } from './settings.service';
 import { SettingsController } from './settings.controller';
+import { DialplanConfigController } from './dialplan-config.controller';
+import { DialplanConfigService } from './dialplan-config.service';
 
 @Module({
   imports: [
@@ -43,6 +55,8 @@ import { SettingsController } from './settings.controller';
           GatewayEntity,
           OutboundRuleEntity,
           SettingEntity,
+          DialplanRuleEntity,
+          DialplanActionEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -52,7 +66,17 @@ import { SettingsController } from './settings.controller';
         },
       }),
     }),
-    TypeOrmModule.forFeature([TenantEntity, UserEntity, RoutingConfigEntity, CdrEntity, GatewayEntity, OutboundRuleEntity, SettingEntity]),
+    TypeOrmModule.forFeature([
+      TenantEntity,
+      UserEntity,
+      RoutingConfigEntity,
+      CdrEntity,
+      GatewayEntity,
+      OutboundRuleEntity,
+      SettingEntity,
+      DialplanRuleEntity,
+      DialplanActionEntity,
+    ]),
   ],
   controllers: [
     FsXmlController,
@@ -62,6 +86,7 @@ import { SettingsController } from './settings.controller';
     TenantManagementController,
     GatewayManagementController,
     OutboundRoutingController,
+    DialplanConfigController,
     SettingsController,
   ],
   providers: [
@@ -77,6 +102,7 @@ import { SettingsController } from './settings.controller';
     GatewayManagementService,
     OutboundRoutingService,
     SettingsService,
+    DialplanConfigService,
   ],
 })
 export class AppModule {}

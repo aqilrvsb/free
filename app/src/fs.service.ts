@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RoutingConfigEntity, TenantEntity, UserEntity, OutboundRuleEntity } from './entities';
+import { DialplanConfigService } from './dialplan-config.service';
 
 interface DialplanParams {
   context?: string;
@@ -33,6 +34,7 @@ export class FsService {
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
     @InjectRepository(OutboundRuleEntity) private readonly outboundRepo: Repository<OutboundRuleEntity>,
+    private readonly dialplanConfig: DialplanConfigService,
   ) {}
 
   async dialplanXML(params: DialplanParams): Promise<string> {
@@ -69,44 +71,48 @@ export class FsService {
     const vmPrefix: string = routeCfg.voicemailPrefix || '*9';
     const pstnGateway: string = routeCfg.pstnGateway || 'pstn';
 
-    const actions: Array<{ app: string; data?: string }> = [
+    const baseActions: Array<{ app: string; data?: string }> = [
       { app: 'set', data: 'ringback=${us-ring}' },
       { app: 'set', data: 'hangup_after_bridge=true' },
     ];
 
-    let extBridge: string | null = null;
-
-    if (!extBridge && outboundRules.length > 0) {
-      const matched = outboundRules.find((rule) => {
-        const prefix = rule.matchPrefix || '';
-        if (!prefix) return true;
-        return dest.startsWith(prefix);
+    if (dest) {
+      const matchedCustom = await this.dialplanConfig.resolveForDestination({
+        tenantId,
+        destination: dest,
+        context,
+        domain: fallbackDomain,
       });
 
-      if (matched) {
-        let dialNumber = dest;
+      if (matchedCustom) {
+        const actions: Array<{ app: string; data?: string }> = matchedCustom.rule.inheritDefault
+          ? [...baseActions]
+          : [];
 
-        if (matched.stripDigits && matched.stripDigits > 0) {
-          if (matched.stripDigits >= dialNumber.length) {
-            dialNumber = '';
-          } else {
-            dialNumber = dialNumber.substring(matched.stripDigits);
-          }
+        const shouldAutoRecord = matchedCustom.rule.recordingEnabled !== false;
+        const hasCustomRecording = matchedCustom.actions.some((action) => action.app === 'record_session');
+        if (shouldAutoRecord && !hasCustomRecording) {
+          actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString));
         }
 
-        if (matched.prepend) {
-          dialNumber = `${matched.prepend}${dialNumber}`;
-        }
+        actions.push(...matchedCustom.actions);
 
-        const gwName = matched.gateway?.name || pstnGateway || null;
-        if (gwName && dialNumber) {
-          extBridge = `sofia/gateway/${gwName}/${dialNumber}`;
-        }
+        return this.buildDialplanXml({
+          context: matchedCustom.context,
+          extensionName: matchedCustom.extensionName,
+          destination: dest,
+          actions,
+        });
       }
     }
+
+    const actions: Array<{ app: string; data?: string }> = [...baseActions];
+
     const localUsers = await this.userRepo.find({ where: { tenantId } });
     const localUserSet = new Set(localUsers.map((u) => u.id));
     const hasLocalUser = (ext: string) => localUserSet.has(ext);
+
+    let extBridge: string | null = null;
 
     if (!extBridge && /^\d{2,6}$/.test(dest) && hasLocalUser(dest)) {
       extBridge = `user/${dest}@${fallbackDomain}`;
@@ -139,6 +145,35 @@ export class FsService {
       }
     }
 
+    if (!extBridge && outboundRules.length > 0) {
+      const matched = outboundRules.find((rule) => {
+        const prefix = rule.matchPrefix || '';
+        if (!prefix) return true;
+        return dest.startsWith(prefix);
+      });
+
+      if (matched) {
+        let dialNumber = dest;
+
+        if (matched.stripDigits && matched.stripDigits > 0) {
+          if (matched.stripDigits >= dialNumber.length) {
+            dialNumber = '';
+          } else {
+            dialNumber = dialNumber.substring(matched.stripDigits);
+          }
+        }
+
+        if (matched.prepend) {
+          dialNumber = `${matched.prepend}${dialNumber}`;
+        }
+
+        const gwName = matched.gateway?.name || pstnGateway || null;
+        if (gwName && dialNumber) {
+          extBridge = `sofia/gateway/${gwName}/${dialNumber}`;
+        }
+      }
+    }
+
     const normalizedDigits = dest.replace(/^\+/, '');
     if (!extBridge && /^00\d{6,15}$/.test(dest)) {
       extBridge = `sofia/gateway/${pstnGateway}/${dest.substring(2)}`;
@@ -151,12 +186,7 @@ export class FsService {
       actions.push({ app: 'playback', data: 'ivr/ivr-invalid_extension.wav' });
       actions.push({ app: 'hangup', data: 'NO_ROUTE_DESTINATION' });
     } else {
-      const filenameSuffix = this.safeFilename(dest || tenantId || 'dest');
-      const recordingFile = '$${recordings_dir}/${uuid}-' + filenameSuffix + '.wav';
-      actions.push({ app: 'set', data: `recording_file=${recordingFile}` });
-      actions.push({ app: 'record_session', data: recordingFile });
-      actions.push({ app: 'export', data: `nolocal:absolute_codec_string=${codecString}` });
-      actions.push({ app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` });
+      actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString));
       actions.push({ app: 'bridge', data: extBridge });
     }
 
@@ -297,6 +327,17 @@ export class FsService {
   private safeFilename(value: string): string {
     const base = value || 'unknown';
     return base.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  private buildRecordingActions(target: string, codecString: string): Array<{ app: string; data?: string }> {
+    const filenameSuffix = this.safeFilename(target || 'dest');
+    const recordingFile = '$${recordings_dir}/${uuid}-' + filenameSuffix + '.wav';
+    return [
+      { app: 'set', data: `recording_file=${recordingFile}` },
+      { app: 'record_session', data: recordingFile },
+      { app: 'export', data: `nolocal:absolute_codec_string=${codecString}` },
+      { app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` },
+    ];
   }
 
   private pickCodecString(value?: string | null): string {

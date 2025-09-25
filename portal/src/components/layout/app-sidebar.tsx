@@ -21,12 +21,13 @@ import type { LucideIcon } from "lucide-react"
 import {
   Activity,
   FileAudio,
+  GitBranch,
+  Globe2,
   LayoutDashboard,
   RadioTower,
   ScrollText,
   UserCog,
   Waves,
-  Globe2,
 } from "lucide-react"
 
 interface NavItem {
@@ -108,6 +109,12 @@ const NAV_SECTIONS: Array<{
         description: "Kết nối Telco bên ngoài",
         href: "/fs/gateways",
         icon: Globe2,
+      },
+      {
+        title: "Dialplan",
+        description: "Quy tắc gọi nội bộ & outbound",
+        href: "/fs/dialplan",
+        icon: GitBranch,
       },
       {
         title: "Outbound Routing",

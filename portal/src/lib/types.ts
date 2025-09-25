@@ -163,3 +163,34 @@ export interface RecordingStorageConfig {
   provider?: 's3' | null;
   aws?: RecordingStorageAwsConfig;
 }
+
+export type DialplanRuleKind = 'internal' | 'external';
+export type DialplanMatchType = 'regex' | 'prefix' | 'exact';
+
+export interface DialplanActionConfig {
+  id: string;
+  application: string;
+  data?: string | null;
+  position: number;
+}
+
+export interface DialplanRuleConfig {
+  id: string;
+  tenantId: string;
+  tenantName?: string;
+  kind: DialplanRuleKind;
+  name: string;
+  description?: string | null;
+  matchType: DialplanMatchType;
+  pattern: string;
+  context?: string | null;
+  extension?: string | null;
+  priority: number;
+  enabled: boolean;
+  inheritDefault: boolean;
+  recordingEnabled: boolean;
+  stopOnMatch: boolean;
+  actions: DialplanActionConfig[];
+  createdAt?: string;
+  updatedAt?: string;
+}

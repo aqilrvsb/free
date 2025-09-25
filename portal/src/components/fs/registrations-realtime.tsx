@@ -207,7 +207,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     }
   }, [apiBase, profile, searchTerm, statusFilter]);
 
-  const fetchSnapshotRef = useRef<() => Promise<void>>();
+  const fetchSnapshotRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     fetchSnapshotRef.current = fetchSnapshot;
