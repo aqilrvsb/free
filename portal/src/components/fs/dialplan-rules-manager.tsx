@@ -69,6 +69,48 @@ const defaultRuleForm: RuleFormState = {
   actions: [],
 };
 
+const ruleTemplates: Array<{
+  id: string;
+  label: string;
+  description: string;
+  apply: (current: RuleFormState) => RuleFormState;
+}> = [
+  {
+    id: "internal-4-digit",
+    label: "Gọi nội bộ 4 số (mặc định)",
+    description:
+      "Pattern ^\\d{4}$, giữ ringback/hangup mặc định, tự set dialed_* và bridge tới thiết bị nội bộ qua sofia_contact.",
+    apply: (current) => {
+      const internalActions: ActionFormState[] = [
+        { application: "set", data: "dialed_ext={{destination}}", position: 10 },
+        { application: "set", data: "dialed_domain={{domain}}", position: 15 },
+        { application: "set", data: "sip_invite_domain={{domain}}", position: 20 },
+        {
+          application: "bridge",
+          data: "${sofia_contact(internal/{{destination}}@{{domain}})}",
+          position: 100,
+        },
+      ];
+
+      return {
+        ...current,
+        name: current.name.trim() ? current.name : "Gọi nội bộ 4 số",
+        description: current.description.trim()
+          ? current.description
+          : "Mẫu mặc định cho gọi nội bộ 4 số trong tenant.",
+        kind: "internal",
+        matchType: "regex",
+        pattern: "^\\d{4}$",
+        priority: "10",
+        inheritDefault: true,
+        recordingEnabled: true,
+        stopOnMatch: true,
+        actions: internalActions,
+      };
+    },
+  },
+];
+
 function resolveBaseUrl(envValue?: string) {
   if (envValue && envValue.length > 0) {
     return envValue.replace(/\/$/, "");
@@ -96,8 +138,12 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
   const [form, setForm] = useState<RuleFormState>({ ...defaultRuleForm });
   const [editing, setEditing] = useState<DialplanRuleConfig | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
 
   const apiBase = useMemo(() => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  const activeTemplate = selectedTemplate
+    ? ruleTemplates.find((template) => template.id === selectedTemplate)
+    : undefined;
 
   const filteredRules = useMemo(() => {
     if (selectedTenant === "all") {
@@ -120,12 +166,14 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
     setDialogMode("create");
     setEditing(null);
     setForm({ ...defaultRuleForm, tenantId: tenantDefault, priority: String(resolveDefaultPriority(tenantDefault)) });
+    setSelectedTemplate("");
     setDialogOpen(true);
   };
 
   const openEdit = (rule: DialplanRuleConfig) => {
     setDialogMode("edit");
     setEditing(rule);
+    setSelectedTemplate("");
     setForm({
       tenantId: rule.tenantId,
       name: rule.name,
@@ -148,6 +196,7 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
   const closeDialog = () => {
     setDialogOpen(false);
     setEditing(null);
+    setSelectedTemplate("");
   };
 
   const handleField = <K extends keyof RuleFormState>(field: K, value: RuleFormState[K]) => {
@@ -221,6 +270,15 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
     };
 
     return payload;
+  };
+
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    const template = ruleTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+    setForm((prev) => template.apply({ ...prev, actions: [...prev.actions] }));
   };
 
   const submitRule = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -419,6 +477,36 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
                 Định nghĩa chuỗi action khi số đích khớp pattern.
               </DialogDescription>
             </DialogHeader>
+
+            {dialogMode === "create" ? (
+              <div className="space-y-2 rounded-md border border-border/70 bg-muted/10 p-3">
+                <Label htmlFor="rule-template" className="text-sm font-medium">
+                  Mẫu nhanh
+                </Label>
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  <select
+                    id="rule-template"
+                    value={selectedTemplate}
+                    onChange={(event) => handleTemplateChange(event.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm md:w-72"
+                  >
+                    <option value="">-- Chọn mẫu --</option>
+                    {ruleTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {activeTemplate ? (
+                  <p className="text-xs text-muted-foreground">{activeTemplate.description}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Chọn mẫu để điền sẵn pattern và action phổ biến cho gọi nội bộ.
+                  </p>
+                )}
+              </div>
+            ) : null}
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
