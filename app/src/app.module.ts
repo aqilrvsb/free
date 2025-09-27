@@ -20,6 +20,9 @@ import {
   SettingEntity,
   TenantEntity,
   UserEntity,
+  InboundRouteEntity,
+  IvrMenuEntity,
+  IvrMenuOptionEntity,
 } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
@@ -34,6 +37,10 @@ import { SettingsService } from './settings.service';
 import { SettingsController } from './settings.controller';
 import { DialplanConfigController } from './dialplan-config.controller';
 import { DialplanConfigService } from './dialplan-config.service';
+import { InboundRoutingService } from './inbound-routing.service';
+import { InboundRoutingController } from './inbound-routing.controller';
+import { IvrMenuService } from './ivr-menu.service';
+import { IvrMenuController } from './ivr-menu.controller';
 
 @Module({
   imports: [
@@ -57,6 +64,9 @@ import { DialplanConfigService } from './dialplan-config.service';
           SettingEntity,
           DialplanRuleEntity,
           DialplanActionEntity,
+          InboundRouteEntity,
+          IvrMenuEntity,
+          IvrMenuOptionEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -76,6 +86,9 @@ import { DialplanConfigService } from './dialplan-config.service';
       SettingEntity,
       DialplanRuleEntity,
       DialplanActionEntity,
+      InboundRouteEntity,
+      IvrMenuEntity,
+      IvrMenuOptionEntity,
     ]),
   ],
   controllers: [
@@ -86,6 +99,8 @@ import { DialplanConfigService } from './dialplan-config.service';
     TenantManagementController,
     GatewayManagementController,
     OutboundRoutingController,
+    InboundRoutingController,
+    IvrMenuController,
     DialplanConfigController,
     SettingsController,
   ],
@@ -101,6 +116,8 @@ import { DialplanConfigService } from './dialplan-config.service';
     TenantManagementService,
     GatewayManagementService,
     OutboundRoutingService,
+    InboundRoutingService,
+    IvrMenuService,
     SettingsService,
     DialplanConfigService,
   ],

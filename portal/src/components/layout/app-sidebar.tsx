@@ -24,10 +24,12 @@ import {
   GitBranch,
   Globe2,
   LayoutDashboard,
+  PhoneIncoming,
   RadioTower,
   ScrollText,
   UserCog,
   Waves,
+  Workflow,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -122,6 +124,18 @@ const NAV_SECTIONS: Array<{
         description: "Quy tắc gọi ra ngoài",
         href: "/fs/outbound",
         icon: RadioTower,
+      },
+      {
+        title: "Inbound Routing",
+        description: "Định tuyến DID vào",
+        href: "/fs/inbound",
+        icon: PhoneIncoming,
+      },
+      {
+        title: "IVR",
+        description: "Kịch bản trả lời tự động",
+        href: "/fs/ivr",
+        icon: Workflow,
       },
     ],
   },

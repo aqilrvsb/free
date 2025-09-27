@@ -148,6 +148,50 @@ export interface OutboundRouteSummary {
   updatedAt?: string;
 }
 
+export type InboundDestinationType = 'extension' | 'sip_uri' | 'ivr' | 'voicemail';
+
+export interface InboundRouteSummary {
+  id: string;
+  tenantId: string;
+  tenantName?: string;
+  name: string;
+  description?: string | null;
+  didNumber: string;
+  destinationType: InboundDestinationType;
+  destinationValue: string;
+  destinationLabel?: string;
+  priority: number;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type IvrActionType = 'extension' | 'sip_uri' | 'voicemail' | 'hangup';
+
+export interface IvrMenuOptionSummary {
+  id: string;
+  digit: string;
+  description?: string | null;
+  actionType: IvrActionType;
+  actionValue?: string | null;
+  position: number;
+}
+
+export interface IvrMenuSummary {
+  id: string;
+  tenantId: string;
+  tenantName?: string;
+  name: string;
+  description?: string | null;
+  greetingAudioUrl?: string | null;
+  invalidAudioUrl?: string | null;
+  timeoutSeconds: number;
+  maxRetries: number;
+  options: IvrMenuOptionSummary[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface RecordingStorageAwsConfig {
   accessKeyId?: string;
   secretAccessKey?: string;

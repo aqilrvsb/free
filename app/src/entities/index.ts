@@ -7,3 +7,6 @@ export * from './outbound-rule.entity';
 export * from './setting.entity';
 export * from './dialplan-rule.entity';
 export * from './dialplan-action.entity';
+export * from './inbound-route.entity';
+export * from './ivr-menu.entity';
+export * from './ivr-menu-option.entity';

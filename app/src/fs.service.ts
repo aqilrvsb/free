@@ -3,7 +3,7 @@ import { create } from 'xmlbuilder2';
 import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RoutingConfigEntity, TenantEntity, UserEntity, OutboundRuleEntity } from './entities';
+import { RoutingConfigEntity, TenantEntity, UserEntity, OutboundRuleEntity, InboundRouteEntity, IvrMenuEntity } from './entities';
 import { DialplanConfigService } from './dialplan-config.service';
 
 interface DialplanParams {
@@ -34,6 +34,8 @@ export class FsService {
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
     @InjectRepository(OutboundRuleEntity) private readonly outboundRepo: Repository<OutboundRuleEntity>,
+    @InjectRepository(InboundRouteEntity) private readonly inboundRepo: Repository<InboundRouteEntity>,
+    @InjectRepository(IvrMenuEntity) private readonly ivrMenuRepo: Repository<IvrMenuEntity>,
     private readonly dialplanConfig: DialplanConfigService,
   ) {}
 
@@ -41,14 +43,27 @@ export class FsService {
     const destRaw = (params.destination_number || '').trim();
     const dest = destRaw.replace(/\s+/g, '');
 
-    const { tenant, domain } = await this.resolveTenant({
+    let inboundRoute = dest ? await this.findInboundRoute(dest) : null;
+
+    const resolved = await this.resolveTenant({
       domain: params.domain,
       context: params.context,
       destination: dest,
     });
 
-    const fallbackDomain = domain || tenant?.domain || 'default.local';
-    const tenantId = tenant?.id || 'tenant1';
+    let tenant = inboundRoute?.tenant || resolved.tenant;
+    let fallbackDomain = inboundRoute?.tenant?.domain || resolved.domain || tenant?.domain || 'default.local';
+    let tenantId = tenant?.id || inboundRoute?.tenantId || 'tenant1';
+
+    if (dest && (!inboundRoute || inboundRoute.tenantId !== tenantId)) {
+      const tenantScoped = await this.findInboundRoute(dest, tenantId);
+      if (tenantScoped) {
+        inboundRoute = tenantScoped;
+        tenant = tenantScoped.tenant;
+        tenantId = tenantScoped.tenantId;
+        fallbackDomain = tenantScoped.tenant?.domain || fallbackDomain;
+      }
+    }
 
     const routing = await this.routingRepo.findOne({ where: { tenantId } });
     const routeCfg = routing || {
@@ -58,12 +73,6 @@ export class FsService {
       enableE164: true,
       codecString: 'PCMU,PCMA,G722,OPUS',
     };
-
-    const outboundRules = await this.outboundRepo.find({
-      where: { tenantId, enabled: true },
-      order: { priority: 'ASC', createdAt: 'ASC' },
-      relations: ['gateway'],
-    });
 
     const codecString = this.pickCodecString(routeCfg?.codecString);
     const context = params.context || `context_${tenantId}`;
@@ -77,6 +86,17 @@ export class FsService {
     ];
 
     if (dest) {
+      if (inboundRoute) {
+        return this.handleInboundRoute({
+          route: inboundRoute,
+          destination: dest,
+          context,
+          codecString,
+          fallbackDomain,
+          baseActions,
+        });
+      }
+
       const matchedCustom = await this.dialplanConfig.resolveForDestination({
         tenantId,
         destination: dest,
@@ -107,6 +127,12 @@ export class FsService {
     }
 
     const actions: Array<{ app: string; data?: string }> = [...baseActions];
+
+    const outboundRules = await this.outboundRepo.find({
+      where: { tenantId, enabled: true },
+      order: { priority: 'ASC', createdAt: 'ASC' },
+      relations: ['gateway'],
+    });
 
     const localUsers = await this.userRepo.find({ where: { tenantId } });
     const localUserSet = new Set(localUsers.map((u) => u.id));
@@ -298,6 +324,174 @@ export class FsService {
     }
 
     return { tenant, domain: normalizedDomain };
+  }
+
+  private async findInboundRoute(didNumber: string, tenantId?: string): Promise<InboundRouteEntity | null> {
+    const where: Record<string, any> = { didNumber, enabled: true };
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+    const route = await this.inboundRepo.findOne({
+      where,
+      order: { priority: 'ASC', createdAt: 'ASC' },
+      relations: ['tenant'],
+    });
+    return route ?? null;
+  }
+
+  private async handleInboundRoute(params: {
+    route: InboundRouteEntity;
+    destination: string;
+    context: string;
+    codecString: string;
+    fallbackDomain: string;
+    baseActions: Array<{ app: string; data?: string }>;
+  }): Promise<string> {
+    const { route, destination, context, codecString, fallbackDomain, baseActions } = params;
+
+    if (route.destinationType === 'ivr') {
+      const menu = await this.ivrMenuRepo.findOne({ where: { id: route.destinationValue }, relations: ['options'] });
+      if (!menu || !menu.options || menu.options.length === 0) {
+        return this.buildDialplanXml({
+          context,
+          extensionName: `inbound_${route.id}`,
+          destination,
+          actions: [
+            { app: 'playback', data: 'ivr/ivr-not_available.wav' },
+            { app: 'hangup', data: 'NORMAL_TEMPORARY_FAILURE' },
+          ],
+        });
+      }
+      return this.buildIvrDialplan({ route, menu, destination, context, baseActions, fallbackDomain });
+    }
+
+    const actions: Array<{ app: string; data?: string }> = [...baseActions];
+
+    switch (route.destinationType) {
+      case 'extension': {
+        const ext = route.destinationValue;
+        actions.push(...this.buildRecordingActions(ext, codecString));
+        actions.push({ app: 'bridge', data: `user/${ext}@${fallbackDomain}` });
+        break;
+      }
+      case 'sip_uri': {
+        actions.push({ app: 'bridge', data: route.destinationValue });
+        break;
+      }
+      case 'voicemail': {
+        actions.push({ app: 'answer' });
+        actions.push({ app: 'sleep', data: '250' });
+        actions.push({ app: 'voicemail', data: `default ${fallbackDomain} ${route.destinationValue}` });
+        actions.push({ app: 'hangup', data: 'NORMAL_CLEARING' });
+        break;
+      }
+      default: {
+        actions.push({ app: 'hangup', data: 'UNALLOCATED_NUMBER' });
+        break;
+      }
+    }
+
+    return this.buildDialplanXml({
+      context,
+      extensionName: `inbound_${route.id}`,
+      destination,
+      actions,
+    });
+  }
+
+  private buildIvrDialplan(params: {
+    route: InboundRouteEntity;
+    menu: IvrMenuEntity;
+    destination: string;
+    context: string;
+    baseActions: Array<{ app: string; data?: string }>;
+    fallbackDomain: string;
+  }): string {
+    const { route, menu, destination, context, baseActions, fallbackDomain } = params;
+    const doc = create({ version: '1.0' });
+    const documentNode = doc.ele('document', { type: 'freeswitch/xml' });
+    const sectionNode = documentNode.ele('section', { name: 'dialplan' });
+    const contextNode = sectionNode.ele('context', { name: context });
+
+    const mainExtension = contextNode.ele('extension', { name: `inbound_${route.id}` });
+    const mainCondition = mainExtension.ele('condition', { field: 'destination_number', expression: `^${destination}$` });
+
+    for (const action of baseActions) {
+      if (action.data) {
+        mainCondition.ele('action', { application: action.app, data: action.data }).up();
+      } else {
+        mainCondition.ele('action', { application: action.app }).up();
+      }
+    }
+
+    mainCondition.ele('action', { application: 'answer' }).up();
+    mainCondition.ele('action', { application: 'sleep', data: '250' }).up();
+
+    const prompt = menu.greetingAudioUrl || 'ivr/ivr-welcome_to_freeswitch.wav';
+    const invalidPrompt = menu.invalidAudioUrl || 'ivr/ivr-invalid_entry.wav';
+    const digitVar = `ivr_menu_${menu.id}_digit`;
+    const timeoutMs = Math.max(1, menu.timeoutSeconds || 5) * 1000;
+    const maxRetries = Math.max(1, menu.maxRetries || 3);
+
+    mainCondition
+      .ele('action', {
+        application: 'play_and_get_digits',
+        data: `1 1 ${maxRetries} ${timeoutMs} # ${prompt} ${invalidPrompt} ${digitVar}`,
+      })
+      .up();
+
+    mainCondition
+      .ele('action', { application: 'execute_extension', data: `ivr-menu-${menu.id} XML ${context}` })
+      .up();
+
+    const menuExtension = contextNode.ele('extension', { name: `ivr_menu_${menu.id}` });
+    const menuCondition = menuExtension.ele('condition', { field: 'destination_number', expression: `^ivr-menu-${menu.id}$` });
+
+    const sortedOptions = [...(menu.options || [])].sort((a, b) => {
+      if (a.position !== b.position) {
+        return a.position - b.position;
+      }
+      return a.digit.localeCompare(b.digit);
+    });
+
+    const digitField = '${' + digitVar + '}';
+
+    for (const option of sortedOptions) {
+      const optionCondition = menuCondition.ele('condition', {
+        field: digitField,
+        expression: `^${option.digit}$`,
+        break: 'on-true',
+      });
+
+      switch (option.actionType) {
+        case 'extension':
+          optionCondition.ele('action', { application: 'transfer', data: `${option.actionValue} XML ${context}` }).up();
+          break;
+        case 'sip_uri':
+          optionCondition.ele('action', { application: 'bridge', data: option.actionValue || '' }).up();
+          break;
+        case 'voicemail':
+          optionCondition.ele('action', {
+            application: 'voicemail',
+            data: `default ${fallbackDomain} ${option.actionValue}`,
+          }).up();
+          break;
+        case 'hangup':
+        default:
+          optionCondition.ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' }).up();
+          break;
+      }
+
+      optionCondition.up();
+    }
+
+    menuCondition
+      .ele('action', { application: 'playback', data: invalidPrompt })
+      .up()
+      .ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' })
+      .up();
+
+    return doc.end({ prettyPrint: true });
   }
 
   private buildDialplanXml(params: {
