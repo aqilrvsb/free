@@ -50,11 +50,8 @@ export function RecordingsTable({ recordings, apiBaseUrl, storageConfig }: Recor
   }, [storageConfig]);
 
   const buildUrl = (path: string) => {
-    if (cdnBase) {
-      const normalized = path.replace(/^\/+/, '');
-      return `${cdnBase}/${encodeURI(normalized)}`;
-    }
-    return `${baseUrl}/recordings/${encodeURIComponent(path)}`;
+    const normalized = path.replace(/^\/+/, '').split('/').map((segment) => encodeURIComponent(segment)).join('/');
+    return `${baseUrl}/recordings/${normalized}`;
   };
 
   const handlePreview = (recording: RecordingMetadata) => {
@@ -64,7 +61,7 @@ export function RecordingsTable({ recordings, apiBaseUrl, storageConfig }: Recor
 
   const playbackUrl = activeRecording ? buildUrl(activeRecording.path) : "";
   const storageDescription = cdnBase
-    ? 'Ghi âm được phục vụ qua CDN.'
+    ? 'File được đồng bộ lên CDN nhưng được phát/tải qua API backend để đảm bảo quyền truy cập.'
     : 'Ghi âm được lưu tại FreeSWITCH và phục vụ trực tiếp qua API backend.';
 
   return (

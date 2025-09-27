@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Connection } from 'modesl';
+import { posix as pathPosix } from 'path';
 import { XMLParser } from 'fast-xml-parser';
 import { TenantManagementService } from './tenant-management.service';
 
@@ -296,6 +297,26 @@ export class FsManagementService {
     }
   }
 
+  async deleteRecordingFile(relativePath: string): Promise<void> {
+    const baseDir = this.configService.get<string>('FS_CORE_RECORDINGS_DIR', '/var/lib/freeswitch/recordings');
+    const normalized = this.normalizeRelativePath(relativePath);
+    const target = normalized
+      ? `${this.trimTrailingSlash(baseDir)}/${normalized}`
+      : this.trimTrailingSlash(baseDir);
+    const sanitizedTarget = this.validateAbsolutePath(target);
+
+    const command = `system rm -f ${sanitizedTarget}`;
+    try {
+      await this.runCommand(command);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete recording via FreeSWITCH (${relativePath})`,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
+  }
+
   private runCommand(command: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -316,6 +337,33 @@ export class FsManagementService {
         reject(error);
       });
     });
+  }
+
+  private normalizeRelativePath(input: string): string {
+    const trimmed = (input || '').replace(/^[\\/]+/, '').replace(/\\+/g, '/');
+    if (!trimmed) {
+      return '';
+    }
+    const normalized = pathPosix.normalize(trimmed);
+    if (normalized === '..' || normalized.startsWith('../')) {
+      throw new Error('Invalid recording path');
+    }
+    return normalized;
+  }
+
+  private trimTrailingSlash(value: string): string {
+    if (!value) {
+      return '';
+    }
+    return value.replace(/[\\/]+$/, '').replace(/\\+/g, '/');
+  }
+
+  private validateAbsolutePath(path: string): string {
+    const pattern = /^[A-Za-z0-9._\/:-]+$/;
+    if (!pattern.test(path)) {
+      throw new Error('Invalid characters in recording path');
+    }
+    return path;
   }
 
   private parseRegistrationsXml(xml: string): Array<Record<string, any>> {

@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { Repository } from 'typeorm';
 import { CdrEntity } from './entities';
+import { RecordingsService } from './recordings.service';
 
 interface ParsedEpochInput {
   primary?: string | number | null;
@@ -36,6 +37,7 @@ export class CdrService {
   constructor(
     @InjectRepository(CdrEntity) private readonly cdrRepo: Repository<CdrEntity>,
     private readonly configService: ConfigService,
+    private readonly recordingsService: RecordingsService,
   ) {
     this.recordingsDir = this.normalizeDirectory(configService.get<string>('RECORDINGS_DIR', '/recordings'));
   }
@@ -52,6 +54,13 @@ export class CdrService {
       `[ingest] call_uuid=${entity.callUuid ?? 'unknown'} duration=${entity.durationSeconds} bill=${entity.billSeconds}`,
     );
     await this.cdrRepo.save(entity);
+
+    const recordingPath = this.extractRecordingInfo(entity.rawPayload);
+    if (recordingPath) {
+      this.recordingsService
+        .syncRecording(recordingPath)
+        .catch((error) => this.logger.error('Không thể đồng bộ ghi âm lên CDN', error instanceof Error ? error.message : String(error)));
+    }
   }
 
   async listCdrs(query: CdrQuery) {

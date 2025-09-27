@@ -15,6 +15,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/platform-socket.io": "^10.4.20",
     "@nestjs/typeorm": "^10.0.0",
+    "@aws-sdk/client-s3": "^3.614.0",
     "@nestjs/websockets": "^10.4.20",
     "@nestjs/swagger": "^7.3.1",
     "express": "^4.19.2",

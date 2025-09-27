@@ -469,7 +469,7 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => (!open ? closeDialog() : setDialogOpen(open))}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="lg:max-w-7xl">
           <form onSubmit={submitRule} className="space-y-4">
             <DialogHeader>
               <DialogTitle>{dialogMode === "create" ? "Thêm dialplan rule" : `Chỉnh sửa ${editing?.name}`}</DialogTitle>
