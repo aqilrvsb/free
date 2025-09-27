@@ -3,13 +3,13 @@ import type { TenantSummary, GatewaySummary, OutboundRouteSummary } from "@/lib/
 import { PageHeader } from "@/components/common/page-header";
 import { OutboundRoutesManager } from "@/components/fs/outbound-routes-manager";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 export default async function OutboundRoutesPage() {
   const [tenants, gateways, routes] = await Promise.all([
-    apiFetch<TenantSummary[]>("/tenants", { revalidate: 5 }),
-    apiFetch<GatewaySummary[]>("/fs/gateways", { revalidate: 5 }),
-    apiFetch<OutboundRouteSummary[]>("/fs/outbound-routes", { revalidate: 5 }),
+    apiFetch<TenantSummary[]>("/tenants", { cache: "no-store" }),
+    apiFetch<GatewaySummary[]>("/fs/gateways", { cache: "no-store" }),
+    apiFetch<OutboundRouteSummary[]>("/fs/outbound-routes", { cache: "no-store" }),
   ]);
 
   return (

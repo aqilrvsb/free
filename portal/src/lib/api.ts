@@ -1,7 +1,9 @@
 const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
-type FetchOptions = RequestInit & {
+type FetchOptions = Omit<RequestInit, "cache" | "next"> & {
   revalidate?: number;
+  cache?: RequestCache;
+  tags?: string[];
 };
 
 function buildUrl(path: string): string {
@@ -14,17 +16,41 @@ function buildUrl(path: string): string {
 }
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
-  const { revalidate = 10, ...fetchOptions } = options;
+  const {
+    revalidate = 10,
+    cache,
+    tags,
+    headers: customHeaders,
+    ...fetchOptions
+  } = options;
   const url = buildUrl(path);
 
-  const response = await fetch(url, {
+  const nextConfig: Record<string, unknown> = {};
+  if (Array.isArray(tags) && tags.length > 0) {
+    nextConfig.tags = tags;
+  }
+
+  if (cache !== "no-store" && typeof revalidate === "number") {
+    nextConfig.revalidate = revalidate;
+  }
+
+  const requestInit: RequestInit = {
     ...fetchOptions,
     headers: {
       "Content-Type": "application/json",
-      ...(fetchOptions.headers || {}),
+      ...(customHeaders || {}),
     },
-    next: { revalidate },
-  });
+  };
+
+  if (cache) {
+    requestInit.cache = cache;
+  }
+
+  if (Object.keys(nextConfig).length > 0) {
+    requestInit.next = nextConfig;
+  }
+
+  const response = await fetch(url, requestInit);
 
   if (!response.ok) {
     const text = await response.text();

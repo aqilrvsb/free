@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/common/page-header";
 
+export const dynamic = "force-dynamic";
+
 export default async function FsStatusPage() {
   const [status, sofia] = await Promise.all([
-    apiFetch<FsStatusResponse>("/fs/status", { revalidate: 5 }),
-    apiFetch<CommandResult>("/fs/sofia", { revalidate: 10 }),
+    apiFetch<FsStatusResponse>("/fs/status", { cache: "no-store" }),
+    apiFetch<CommandResult>("/fs/sofia", { cache: "no-store" }),
   ]);
 
   const parsed = status.parsed ?? ({} as FsStatusParsed);

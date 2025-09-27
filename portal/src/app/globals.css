@@ -44,71 +44,71 @@
 }
 
 :root {
-  --radius: 0.75rem;
-  --background: #fff1e5;
-  --foreground: #301508;
-  --card: #ffffff;
-  --card-foreground: #301508;
-  --popover: #ffffff;
-  --popover-foreground: #301508;
-  --primary: #f97316;
-  --primary-foreground: #1f130c;
-  --secondary: #ffe0c2;
+  --radius: 0.9rem;
+  --background: #fdf8f4;
+  --foreground: #2d1305;
+  --card: rgba(255, 255, 255, 0.94);
+  --card-foreground: #2d1305;
+  --popover: rgba(255, 255, 255, 0.98);
+  --popover-foreground: #2d1305;
+  --primary: #ea580c;
+  --primary-foreground: #fffdfa;
+  --secondary: #ffe8d6;
   --secondary-foreground: #9a3412;
-  --muted: #ffe8d5;
-  --muted-foreground: #9a3412;
-  --accent: #fff3e0;
+  --muted: rgba(249, 240, 232, 0.85);
+  --muted-foreground: #7c3410;
+  --accent: rgba(255, 235, 217, 0.9);
   --accent-foreground: #9a3412;
-  --destructive: #f87171;
-  --border: #fdba74;
-  --input: #fdba74;
-  --ring: #f97316;
-  --chart-1: #f97316;
-  --chart-2: #fb923c;
+  --destructive: #ef4444;
+  --border: rgba(249, 205, 167, 0.78);
+  --input: rgba(249, 205, 167, 0.85);
+  --ring: #ea580c;
+  --chart-1: #ea580c;
+  --chart-2: #f97316;
   --chart-3: #facc15;
-  --chart-4: #f59e0b;
+  --chart-4: #fb7185;
   --chart-5: #fbbf24;
-  --sidebar: #fff3e0;
-  --sidebar-foreground: #301508;
-  --sidebar-primary: #f97316;
-  --sidebar-primary-foreground: #1f130c;
-  --sidebar-accent: #ffe0c2;
+  --sidebar: rgba(255, 244, 233, 0.75);
+  --sidebar-foreground: #2d1305;
+  --sidebar-primary: #ea580c;
+  --sidebar-primary-foreground: #fffdfa;
+  --sidebar-accent: rgba(250, 176, 94, 0.18);
   --sidebar-accent-foreground: #9a3412;
-  --sidebar-border: #fdba74;
-  --sidebar-ring: #f97316;
+  --sidebar-border: rgba(249, 205, 167, 0.6);
+  --sidebar-ring: #ea580c;
 }
 
 .dark {
-  --background: #140a04;
-  --foreground: #fde0c3;
-  --card: #1c0f07;
-  --card-foreground: #fde0c3;
-  --popover: #1c0f07;
-  --popover-foreground: #fde0c3;
+  --background: #1a0f05;
+  --foreground: #fde7d7;
+  --card: rgba(26, 15, 5, 0.82);
+  --card-foreground: #fde7d7;
+  --popover: rgba(31, 17, 8, 0.92);
+  --popover-foreground: #fde7d7;
   --primary: #fb923c;
-  --primary-foreground: #1f130c;
-  --secondary: #2b1408;
+  --primary-foreground: #1a0f05;
+  --secondary: rgba(64, 32, 11, 0.75);
   --secondary-foreground: #fecba1;
-  --muted: #2b1408;
-  --muted-foreground: #fbbf78;
-  --accent: #2b1408;
-  --accent-foreground: #fecba1;
+  --muted: rgba(64, 32, 11, 0.55);
+  --muted-foreground: #fcbf83;
+  --accent: rgba(250, 175, 86, 0.2);
+  --accent-foreground: #ffe7d3;
   --destructive: #f87171;
-  --border: rgba(253, 186, 116, 0.45);
-  --input: rgba(253, 186, 116, 0.22);
+  --border: rgba(251, 146, 60, 0.35);
+  --input: rgba(234, 88, 12, 0.28);
   --ring: #fb923c;
   --chart-1: #fb923c;
-  --chart-2: #facc15;
-  --chart-3: #f97316;
-  --chart-4: #fbbf24;
-  --chart-5: #f472b6;
-  --sidebar: #1c0f07;
-  --sidebar-foreground: #fde0c3;
+  --chart-2: #f97316;
+  --chart-3: #facc15;
+  --chart-4: #fda4af;
+  --chart-5: #fbbf24;
+  --sidebar: rgba(31, 17, 8, 0.78);
+  --sidebar-foreground: #fde7d7;
   --sidebar-primary: #fb923c;
-  --sidebar-primary-foreground: #1f130c;
-  --sidebar-accent: #2b1408;
-  --sidebar-accent-foreground: #fecba1;
-  --sidebar-border: rgba(253, 186, 116, 0.32);
+  --sidebar-primary-foreground: #1a0f05;
+  --sidebar-accent: rgba(250, 175, 86, 0.16);
+  --sidebar-accent-foreground: #ffe7d3;
+  --sidebar-border: rgba(234, 88, 12, 0.28);
   --sidebar-ring: #fb923c;
 }
 
@@ -117,6 +117,17 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(1200px circle at 12% -8%, rgba(234, 88, 12, 0.16), transparent 58%),
+      radial-gradient(780px circle at 88% 0%, rgba(148, 163, 184, 0.18), transparent 62%),
+      linear-gradient(180deg, rgba(255, 253, 246, 0.95) 0%, rgba(250, 243, 236, 0.96) 55%, rgba(247, 239, 232, 0.94) 100%);
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .glass-surface {
+    @apply backdrop-blur-md border border-border/70 bg-card shadow-lg shadow-primary/10;
   }
 }

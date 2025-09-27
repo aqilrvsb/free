@@ -9,6 +9,9 @@ import { vi } from "date-fns/locale";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/common/page-header";
 import { extractChannelCount } from "@/lib/channels";
+import { Activity, AudioLines, Waves, ScrollText } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 function formatDate(input?: string | null) {
   if (!input) return "-";
@@ -19,10 +22,10 @@ function formatDate(input?: string | null) {
 
 export default async function DashboardPage() {
   const [cdr, fsStatus, recordings, channels] = await Promise.all([
-    apiFetch<PaginatedCdrResponse>(`/cdr?page=1&pageSize=5`, { revalidate: 5 }),
-    apiFetch<FsStatusResponse>(`/fs/status`, { revalidate: 10 }),
-    apiFetch<RecordingMetadata[]>(`/recordings`, { revalidate: 30 }),
-    apiFetch<CommandResult<FsChannelList>>(`/fs/channels`, { revalidate: 5 }),
+    apiFetch<PaginatedCdrResponse>(`/cdr?page=1&pageSize=5`, { cache: "no-store" }),
+    apiFetch<FsStatusResponse>(`/fs/status`, { cache: "no-store" }),
+    apiFetch<RecordingMetadata[]>(`/recordings`, { cache: "no-store" }),
+    apiFetch<CommandResult<FsChannelList>>(`/fs/channels`, { cache: "no-store" }),
   ]);
 
   const activeChannels = extractChannelCount(channels.parsed);
@@ -31,58 +34,88 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Dashboard"
-        description="Tổng quan nhanh về trạng thái FreeSWITCH, CDR và ghi âm."
+        title="Dashboard realtime"
+        description="Nắm bắt trạng thái FreeSWITCH, hoạt động cuộc gọi và các ghi âm quan trọng theo thời gian thực."
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Trạng thái FreeSWITCH</CardTitle>
+        <Card className="glass-surface border-none px-0 py-0">
+          <CardHeader className="flex flex-row items-center justify-between px-6 pb-4 pt-6">
+            <div className="space-y-1">
+              <CardTitle className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Core status
+              </CardTitle>
+              <span className="text-2xl font-semibold text-foreground">{fsStatus.parsed?.state || "Không rõ"}</span>
+            </div>
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-primary/18 text-primary">
+              <Activity className="size-6" />
+            </span>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{fsStatus.parsed?.state || "Không rõ"}</div>
-            <p className="text-sm text-muted-foreground mt-2">Uptime: {fsStatus.parsed?.uptime || "-"}</p>
+          <CardContent className="px-6 pb-6 text-sm text-muted-foreground">
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              Uptime {fsStatus.parsed?.uptime || "-"}
+            </span>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Phiên đang hoạt động</CardTitle>
+        <Card className="glass-surface border-none px-0 py-0">
+          <CardHeader className="flex flex-row items-center justify-between px-6 pb-4 pt-6">
+            <div className="space-y-1">
+              <CardTitle className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Phiên đang hoạt động
+              </CardTitle>
+              <span className="text-2xl font-semibold text-foreground">{activeChannels}</span>
+            </div>
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-orange-500/20 text-orange-600">
+              <Waves className="size-6" />
+            </span>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeChannels}</div>
-            <p className="text-sm text-muted-foreground mt-2">Tổng số kênh hiển thị hiện tại.</p>
+          <CardContent className="px-6 pb-6 text-sm text-muted-foreground">
+            Cập nhật tức thời từ FreeSWITCH channels.
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Tổng CDR (5 gần nhất)</CardTitle>
+        <Card className="glass-surface border-none px-0 py-0">
+          <CardHeader className="flex flex-row items-center justify-between px-6 pb-4 pt-6">
+            <div className="space-y-1">
+              <CardTitle className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                CDR ghi nhận
+              </CardTitle>
+              <span className="text-2xl font-semibold text-foreground">{cdr.items.length}</span>
+            </div>
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-600">
+              <ScrollText className="size-6" />
+            </span>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{cdr.items.length}</div>
-            <p className="text-sm text-muted-foreground mt-2">Tổng số bản ghi được tải gần nhất.</p>
+          <CardContent className="px-6 pb-6 text-sm text-muted-foreground">
+            5 bản ghi gọi gần nhất được đồng bộ từ MySQL.
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Ghi âm mới nhất</CardTitle>
+        <Card className="glass-surface border-none px-0 py-0">
+          <CardHeader className="flex flex-row items-center justify-between px-6 pb-4 pt-6">
+            <div className="space-y-1">
+              <CardTitle className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Ghi âm mới
+              </CardTitle>
+              <span className="text-2xl font-semibold text-foreground">{latestRecordings.length}</span>
+            </div>
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-amber-400/20 text-amber-700">
+              <AudioLines className="size-6" />
+            </span>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{latestRecordings.length}</div>
-            <p className="text-sm text-muted-foreground mt-2">Hiển thị tối đa 5 file ghi âm mới.</p>
+          <CardContent className="px-6 pb-6 text-sm text-muted-foreground">
+            Hiển thị tối đa 5 file ghi âm mới nhất từ portal.
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="h-full">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card className="glass-surface h-full border-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle className="text-base font-semibold">CDR gần đây</CardTitle>
             <Link href="/cdr" className="text-sm text-primary hover:underline">
               Xem tất cả
             </Link>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[320px]">
+            <ScrollArea className="h-[320px] rounded-2xl border border-border/60 bg-background/40">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -144,15 +177,15 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="h-full">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card className="glass-surface h-full border-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle className="text-base font-semibold">Ghi âm mới nhất</CardTitle>
             <Link href="/recordings" className="text-sm text-primary hover:underline">
               Quản lý ghi âm
             </Link>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[320px]">
+            <ScrollArea className="h-[320px] rounded-2xl border border-border/60 bg-background/40">
               <Table>
                 <TableHeader>
                   <TableRow>

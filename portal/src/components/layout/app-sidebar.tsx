@@ -29,6 +29,7 @@ import {
   UserCog,
   Waves,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 
 interface NavItem {
   title: string
@@ -140,23 +141,36 @@ export function AppSidebar() {
   const pathname = usePathname()
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="backdrop-blur-xl">
       <SidebarHeader className="gap-4 px-3 pb-4 pt-6">
-        <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-primary/15 via-primary/10 to-transparent px-3 py-2 text-sm shadow-sm">
-          <div className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold shadow-md">
-            PBX
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">PBX Portal</span>
-            <span className="text-xs text-muted-foreground">Giám sát FreeSWITCH</span>
+        <div className="glass-surface relative overflow-hidden rounded-2xl px-3 py-3">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/25 via-orange-400/15 to-transparent" />
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-full border border-primary/40 bg-primary/90 text-primary-foreground font-semibold shadow-lg shadow-primary/30">
+                PBX
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold tracking-tight">PBX Portal</span>
+                <span className="text-xs text-muted-foreground">Giám sát FreeSWITCH realtime</span>
+              </div>
+            </div>
+            <Badge variant="secondary" className="border border-primary/30 bg-primary/10 text-xs font-medium text-primary">
+              Stable · v1.0
+            </Badge>
           </div>
         </div>
-        <SidebarInput placeholder="Tìm kiếm (Ctrl+B)" className="hidden h-9 md:block" />
+        <SidebarInput
+          placeholder="Tìm kiếm (Ctrl+B)"
+          className="hidden h-9 rounded-xl border border-border/70 bg-white/70 text-sm placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/60 md:block"
+        />
       </SidebarHeader>
-      <SidebarContent className="px-2 pb-6">
+      <SidebarContent className="space-y-6 px-2 pb-6">
         {NAV_SECTIONS.map((section, index) => (
           <SidebarGroup key={section.label}>
-            <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+            <SidebarGroupLabel className="px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/65">
+              {section.label}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {section.items.map((item) => {
@@ -167,15 +181,18 @@ export function AppSidebar() {
                       <SidebarMenuButton
                         asChild
                         isActive={active}
+                        className="group relative overflow-hidden rounded-xl border border-transparent bg-transparent ring-0 transition-all duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 hover:pl-3 data-[active=true]:border-primary/60 data-[active=true]:bg-primary/15 data-[active=true]:pl-3"
                         tooltip={item.title}
                       >
                         <Link
                           href={item.href}
                           className="flex w-full items-center gap-3"
                         >
-                          <Icon className="size-4 shrink-0" />
+                          <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary group-data-[active=true]/sidebar-menu-button:bg-primary group-data-[active=true]/sidebar-menu-button:text-primary-foreground">
+                            <Icon className="size-4" />
+                          </span>
                           <div className="flex min-w-0 flex-col text-left leading-tight">
-                            <span className="truncate font-medium">
+                            <span className="truncate text-sm font-medium">
                               {item.title}
                             </span>
                             {item.description ? (
@@ -196,9 +213,20 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter className="px-3 pb-6 pt-4">
-        <div className="rounded-lg border border-border/80 bg-card/80 px-3 py-3 text-xs text-muted-foreground shadow-sm">
-          <p className="font-medium text-foreground">Trạng thái bảng điều khiển</p>
-          <p>FreeSWITCH + NestJS + Next.js</p>
+        <div className="glass-surface relative overflow-hidden rounded-2xl px-4 py-4 text-xs text-muted-foreground">
+          <div className="absolute inset-0 bg-gradient-to-tr from-orange-500/15 via-transparent to-transparent" />
+          <div className="relative flex flex-col gap-2">
+            <p className="text-sm font-semibold text-foreground">Trung tâm điều hành PBX</p>
+            <p className="leading-relaxed">
+              FreeSWITCH · NestJS · Next.js được đồng bộ realtime. Mở dashboard để xem metrics trực tiếp.
+            </p>
+            <Link
+              href="/fs/status"
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+            >
+              Xem trạng thái hệ thống
+            </Link>
+          </div>
         </div>
       </SidebarFooter>
       <SidebarRail />

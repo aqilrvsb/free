@@ -24,9 +24,11 @@ const FIELDS: Array<{ key: keyof CdrRecord; label: string }> = [
   { key: "receivedAt", label: "Ghi nhận" },
 ];
 
+export const dynamic = "force-dynamic";
+
 export default async function CdrDetailPage({ params }: CdrDetailPageProps) {
   const callUuid = params.callUuid;
-  const record = await apiFetch<CdrRecord | null>(`/cdr/call/${callUuid}`, { revalidate: 5 });
+  const record = await apiFetch<CdrRecord | null>(`/cdr/call/${callUuid}`, { cache: "no-store" });
 
   if (!record) {
     return (

@@ -8,6 +8,8 @@ import { CdrFilter } from "@/components/cdr/cdr-filter";
 import { PaginationControls } from "@/components/common/pagination";
 import { PageHeader } from "@/components/common/page-header";
 
+export const dynamic = "force-dynamic";
+
 interface CdrPageProps {
   searchParams?: Record<string, string | string[]>;
 }
@@ -40,7 +42,7 @@ export default async function CdrPage({ searchParams = {} }: CdrPageProps) {
     query.set("callUuid", callUuid);
   }
 
-  const cdr = await apiFetch<PaginatedCdrResponse>(`/cdr?${query.toString()}`, { revalidate: 5 });
+  const cdr = await apiFetch<PaginatedCdrResponse>(`/cdr?${query.toString()}`, { cache: "no-store" });
   const recordingsBaseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || "http://localhost:3000";
 

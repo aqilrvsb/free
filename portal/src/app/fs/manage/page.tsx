@@ -3,12 +3,12 @@ import type { TenantSummary, ExtensionSummary } from "@/lib/types";
 import { DomainExtensionManager } from "@/components/fs/domain-extension-manager";
 import { PageHeader } from "@/components/common/page-header";
 
-export const revalidate = 5;
+export const dynamic = "force-dynamic";
 
 export default async function ManagePage() {
   const [tenants, extensions] = await Promise.all([
-    apiFetch<TenantSummary[]>("/tenants", { revalidate: 5 }),
-    apiFetch<ExtensionSummary[]>("/extensions", { revalidate: 5 }),
+    apiFetch<TenantSummary[]>("/tenants", { cache: "no-store" }),
+    apiFetch<ExtensionSummary[]>("/extensions", { cache: "no-store" }),
   ]);
 
   return (

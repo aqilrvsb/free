@@ -144,7 +144,7 @@ export function RecordingStorageSettings({ initialConfig }: RecordingStorageSett
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border bg-card p-4 shadow-sm">
+    <form onSubmit={handleSubmit} className="glass-surface space-y-4 rounded-2xl border-none p-5">
       <div>
         <h3 className="text-lg font-medium">Tuỳ chọn lưu trữ ghi âm</h3>
         <p className="text-sm text-muted-foreground">

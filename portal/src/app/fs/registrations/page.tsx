@@ -7,6 +7,8 @@ import { buildSnapshot, type RegistrationSnapshot, type SofiaRegistrationsPayloa
 
 type SearchParamValue = string | string[] | undefined;
 
+export const dynamic = "force-dynamic";
+
 function getValue(value: SearchParamValue): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
@@ -21,7 +23,7 @@ export default async function RegistrationsPage({
   const profile = getValue(resolvedSearchParams.profile) || "internal";
   const data = await apiFetch<CommandResult<SofiaRegistrationsPayload>>(
     `/fs/sofia/${profile}/registrations`,
-    { revalidate: 5 },
+    { cache: "no-store" },
   );
 
   const parsedPayload = data.parsed as SofiaRegistrationsPayload | undefined;

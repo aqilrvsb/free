@@ -12,8 +12,10 @@ function formatDate(value?: string) {
   return date.toLocaleString("vi-VN");
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function ChannelsPage() {
-  const channels = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", { revalidate: 5 });
+  const channels = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", { cache: "no-store" });
   const items = extractChannelRows(channels.parsed);
   const total = extractChannelCount(channels.parsed);
 
