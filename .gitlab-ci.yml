@@ -101,12 +101,14 @@ update-manifest-development:
     GIT_REPO: "https://gitlab.com/vqtuan96/vill-k8s-configs.git"
     APP_FOLDER: "helm-dispatcher"
   script:
-    - apk add --no-cache git
-    - git config --global user.name "vo quoc tuan"
-    - git config --global user.email "vqtuan96@gmail.com"
-    - git clone "https://$GITLAB_CONFIG_USERNAME:$GITLAB_CONFIG_PASSWORD@gitlab.com/vqtuan96/vill-k8s-configs.git" config
-    - cd config/$APP_FOLDER
-    - sed -i "s/tag:.*/tag: ${IMAGE_TAG}/g" values.yaml
-    - git add values.yaml
-    - git commit -m "ci: update image tag to ${IMAGE_TAG}" || echo "No changes to commit"
-    - git push origin main
+    - |
+      set -e
+      apk add --no-cache git
+      git config --global user.name "vo quoc tuan"
+      git config --global user.email "vqtuan96@gmail.com"
+      git clone "https://$GITLAB_CONFIG_USERNAME:$GITLAB_CONFIG_PASSWORD@gitlab.com/vqtuan96/vill-k8s-configs.git" config
+      cd config/$APP_FOLDER
+      sed -i "s/tag:.*/tag: ${IMAGE_TAG}/g" values.yaml
+      git add values.yaml
+      git commit -m "ci: update image tag to ${IMAGE_TAG}" || echo "No changes to commit"
+      git push origin main
