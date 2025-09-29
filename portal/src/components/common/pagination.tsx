@@ -8,9 +8,10 @@ interface PaginationProps {
   page: number;
   pageSize: number;
   total: number;
+  basePath?: string;
 }
 
-export function PaginationControls({ page, pageSize, total }: PaginationProps) {
+export function PaginationControls({ page, pageSize, total, basePath = "/cdr" }: PaginationProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -21,7 +22,9 @@ export function PaginationControls({ page, pageSize, total }: PaginationProps) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(nextPage));
     startTransition(() => {
-      router.push(`/cdr?${params.toString()}`);
+      const queryString = params.toString();
+      const suffix = queryString ? `?${queryString}` : "";
+      router.push(`${basePath}${suffix}`);
     });
   };
 

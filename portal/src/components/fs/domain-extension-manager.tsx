@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -18,13 +19,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import type { ExtensionSummary, TenantSummary } from "@/lib/types";
-import { Clipboard, Check, QrCode } from "lucide-react";
+import type {
+  ExtensionSummary,
+  PaginatedResult,
+  TenantLookupItem,
+  TenantSummary,
+} from "@/lib/types";
+import { Clipboard, Check, ChevronLeft, ChevronRight, QrCode } from "lucide-react";
 import QRCode from "qrcode";
 
 interface DomainExtensionManagerProps {
-  initialTenants: TenantSummary[];
-  initialExtensions: ExtensionSummary[];
+  initialTenants: PaginatedResult<TenantSummary>;
+  initialExtensions: PaginatedResult<ExtensionSummary>;
+  tenantOptions: TenantLookupItem[];
 }
 
 type TenantDialogMode = "create" | "edit";
@@ -58,9 +65,12 @@ function resolveBaseUrl(envValue?: string) {
   return "";
 }
 
-export function DomainExtensionManager({ initialTenants, initialExtensions }: DomainExtensionManagerProps) {
-  const [tenants, setTenants] = useState<TenantSummary[]>(initialTenants);
-  const [extensions, setExtensions] = useState<ExtensionSummary[]>(initialExtensions);
+export function DomainExtensionManager({ initialTenants, initialExtensions, tenantOptions: initialTenantOptions }: DomainExtensionManagerProps) {
+  const TENANTS_PER_PAGE = initialTenants.pageSize || 6;
+  const EXTENSIONS_PER_PAGE = initialExtensions.pageSize || 10;
+
+  const [tenantData, setTenantData] = useState<PaginatedResult<TenantSummary>>(initialTenants);
+  const [extensionData, setExtensionData] = useState<PaginatedResult<ExtensionSummary>>(initialExtensions);
   const [tenantDialogOpen, setTenantDialogOpen] = useState(false);
   const [tenantDialogMode, setTenantDialogMode] = useState<TenantDialogMode>("create");
   const [tenantForm, setTenantForm] = useState(defaultTenantForm);
@@ -89,6 +99,15 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [qrPort, setQrPort] = useState<string>("5060");
   const [qrTransport, setQrTransport] = useState<string>("UDP");
+  const [tenantSearch, setTenantSearch] = useState<string>("");
+  const [extensionSearch, setExtensionSearch] = useState<string>("");
+  const [tenantPage, setTenantPage] = useState(initialTenants.page || 1);
+  const [extensionPage, setExtensionPage] = useState(initialExtensions.page || 1);
+  const [tenantChoices, setTenantChoices] = useState<TenantLookupItem[]>(() =>
+    [...initialTenantOptions].sort((a, b) => a.name.localeCompare(b.name, "vi", { sensitivity: "base" })),
+  );
+  const [tenantLoading, setTenantLoading] = useState(false);
+  const [extensionLoading, setExtensionLoading] = useState(false);
 
   const apiBase = useMemo(
     () => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
@@ -105,17 +124,196 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
     [],
   );
 
+  const tenantMap = useMemo(
+    () => new Map(tenantChoices.map((tenant) => [tenant.id, tenant])),
+    [tenantChoices],
+  );
   const tenantOptions = useMemo(
-    () => tenants.map((tenant) => ({ label: `${tenant.name} (${tenant.domain})`, value: tenant.id })),
-    [tenants],
+    () => tenantChoices.map((tenant) => ({ label: `${tenant.name} (${tenant.domain})`, value: tenant.id })),
+    [tenantChoices],
   );
 
-  const filteredExtensions = useMemo(() => {
-    if (tenantFilter === "all") {
-      return extensions;
+  const tenantPageCount = Math.max(1, Math.ceil(tenantData.total / TENANTS_PER_PAGE));
+  const extensionPageCount = Math.max(1, Math.ceil(extensionData.total / EXTENSIONS_PER_PAGE));
+
+  const sortTenantList = useCallback(
+    (list: TenantLookupItem[]) =>
+      [...list].sort((a, b) => a.name.localeCompare(b.name, "vi", { sensitivity: "base" })),
+    [],
+  );
+
+  const upsertTenantChoice = useCallback(
+    (tenant: TenantSummary) => {
+      setTenantChoices((prev) => {
+        const next = [...prev];
+        const payload: TenantLookupItem = {
+          id: tenant.id,
+          name: tenant.name,
+          domain: tenant.domain,
+        };
+        const index = next.findIndex((item) => item.id === tenant.id);
+        if (index >= 0) {
+          next[index] = payload;
+        } else {
+          next.push(payload);
+        }
+        return sortTenantList(next);
+      });
+    },
+    [sortTenantList],
+  );
+
+  const removeTenantChoice = useCallback((tenantId: string) => {
+    setTenantChoices((prev) => prev.filter((item) => item.id !== tenantId));
+    setTenantFilter((prev) => (prev === tenantId ? "all" : prev));
+  }, []);
+
+  const fetchTenantPage = useCallback(
+    async (
+      page: number,
+      searchValue: string = tenantSearch,
+      options: { silent?: boolean; signal?: AbortSignal } = {},
+    ) => {
+      if (!apiBase) {
+        return;
+      }
+      const silent = Boolean(options.silent);
+      if (!silent) {
+        setTenantLoading(true);
+      }
+      try {
+        const params = new URLSearchParams({
+          page: String(Math.max(1, page)),
+          pageSize: String(TENANTS_PER_PAGE),
+        });
+        if (searchValue.trim()) {
+          params.set("search", searchValue.trim());
+        }
+        const response = await fetch(`${apiBase}/tenants?${params.toString()}`, {
+          method: "GET",
+          signal: options.signal,
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const data = (await response.json()) as PaginatedResult<TenantSummary>;
+        if (page > 1 && data.total > 0 && data.items.length === 0) {
+          await fetchTenantPage(page - 1, searchValue, { silent: true });
+          return;
+        }
+        setTenantData(data);
+        setTenantPage(page);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
+          return;
+        }
+        console.error("Failed to fetch tenants", error);
+        alert("Không thể tải danh sách domain.");
+      } finally {
+        if (!silent) {
+          setTenantLoading(false);
+        }
+      }
+    },
+    [TENANTS_PER_PAGE, apiBase, tenantSearch],
+  );
+
+  const fetchExtensionPage = useCallback(
+    async (
+      page: number,
+      tenantId: string = tenantFilter,
+      searchValue: string = extensionSearch,
+      options: { silent?: boolean; signal?: AbortSignal } = {},
+    ) => {
+      if (!apiBase) {
+        return;
+      }
+      const silent = Boolean(options.silent);
+      if (!silent) {
+        setExtensionLoading(true);
+      }
+      try {
+        const params = new URLSearchParams({
+          page: String(Math.max(1, page)),
+          pageSize: String(EXTENSIONS_PER_PAGE),
+        });
+        if (tenantId !== "all") {
+          params.set("tenantId", tenantId);
+        }
+        if (searchValue.trim()) {
+          params.set("search", searchValue.trim());
+        }
+        const response = await fetch(`${apiBase}/extensions?${params.toString()}`, {
+          method: "GET",
+          signal: options.signal,
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const data = (await response.json()) as PaginatedResult<ExtensionSummary>;
+        if (page > 1 && data.total > 0 && data.items.length === 0) {
+          await fetchExtensionPage(page - 1, tenantId, searchValue, { silent: true });
+          return;
+        }
+        setExtensionData(data);
+        setExtensionPage(page);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
+          return;
+        }
+        console.error("Failed to fetch extensions", error);
+        alert("Không thể tải danh sách extension.");
+      } finally {
+        if (!silent) {
+          setExtensionLoading(false);
+        }
+      }
+    },
+    [EXTENSIONS_PER_PAGE, apiBase, extensionSearch, tenantFilter],
+  );
+
+  const tenantSearchInitialized = useRef(false);
+  const extensionSearchInitialized = useRef(false);
+  const tenantFilterInitialized = useRef(false);
+  const previousTenantFilter = useRef(tenantFilter);
+
+  useEffect(() => {
+    if (!tenantSearchInitialized.current) {
+      tenantSearchInitialized.current = true;
+      return;
     }
-    return extensions.filter((item) => item.tenantId === tenantFilter);
-  }, [extensions, tenantFilter]);
+    const handle = setTimeout(() => {
+      void fetchTenantPage(1, tenantSearch);
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [tenantSearch, fetchTenantPage]);
+
+  useEffect(() => {
+    if (!extensionSearchInitialized.current) {
+      extensionSearchInitialized.current = true;
+      previousTenantFilter.current = tenantFilter;
+      return;
+    }
+    if (previousTenantFilter.current !== tenantFilter) {
+      previousTenantFilter.current = tenantFilter;
+      return;
+    }
+    const handle = setTimeout(() => {
+      void fetchExtensionPage(1, tenantFilter, extensionSearch);
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [extensionSearch, tenantFilter, fetchExtensionPage]);
+
+  useEffect(() => {
+    if (!tenantFilterInitialized.current) {
+      tenantFilterInitialized.current = true;
+      return;
+    }
+    previousTenantFilter.current = tenantFilter;
+    void fetchExtensionPage(1, tenantFilter, extensionSearch);
+  }, [tenantFilter, extensionSearch, fetchExtensionPage]);
 
   const openCreateTenant = () => {
     setTenantDialogMode("create");
@@ -220,7 +418,8 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
           throw new Error(await response.text());
         }
         const tenant = (await response.json()) as TenantSummary;
-        setTenants((prev) => [...prev, tenant]);
+        upsertTenantChoice(tenant);
+        await fetchTenantPage(1, tenantSearch);
       } else if (editingTenant) {
         setLoading(`tenant-update-${editingTenant.id}`);
         const response = await fetch(`${apiBase}/tenants/${editingTenant.id}`, {
@@ -234,7 +433,9 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
           throw new Error(await response.text());
         }
         const updated = (await response.json()) as TenantSummary;
-        setTenants((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        upsertTenantChoice(updated);
+        await fetchTenantPage(tenantPage, tenantSearch);
+        await fetchExtensionPage(extensionPage, tenantFilter, extensionSearch, { silent: true });
       }
       setTenantForm(defaultTenantForm);
       closeTenantDialog();
@@ -259,8 +460,13 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      setTenants((prev) => prev.filter((item) => item.id !== tenant.id));
-      setExtensions((prev) => prev.filter((item) => item.tenantId !== tenant.id));
+      const wasFilterTenant = tenantFilter === tenant.id;
+      const nextFilter = wasFilterTenant ? "all" : tenantFilter;
+      removeTenantChoice(tenant.id);
+      await fetchTenantPage(tenantPage, tenantSearch);
+      if (!wasFilterTenant) {
+        await fetchExtensionPage(1, nextFilter, extensionSearch);
+      }
     } catch (error) {
       console.error("Failed to delete tenant", error);
       alert("Không thể xóa tenant.");
@@ -307,8 +513,10 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
         if (!response.ok) {
           throw new Error(await response.text());
         }
-        const extension = (await response.json()) as ExtensionSummary;
-        setExtensions((prev) => [...prev, extension]);
+        await response.json();
+        const shouldResetPage = tenantFilter === "all" || tenantFilter === payload.tenantId;
+        await fetchExtensionPage(shouldResetPage ? 1 : extensionPage, tenantFilter, extensionSearch);
+        await fetchTenantPage(tenantPage, tenantSearch, { silent: true });
       } else if (editingExtension) {
         setLoading(`extension-update-${editingExtension.id}`);
         const response = await fetch(`${apiBase}/extensions/${editingExtension.id}`, {
@@ -321,8 +529,9 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
         if (!response.ok) {
           throw new Error(await response.text());
         }
-        const updated = (await response.json()) as ExtensionSummary;
-        setExtensions((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        await response.json();
+        await fetchExtensionPage(extensionPage, tenantFilter, extensionSearch);
+        await fetchTenantPage(tenantPage, tenantSearch, { silent: true });
       }
 
       setExtensionForm(defaultExtensionForm);
@@ -375,7 +584,8 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      setExtensions((prev) => prev.filter((item) => item.id !== extension.id));
+      await fetchExtensionPage(extensionPage, tenantFilter, extensionSearch);
+      await fetchTenantPage(tenantPage, tenantSearch, { silent: true });
     } catch (error) {
       console.error("Failed to delete extension", error);
       alert("Không thể xóa extension.");
@@ -449,8 +659,10 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
 
   const openExtensionQr = async (extension: ExtensionSummary) => {
     if (!apiBase) return;
-    const tenant = tenants.find((item) => item.id === extension.tenantId);
-    if (!tenant) {
+    const tenantInfo = tenantMap.get(extension.tenantId);
+    const domain = tenantInfo?.domain || extension.tenantDomain || "";
+    const displayTenantName = tenantInfo?.name || extension.tenantName || extension.tenantId;
+    if (!domain) {
       alert("Không tìm thấy thông tin domain của tenant.");
       return;
     }
@@ -476,11 +688,11 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
       const data = (await response.json()) as { password: string };
       const password = data.password || "";
       setQrInfo({
-        domain: tenant.domain,
+        domain,
         password,
-        sipUri: `sip:${extension.id}@${tenant.domain}`,
+        sipUri: `sip:${extension.id}@${domain}`,
         username: extension.id,
-        displayName: extension.displayName || null,
+        displayName: extension.displayName || displayTenantName || null,
       });
     } catch (error) {
       console.error("Failed to load QR info", error);
@@ -578,63 +790,95 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <CardTitle>Domain (Tenant)</CardTitle>
               <div className="flex items-center gap-2">
-                <Button onClick={openCreateTenant}>Thêm domain</Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={tenantSearch}
+                    onChange={(event) => setTenantSearch(event.target.value)}
+                    placeholder="Tìm theo tên hoặc domain"
+                    className="hidden w-56 md:block"
+                  />
+                  <Button onClick={openCreateTenant}>Thêm domain</Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               <ScrollArea className="max-h-[420px] pr-2">
-                <div className="space-y-4">
-                  {tenants.map((tenant) => (
-                    <div key={tenant.id} className="rounded-lg border p-4 shadow-sm">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm text-muted-foreground">Mã: {tenant.id}</div>
-                          <div className="text-lg font-semibold">{tenant.name}</div>
-                          <div className="text-sm text-muted-foreground">{tenant.domain}</div>
+                {tenantLoading ? (
+                  <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                    Đang tải domain...
+                  </div>
+                ) : tenantData.items.length > 0 ? (
+                  <div className="space-y-4">
+                    {tenantData.items.map((tenant) => (
+                      <div key={tenant.id} className="rounded-lg border p-4 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm text-muted-foreground">Mã: {tenant.id}</div>
+                            <div className="text-lg font-semibold">{tenant.name}</div>
+                            <div className="text-sm text-muted-foreground">{tenant.domain}</div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditTenant(tenant)}
+                              disabled={loading === `tenant-update-${tenant.id}`}
+                            >
+                              Chỉnh sửa
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => void deleteTenant(tenant)}
+                              disabled={loading === `tenant-delete-${tenant.id}`}
+                            >
+                              Xóa
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditTenant(tenant)}
-                            disabled={loading === `tenant-update-${tenant.id}`}
-                          >
-                            Chỉnh sửa
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => void deleteTenant(tenant)}
-                            disabled={loading === `tenant-delete-${tenant.id}`}
-                          >
-                            Xóa
-                          </Button>
+                        <Separator className="my-3" />
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <Badge variant="default">{tenant.extensionCount ?? 0} extension</Badge>
+                          <Badge variant="secondary">Prefix nội bộ: {tenant.routing?.internalPrefix || '-'}</Badge>
+                          <Badge variant="secondary">Voicemail: {tenant.routing?.voicemailPrefix || '-'}</Badge>
+                          <Badge variant="secondary">Gateway: {tenant.routing?.pstnGateway || '-'}</Badge>
+                          <Badge variant="secondary">E164: {tenant.routing?.enableE164 ? 'Bật' : 'Tắt'}</Badge>
+                          <Badge variant="secondary">Codec: {tenant.routing?.codecString || '-'}</Badge>
                         </div>
                       </div>
-                      <Separator className="my-3" />
-                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <Badge variant="secondary">Prefix nội bộ: {tenant.routing?.internalPrefix || '-'}</Badge>
-                        <Badge variant="secondary">Voicemail: {tenant.routing?.voicemailPrefix || '-'}</Badge>
-                        <Badge variant="secondary">Gateway: {tenant.routing?.pstnGateway || '-'}</Badge>
-                        <Badge variant="secondary">E164: {tenant.routing?.enableE164 ? 'Bật' : 'Tắt'}</Badge>
-                        <Badge variant="secondary">Codec: {tenant.routing?.codecString || '-'}</Badge>
-                      </div>
-                    </div>
-                  ))}
-                  {tenants.length === 0 && (
-                    <p className="text-center text-sm text-muted-foreground">Chưa có domain nào.</p>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-sm text-muted-foreground">Chưa có domain nào.</div>
+                )}
               </ScrollArea>
+              {tenantData.total > TENANTS_PER_PAGE ? (
+                <PaginationBar
+                  page={tenantPage}
+                  pageCount={tenantPageCount}
+                  total={tenantData.total}
+                  loading={tenantLoading}
+                  onPrev={() => {
+                    if (tenantPage > 1) {
+                      void fetchTenantPage(tenantPage - 1);
+                    }
+                  }}
+                  onNext={() => {
+                    if (tenantPage < tenantPageCount) {
+                      void fetchTenantPage(tenantPage + 1);
+                    }
+                  }}
+                />
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="extensions" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle>Extension</CardTitle>
-              <div className="flex flex-wrap items-center gap-3">
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <CardTitle>Extension</CardTitle>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>Lọc tenant:</span>
                   <select
@@ -650,69 +894,123 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
                     ))}
                   </select>
                 </div>
-                <Button onClick={openCreateExtension}>Thêm extension</Button>
+              </div>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <Input
+                  value={extensionSearch}
+                  onChange={(event) => setExtensionSearch(event.target.value)}
+                  placeholder="Tìm bằng extension, tenant hoặc hiển thị"
+                  className="md:w-72"
+                />
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline">{extensionData.total} kết quả</Badge>
+                  <Button onClick={openCreateExtension}>Thêm extension</Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               <ScrollArea className="max-h-[420px] pr-2">
-                <div className="space-y-4">
-                  {filteredExtensions.map((extension) => {
-                    const tenant = tenants.find((t) => t.id === extension.tenantId);
-                    return (
-                      <div key={extension.id} className="rounded-lg border p-4 shadow-sm">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <div className="text-lg font-semibold">{extension.id}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {tenant ? `${tenant.name} (${tenant.domain})` : extension.tenantId}
-                            </div>
-                            {extension.displayName ? (
-                              <div className="text-sm text-muted-foreground">{extension.displayName}</div>
-                            ) : null}
-                          </div>
-                         <div className="flex flex-wrap gap-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => void copyExtensionPassword(extension)}
-                              disabled={loading === `extension-copy-${extension.id}`}
-                            >
-                              Sao chép mật khẩu
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void openExtensionQr(extension)}
-                              disabled={qrLoading && qrExtension?.id === extension.id}
-                            >
-                              <QrCode className="mr-2 h-4 w-4" /> QR SIP
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEditExtension(extension)}
-                              disabled={loading === `extension-update-${extension.id}`}
-                            >
-                              Chỉnh sửa
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => void deleteExtension(extension)}
-                              disabled={loading === `extension-delete-${extension.id}`}
-                            >
-                              Xóa
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {filteredExtensions.length === 0 && (
-                    <p className="text-center text-sm text-muted-foreground">Không có extension nào.</p>
-                  )}
-                </div>
+                {extensionLoading ? (
+                  <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                    Đang tải extension...
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Extension</TableHead>
+                        <TableHead>Tenant</TableHead>
+                        <TableHead>Tên hiển thị</TableHead>
+                        <TableHead className="text-right">Hành động</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {extensionData.items.map((extension) => {
+                        const tenantInfo = tenantMap.get(extension.tenantId);
+                        const tenantName = tenantInfo?.name || extension.tenantName || extension.tenantId;
+                        const tenantDomain = tenantInfo?.domain || extension.tenantDomain || "";
+                        return (
+                          <TableRow key={extension.id}>
+                            <TableCell className="font-semibold">{extension.id}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              <span>
+                                {tenantName}
+                                {tenantDomain ? (
+                                  <span className="ml-1 text-xs">({tenantDomain})</span>
+                                ) : null}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {extension.displayName || <span className="text-muted-foreground">(trống)</span>}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap items-center justify-end gap-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => void copyExtensionPassword(extension)}
+                                  disabled={loading === `extension-copy-${extension.id}`}
+                                >
+                                  Sao chép mật khẩu
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void openExtensionQr(extension)}
+                                  disabled={qrLoading && qrExtension?.id === extension.id}
+                                >
+                                  <QrCode className="mr-2 h-4 w-4" /> QR SIP
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openEditExtension(extension)}
+                                  disabled={loading === `extension-update-${extension.id}`}
+                                >
+                                  Chỉnh sửa
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => void deleteExtension(extension)}
+                                  disabled={loading === `extension-delete-${extension.id}`}
+                                >
+                                  Xóa
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {extensionData.items.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                            Không có extension nào.
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
+                )}
               </ScrollArea>
+              {extensionData.total > EXTENSIONS_PER_PAGE ? (
+                <PaginationBar
+                  page={extensionPage}
+                  pageCount={extensionPageCount}
+                  total={extensionData.total}
+                  loading={extensionLoading}
+                  onPrev={() => {
+                    if (extensionPage > 1) {
+                      void fetchExtensionPage(extensionPage - 1);
+                    }
+                  }}
+                  onNext={() => {
+                    if (extensionPage < extensionPageCount) {
+                      void fetchExtensionPage(extensionPage + 1);
+                    }
+                  }}
+                />
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1017,5 +1315,32 @@ export function DomainExtensionManager({ initialTenants, initialExtensions }: Do
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+interface PaginationBarProps {
+  page: number;
+  pageCount: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+  loading?: boolean;
+}
+
+function PaginationBar({ page, pageCount, total, onPrev, onNext, loading = false }: PaginationBarProps) {
+  return (
+    <div className="mt-4 flex items-center justify-between gap-2 border-t pt-4 text-sm text-muted-foreground">
+      <span>
+        Trang {page}/{pageCount} · {total} mục
+      </span>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={onPrev} disabled={page <= 1 || loading}>
+          <ChevronLeft className="mr-1 h-4 w-4" /> Trước
+        </Button>
+        <Button variant="outline" size="sm" onClick={onNext} disabled={page >= pageCount || loading}>
+          Sau <ChevronRight className="ml-1 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
   );
 }

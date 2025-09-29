@@ -16,10 +16,19 @@ export interface CdrRecord {
   rawPayload?: string;
   recordingFilename?: string | null;
   recordingUrl?: string | null;
+  finalStatus: string;
+  finalStatusLabel: string;
 }
 
 export interface PaginatedCdrResponse {
   items: CdrRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
   total: number;
   page: number;
   pageSize: number;
@@ -86,6 +95,7 @@ export interface TenantSummary {
   createdAt?: string;
   updatedAt?: string;
   routing?: RoutingConfig | null;
+  extensionCount?: number;
 }
 
 export interface ExtensionSummary {
@@ -94,6 +104,14 @@ export interface ExtensionSummary {
   displayName?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  tenantName?: string | null;
+  tenantDomain?: string | null;
+}
+
+export interface TenantLookupItem {
+  id: string;
+  name: string;
+  domain: string;
 }
 
 export interface CallEvent {
@@ -188,6 +206,18 @@ export interface IvrMenuSummary {
   timeoutSeconds: number;
   maxRetries: number;
   options: IvrMenuOptionSummary[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SystemRecordingSummary {
+  id: string;
+  name: string;
+  originalFilename: string;
+  mimetype: string;
+  sizeBytes: number;
+  playbackUrl: string;
+  downloadUrl: string;
   createdAt?: string;
   updatedAt?: string;
 }

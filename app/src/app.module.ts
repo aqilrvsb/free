@@ -23,6 +23,7 @@ import {
   InboundRouteEntity,
   IvrMenuEntity,
   IvrMenuOptionEntity,
+  SystemRecordingEntity,
 } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
@@ -41,6 +42,8 @@ import { InboundRoutingService } from './inbound-routing.service';
 import { InboundRoutingController } from './inbound-routing.controller';
 import { IvrMenuService } from './ivr-menu.service';
 import { IvrMenuController } from './ivr-menu.controller';
+import { SystemRecordingsService } from './system-recordings.service';
+import { SystemRecordingsController } from './system-recordings.controller';
 
 @Module({
   imports: [
@@ -67,6 +70,7 @@ import { IvrMenuController } from './ivr-menu.controller';
           InboundRouteEntity,
           IvrMenuEntity,
           IvrMenuOptionEntity,
+          SystemRecordingEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -89,6 +93,7 @@ import { IvrMenuController } from './ivr-menu.controller';
       InboundRouteEntity,
       IvrMenuEntity,
       IvrMenuOptionEntity,
+      SystemRecordingEntity,
     ]),
   ],
   controllers: [
@@ -101,6 +106,7 @@ import { IvrMenuController } from './ivr-menu.controller';
     OutboundRoutingController,
     InboundRoutingController,
     IvrMenuController,
+    SystemRecordingsController,
     DialplanConfigController,
     SettingsController,
   ],
@@ -118,6 +124,7 @@ import { IvrMenuController } from './ivr-menu.controller';
     OutboundRoutingService,
     InboundRoutingService,
     IvrMenuService,
+    SystemRecordingsService,
     SettingsService,
     DialplanConfigService,
   ],

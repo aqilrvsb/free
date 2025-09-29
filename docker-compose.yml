@@ -30,7 +30,7 @@ services:
       - ./app:/app
       - app-node-modules:/app/node_modules
       - ./docker/app-entrypoint.sh:/usr/local/bin/app-entrypoint.sh:ro
-      - ./data/recordings:/recordings:ro
+      - ./data/recordings:/recordings
       - ./freeswitch/conf/sip_profiles/external:/shared/gateways
     depends_on:
       mysql:

@@ -45,101 +45,107 @@ const NAV_SECTIONS: Array<{
   label: string
   items: NavItem[]
 }> = [
-  {
-    label: "Tổng quan",
-    items: [
-      {
-        title: "Dashboard",
-        description: "Bảng điều khiển thời gian thực",
-        href: "/",
-        icon: LayoutDashboard,
-        exact: true,
-      },
-    ],
-  },
-  {
-    label: "Giám sát",
-    items: [
-      {
-        title: "CDR",
-        description: "Nhật ký cuộc gọi",
-        href: "/cdr",
-        icon: ScrollText,
-      },
-      {
-        title: "Trạng thái",
-        description: "Core & Sofia",
-        href: "/fs/status",
-        icon: Activity,
-      },
-      {
-        title: "Kênh",
-        description: "Phiên đang hoạt động",
-        href: "/fs/channels",
-        icon: Waves,
-      },
-      {
-        title: "Cuộc gọi",
-        description: "Theo dõi realtime",
-        href: "/fs/calls",
-        icon: Activity,
-      },
-      {
-        title: "Đăng ký",
-        description: "Thiết bị SIP",
-        href: "/fs/registrations",
-        icon: RadioTower,
-      },
-      {
-        title: "Ghi âm",
-        description: "Tệp lưu lại",
-        href: "/recordings",
-        icon: FileAudio,
-      },
-    ],
-  },
-  {
-    label: "Quản trị",
-    items: [
-      {
-        title: "Domain & Extension",
-        description: "Thiết lập tenant và máy nhánh",
-        href: "/fs/manage",
-        icon: UserCog,
-      },
-      {
-        title: "Gateway / Trunk",
-        description: "Kết nối Telco bên ngoài",
-        href: "/fs/gateways",
-        icon: Globe2,
-      },
-      {
-        title: "Dialplan",
-        description: "Quy tắc gọi nội bộ & outbound",
-        href: "/fs/dialplan",
-        icon: GitBranch,
-      },
-      {
-        title: "Outbound Routing",
-        description: "Quy tắc gọi ra ngoài",
-        href: "/fs/outbound",
-        icon: RadioTower,
-      },
-      {
-        title: "Inbound Routing",
-        description: "Định tuyến DID vào",
-        href: "/fs/inbound",
-        icon: PhoneIncoming,
-      },
-      {
-        title: "IVR",
-        description: "Kịch bản trả lời tự động",
-        href: "/fs/ivr",
-        icon: Workflow,
-      },
-    ],
-  },
-]
+    {
+      label: "Tổng quan",
+      items: [
+        {
+          title: "Dashboard",
+          description: "Bảng điều khiển thời gian thực",
+          href: "/",
+          icon: LayoutDashboard,
+          exact: true,
+        },
+      ],
+    },
+    {
+      label: "Giám sát",
+      items: [
+        {
+          title: "CDR",
+          description: "Nhật ký cuộc gọi",
+          href: "/cdr",
+          icon: ScrollText,
+        },
+        {
+          title: "Trạng thái",
+          description: "Core & Sofia",
+          href: "/fs/status",
+          icon: Activity,
+        },
+        {
+          title: "Kênh",
+          description: "Phiên đang hoạt động",
+          href: "/fs/channels",
+          icon: Waves,
+        },
+        {
+          title: "Cuộc gọi",
+          description: "Theo dõi realtime",
+          href: "/fs/calls",
+          icon: Activity,
+        },
+        {
+          title: "Đăng ký",
+          description: "Thiết bị SIP",
+          href: "/fs/registrations",
+          icon: RadioTower,
+        },
+        {
+          title: "Ghi âm",
+          description: "Tệp lưu lại",
+          href: "/recordings",
+          icon: FileAudio,
+        },
+      ],
+    },
+    {
+      label: "Quản trị",
+      items: [
+        {
+          title: "Domain & Extension",
+          description: "Thiết lập tenant và máy nhánh",
+          href: "/fs/manage",
+          icon: UserCog,
+        },
+        {
+          title: "Gateway / Trunk",
+          description: "Kết nối Telco bên ngoài",
+          href: "/fs/gateways",
+          icon: Globe2,
+        },
+        {
+          title: "Dialplan",
+          description: "Quy tắc gọi nội bộ & outbound",
+          href: "/fs/dialplan",
+          icon: GitBranch,
+        },
+        {
+          title: "Outbound Routing",
+          description: "Quy tắc gọi ra ngoài",
+          href: "/fs/outbound",
+          icon: RadioTower,
+        },
+        {
+          title: "Inbound Routing",
+          description: "Định tuyến DID vào",
+          href: "/fs/inbound",
+          icon: PhoneIncoming,
+        },
+        {
+          title: "IVR",
+          description: "Kịch bản trả lời tự động",
+          href: "/fs/ivr",
+          icon: Workflow,
+        },
+        {
+          title: "System Recordings",
+          description: "Kho âm thanh dùng chung",
+          href: "/fs/system-recordings",
+          icon: FileAudio,
+        },
+      ],
+    },
+  ]
 
 function isActivePath(pathname: string, item: NavItem) {
   if (item.exact) {
@@ -169,6 +175,8 @@ export function AppSidebar() {
                 <span className="text-xs text-muted-foreground">Giám sát FreeSWITCH realtime</span>
               </div>
             </div>
+          </div>
+          <div className="w-full flex justify-end pt-2">
             <Badge variant="secondary" className="border border-primary/30 bg-primary/10 text-xs font-medium text-primary">
               Stable · v1.0
             </Badge>
@@ -195,7 +203,7 @@ export function AppSidebar() {
                       <SidebarMenuButton
                         asChild
                         isActive={active}
-                        className="group relative overflow-hidden rounded-xl border border-transparent bg-transparent ring-0 transition-all duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 hover:pl-3 data-[active=true]:border-primary/60 data-[active=true]:bg-primary/15 data-[active=true]:pl-3"
+                        className="group relative overflow-hidden rounded-xl border border-transparent bg-transparent ring-0 transition-all duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 hover:pl-3 data-[active=true]:border-primary/60 data-[active=true]:bg-primary/15 data-[active=true]:pl-3 py-5"
                         tooltip={item.title}
                       >
                         <Link
@@ -210,7 +218,7 @@ export function AppSidebar() {
                               {item.title}
                             </span>
                             {item.description ? (
-                              <span className="text-xs text-muted-foreground group-data-[collapsible=icon]/sidebar-menu-button:hidden">
+                              <span className="text-xs text-muted-foreground group-data-[collapsible=icon]/sidebar-menu-button:hidden truncate">
                                 {item.description}
                               </span>
                             ) : null}
@@ -232,7 +240,7 @@ export function AppSidebar() {
           <div className="relative flex flex-col gap-2">
             <p className="text-sm font-semibold text-foreground">Trung tâm điều hành PBX</p>
             <p className="leading-relaxed">
-              FreeSWITCH · NestJS · Next.js được đồng bộ realtime. Mở dashboard để xem metrics trực tiếp.
+              FreeSWITCH · NestJS · Next.js được đồng bộ realtime.
             </p>
             <Link
               href="/fs/status"

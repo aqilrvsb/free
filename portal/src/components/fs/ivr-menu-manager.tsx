@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ExtensionSummary, IvrActionType, IvrMenuSummary, TenantSummary } from "@/lib/types";
+import type { ExtensionSummary, IvrActionType, IvrMenuSummary, SystemRecordingSummary, TenantSummary } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ interface IvrMenuManagerProps {
   tenants: TenantSummary[];
   extensions: ExtensionSummary[];
   initialMenus: IvrMenuSummary[];
+  systemRecordings: SystemRecordingSummary[];
 }
 
 type DialogMode = "create" | "edit";
@@ -62,6 +63,16 @@ const defaultOption: OptionFormState = {
   position: "0",
 };
 
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${bytes} B`;
+}
+
 function resolveBaseUrl(envValue?: string) {
   if (envValue && envValue.length > 0) {
     return envValue.replace(/\/$/, "");
@@ -72,7 +83,7 @@ function resolveBaseUrl(envValue?: string) {
   return "";
 }
 
-export function IvrMenuManager({ tenants, extensions, initialMenus }: IvrMenuManagerProps) {
+export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecordings }: IvrMenuManagerProps) {
   const [menus, setMenus] = useState<IvrMenuSummary[]>(initialMenus);
   const [selectedTenant, setSelectedTenant] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -92,6 +103,14 @@ export function IvrMenuManager({ tenants, extensions, initialMenus }: IvrMenuMan
   }, [menus, selectedTenant]);
 
   const tenantMap = useMemo(() => new Map(tenants.map((tenant) => [tenant.id, tenant])), [tenants]);
+  const systemRecordingOptions = useMemo(
+    () =>
+      systemRecordings.map((recording) => ({
+        label: `${recording.name} (${formatBytes(recording.sizeBytes)})`,
+        value: recording.playbackUrl,
+      })),
+    [systemRecordings],
+  );
 
   const extensionOptions = useMemo(() => {
     return extensions.reduce<Record<string, Array<{ label: string; value: string }>>>((acc, ext) => {
@@ -392,11 +411,49 @@ export function IvrMenuManager({ tenants, extensions, initialMenus }: IvrMenuMan
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Âm chào (file hoặc câu)</Label>
-                <Input value={form.greetingAudioUrl} onChange={(event) => handleForm("greetingAudioUrl", event.target.value)} placeholder="ivr/ivr-welcome_to_company.wav" />
+                <div className="flex flex-col gap-2">
+                  <Input value={form.greetingAudioUrl} onChange={(event) => handleForm("greetingAudioUrl", event.target.value)} placeholder="ivr/ivr-welcome_to_company.wav" />
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      if (event.target.value) {
+                        handleForm("greetingAudioUrl", event.target.value);
+                        event.target.value = "";
+                      }
+                    }}
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs"
+                  >
+                    <option value="">Chọn từ system recordings…</option>
+                    {systemRecordingOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Âm sai phím</Label>
-                <Input value={form.invalidAudioUrl} onChange={(event) => handleForm("invalidAudioUrl", event.target.value)} placeholder="ivr/ivr-invalid_entry.wav" />
+                <div className="flex flex-col gap-2">
+                  <Input value={form.invalidAudioUrl} onChange={(event) => handleForm("invalidAudioUrl", event.target.value)} placeholder="ivr/ivr-invalid_entry.wav" />
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      if (event.target.value) {
+                        handleForm("invalidAudioUrl", event.target.value);
+                        event.target.value = "";
+                      }
+                    }}
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs"
+                  >
+                    <option value="">Chọn từ system recordings…</option>
+                    {systemRecordingOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 

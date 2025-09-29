@@ -10,14 +10,24 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/common/page-header";
 import { extractChannelCount } from "@/lib/channels";
 import { Activity, AudioLines, Waves, ScrollText } from "lucide-react";
+import { LocalTime } from "@/components/common/local-time";
+import { getServerTimezone } from "@/lib/server-timezone";
 
 export const dynamic = "force-dynamic";
 
-function formatDate(input?: string | null) {
-  if (!input) return "-";
-  const date = new Date(input);
-  if (Number.isNaN(date.getTime())) return input;
-  return `${date.toLocaleString("vi-VN")}`;
+function resolveStatusVariant(status: string) {
+  switch (status) {
+    case "answered":
+      return "default" as const;
+    case "busy":
+    case "failed":
+      return "destructive" as const;
+    case "cancelled":
+    case "no_answer":
+      return "secondary" as const;
+    default:
+      return "outline" as const;
+  }
 }
 
 export default async function DashboardPage() {
@@ -30,6 +40,7 @@ export default async function DashboardPage() {
 
   const activeChannels = extractChannelCount(channels.parsed);
   const latestRecordings = recordings.slice(0, 5);
+  const timezone = await getServerTimezone();
 
   return (
     <div className="space-y-6">
@@ -124,6 +135,7 @@ export default async function DashboardPage() {
                     <TableHead>Từ</TableHead>
                     <TableHead>Đến</TableHead>
                     <TableHead>Thời lượng</TableHead>
+                    <TableHead>Trạng thái</TableHead>
                     <TableHead>Thời điểm</TableHead>
                     <TableHead>Ghi âm</TableHead>
                   </TableRow>
@@ -152,7 +164,12 @@ export default async function DashboardPage() {
                           <span className="text-xs text-muted-foreground"> (bill {item.billSeconds}s)</span>
                         ) : null}
                       </TableCell>
-                      <TableCell>{formatDate(item.startTime)}</TableCell>
+                      <TableCell>
+                        <Badge variant={resolveStatusVariant(item.finalStatus)}>{item.finalStatusLabel}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <LocalTime value={item.startTime} serverTimezone={timezone} />
+                      </TableCell>
                       <TableCell>
                         {item.recordingUrl ? (
                           <Link href={item.recordingUrl} target="_blank" className="text-primary hover:underline">

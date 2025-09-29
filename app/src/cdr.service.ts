@@ -33,6 +33,31 @@ export class CdrService {
   });
 
   private readonly recordingsDir: string;
+  private readonly busyCauses = new Set([
+    'USER_BUSY',
+    'CALL_REJECTED',
+    'RECOVERY_ON_TIMER_EXPIRE',
+    'DESTINATION_OUT_OF_ORDER',
+    'NO_CIRCUIT_AVAILABLE',
+    'NORMAL_CIRCUIT_CONGESTION',
+    'SWITCH_CONGESTION',
+  ]);
+  private readonly cancelCauses = new Set(['ORIGINATOR_CANCEL', 'LOSE_RACE', 'BEARERCAPABILITY_NOTAUTH']);
+  private readonly noAnswerCauses = new Set(['NO_ANSWER', 'ALLOTTED_TIMEOUT']);
+  private readonly failedCauses = new Set([
+    'UNALLOCATED_NUMBER',
+    'NO_ROUTE_TRANSIT_NET',
+    'NO_ROUTE_DESTINATION',
+    'NORMAL_TEMPORARY_FAILURE',
+    'NETWORK_OUT_OF_ORDER',
+    'FACILITY_REJECTED',
+    'REQUESTED_CHAN_UNAVAIL',
+    'SERVICE_UNAVAILABLE',
+    'BEARERCAPABILITY_NOTIMPL',
+    'CHAN_NOT_IMPLEMENTED',
+    'DESTINATION_OUT_OF_ORDER',
+    'MANAGER_REQUEST',
+  ]);
 
   constructor(
     @InjectRepository(CdrEntity) private readonly cdrRepo: Repository<CdrEntity>,
@@ -392,10 +417,16 @@ export class CdrService {
   private withRecordingInfo<T extends CdrEntity>(
     record: T,
     fallbackRecording?: string | undefined,
-  ): T & { recordingFilename?: string | null; recordingUrl?: string | null } {
+  ): T & {
+    recordingFilename?: string | null;
+    recordingUrl?: string | null;
+    finalStatus: string;
+    finalStatusLabel: string;
+  } {
     const relativePath = this.extractRecordingInfo(record.rawPayload) ?? fallbackRecording ?? null;
+    const { code, label } = this.resolveFinalStatus(record);
     if (!relativePath) {
-      return { ...record, recordingFilename: null, recordingUrl: null };
+      return { ...record, recordingFilename: null, recordingUrl: null, finalStatus: code, finalStatusLabel: label };
     }
 
     const encoded = relativePath
@@ -407,7 +438,39 @@ export class CdrService {
       ...record,
       recordingFilename: relativePath,
       recordingUrl: `/recordings/${encoded}`,
+      finalStatus: code,
+      finalStatusLabel: label,
     };
+  }
+
+  private resolveFinalStatus(record: CdrEntity): { code: string; label: string } {
+    const hangupCause = record.hangupCause?.toUpperCase() ?? '';
+    const answered = Boolean(record.answerTime || (record.billSeconds ?? 0) > 0);
+
+    if (answered) {
+      return { code: 'answered', label: 'Nghe máy' };
+    }
+
+    if (hangupCause) {
+      if (this.busyCauses.has(hangupCause)) {
+        return { code: 'busy', label: 'Máy bận' };
+      }
+      if (this.cancelCauses.has(hangupCause)) {
+        return { code: 'cancelled', label: 'Người gọi huỷ' };
+      }
+      if (this.noAnswerCauses.has(hangupCause)) {
+        return { code: 'no_answer', label: 'Không trả lời' };
+      }
+      if (this.failedCauses.has(hangupCause)) {
+        return { code: 'failed', label: 'Thất bại' };
+      }
+    }
+
+    if (hangupCause) {
+      return { code: 'failed', label: 'Thất bại' };
+    }
+
+    return { code: 'unknown', label: 'Không xác định' };
   }
 
   private extractRecordingInfo(rawPayload: string | undefined | null): string | null {

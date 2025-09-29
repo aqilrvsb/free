@@ -284,7 +284,14 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     });
 
     socket.on("registrations:snapshot", (data: RegistrationSnapshot) => {
-      console.log('[ws] snapshot', data.profile, Array.isArray(data.registrations) ? data.registrations.length : 'n/a', data);
+      if (process.env.NODE_ENV !== "production") {
+        console.debug(
+          "[ws] snapshot",
+          data.profile,
+          Array.isArray(data.registrations) ? data.registrations.length : "n/a",
+          data,
+        );
+      }
       if (data.profile !== profile) return;
       const currentFilters = filterStateRef.current;
       const hasActiveFilter = currentFilters.status !== 'all' || currentFilters.search.length > 0;
@@ -301,7 +308,9 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     });
 
     socket.on("registrations:event", (event: RegistrationEventMessage) => {
-      console.log('[ws] event', event.profile, event.action, event);
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[ws] event", event.profile, event.action, event);
+      }
       if (!event || event.profile !== profile) return;
       setLastEvent(event);
       scheduleRefresh();

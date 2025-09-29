@@ -1,15 +1,45 @@
 import { apiFetch, API_BASE_URL } from "@/lib/api";
-import type { RecordingMetadata, RecordingStorageConfig } from "@/lib/types";
+import type { RecordingMetadata, RecordingStorageConfig, PaginatedResult } from "@/lib/types";
 import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecordingsTable } from "@/components/recordings/recordings-table";
 import { RecordingStorageSettings } from "@/components/recordings/recording-storage-settings";
+import { PaginationControls } from "@/components/common/pagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function RecordingsPage() {
+interface RecordingsPageProps {
+  searchParams?: Promise<Record<string, string | string[]>>;
+}
+
+function getParam(value: string | string[] | undefined, fallback = "") {
+  if (Array.isArray(value)) {
+    return value[0] ?? fallback;
+  }
+  return value ?? fallback;
+}
+
+const PAGE_SIZE = 25;
+
+export default async function RecordingsPage({ searchParams }: RecordingsPageProps) {
+  const resolvedSearchParams = (await (searchParams ?? Promise.resolve({}))) as Record<
+    string,
+    string | string[]
+  >;
+  const pageParam = getParam(resolvedSearchParams.page, "1");
+  const page = Math.max(1, Number.parseInt(pageParam, 10) || 1);
+  const search = getParam(resolvedSearchParams.search).trim();
+
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(PAGE_SIZE),
+  });
+  if (search) {
+    query.set("search", search);
+  }
+
   const [recordings, storageConfig] = await Promise.all([
-    apiFetch<RecordingMetadata[]>("/recordings", { cache: "no-store" }),
+    apiFetch<PaginatedResult<RecordingMetadata>>(`/recordings?${query.toString()}`, { cache: "no-store" }),
     apiFetch<RecordingStorageConfig>("/settings/recordings-storage", { cache: "no-store" }),
   ]);
 
@@ -24,11 +54,23 @@ export default async function RecordingsPage() {
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <CardTitle className="text-lg font-semibold">Danh sách ghi âm</CardTitle>
           <div className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            {recordings.length} file
+            {recordings.total} file
           </div>
         </CardHeader>
         <CardContent>
-          <RecordingsTable recordings={recordings} apiBaseUrl={API_BASE_URL} storageConfig={storageConfig} />
+          <RecordingsTable
+            recordings={recordings.items}
+            apiBaseUrl={API_BASE_URL}
+            storageConfig={storageConfig}
+          />
+          <div className="mt-6">
+            <PaginationControls
+              page={recordings.page}
+              pageSize={recordings.pageSize}
+              total={recordings.total}
+              basePath="/recordings"
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

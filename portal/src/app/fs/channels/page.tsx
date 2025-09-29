@@ -4,13 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/common/page-header";
 import { extractChannelRows, extractChannelCount } from "@/lib/channels";
-
-function formatDate(value?: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("vi-VN");
-}
+import { LocalTime } from "@/components/common/local-time";
+import { getServerTimezone } from "@/lib/server-timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +13,7 @@ export default async function ChannelsPage() {
   const channels = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", { cache: "no-store" });
   const items = extractChannelRows(channels.parsed);
   const total = extractChannelCount(channels.parsed);
+  const timezone = await getServerTimezone();
 
   return (
     <div className="space-y-6">
@@ -54,7 +50,9 @@ export default async function ChannelsPage() {
                     </TableCell>
                     <TableCell>{channel.dest || "-"}</TableCell>
                     <TableCell>{channel.state}</TableCell>
-                    <TableCell>{formatDate(channel.created)}</TableCell>
+                    <TableCell>
+                      <LocalTime value={channel.created} serverTimezone={timezone} preset="datetime" />
+                    </TableCell>
                     <TableCell>{channel.application || "-"}</TableCell>
                   </TableRow>
                 ))}
