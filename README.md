@@ -101,6 +101,7 @@ docker compose -f docker-compose.yml -f docker-compose.local-db.yml up --build
 - **Gateways**: PSTN examples use gateway `pstn` (configure under `conf/sip_profiles/external/` as needed).
 - **Database config**: override DB settings via `.env` (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SYNC`, `DB_LOGGING`). Disable demo seed with `SEED_DEMO_DATA=false`.
 - **Local MySQL option**: run `docker compose -f docker-compose.yml -f docker-compose.local-db.yml up` if you need a sandboxed MySQL container inside the stack.
+- **CI builds**: GitLab pipelines use `docker-compose.build.yml` to build and push production-ready images for `app`, `portal`, and `freeswitch`.
 - **CDR security**: set `CDR_HTTP_HEADERS` in `.env` if you need FreeSWITCH to send extra HTTP headers (for example `Authorization: Basic ...`) with each CDR webhook.
 - **FreeSWITCH management**: set `FS_ESL_HOST`, `FS_ESL_PORT`, and `FS_ESL_PASSWORD` so the Nest app can reach the FreeSWITCH Event Socket; recordings directory is mapped via `RECORDINGS_DIR`.
 - **API security**: lock down `/fs/xml` and `/fs/cdr` (network ACL, reverse proxy auth, or mTLS) before exposing publicly.
