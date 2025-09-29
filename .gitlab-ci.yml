@@ -1,0 +1,122 @@
+# This file is a template, and might need editing before it works on your project.
+# To contribute improvements to CI/CD templates, please follow the Development guide at:
+# https://docs.gitlab.com/ee/development/cicd/templates.html
+# This specific template is located at:
+# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Docker.gitlab-ci.yml
+
+# Build a Docker image with CI/CD and push to the GitLab registry.
+# Docker-in-Docker documentation: https://docs.gitlab.com/ee/ci/docker/using_docker_build.html
+#
+# This template uses one generic job with conditional builds
+# for the default branch and all other (MR) branches.
+#
+image: docker:20.10.16
+stages:
+  - 'build'
+  - 'push'
+  - 'webhook'
+  - 'update-manifest-development'
+
+# This folder is cached between builds
+# http://docs.gitlab.com/ee/ci/yaml/README.html#cache
+default:
+  services:
+    - docker:20.10.16-dind
+
+before_script:
+  - export IMAGE_NAME_WITH_REGISTRY_PREFIX=$CI_REGISTRY_IMAGE # Your repository prefixed with GitLab Registry URL
+  - export COMMIT_HASH=$CI_COMMIT_SHA # Your current commit sha
+  - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  - apk add --update curl && rm -rf /var/cache/apk/*
+  - export CONTAINER_FULL_IMAGE_NAME=$IMAGE_NAME_WITH_REGISTRY_PREFIX/$CI_COMMIT_REF_NAME
+  - export CONTAINER_FULL_IMAGE_NAME_WITH_TAG=$CONTAINER_FULL_IMAGE_NAME:$COMMIT_HASH
+docker-build:
+  stage: build
+  # Default branch leaves tag empty (= latest tag)
+  # All other branches are tagged with the escaped branch name (commit ref slug)
+  #
+  only:
+    - development
+    - master
+  script:
+    - |
+      if [[ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]]; then
+        tag=""
+        echo "Running on default branch '$CI_DEFAULT_BRANCH': tag = 'latest'"
+      else
+        tag="$CI_COMMIT_REF_SLUG.$CI_COMMIT_SHA"
+        echo "Running on branch '$CI_COMMIT_BRANCH': tag = $tag"
+      fi
+    - docker build --pull -t "${CONTAINER_FULL_IMAGE_NAME_WITH_TAG}" .
+    - docker push "${CONTAINER_FULL_IMAGE_NAME_WITH_TAG}"
+
+push-latest:
+  variables:
+    GIT_STRATEGY: none
+  stage: push
+  only:
+    - master
+    - development
+  script:
+    - docker pull $CONTAINER_FULL_IMAGE_NAME_WITH_TAG
+    - docker tag $CONTAINER_FULL_IMAGE_NAME_WITH_TAG $CONTAINER_FULL_IMAGE_NAME:latest
+    - docker push $CONTAINER_FULL_IMAGE_NAME:latest
+
+push-tag:
+  variables:
+    GIT_STRATEGY: none
+  stage: push
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+(\.[0-9]+)*$/' # Regex for semantic versioning tags
+  script:
+    - docker pull $CONTAINER_FULL_IMAGE_NAME_WITH_TAG || true
+    - docker tag $CONTAINER_FULL_IMAGE_NAME_WITH_TAG $CONTAINER_FULL_IMAGE_NAME:$CI_COMMIT_TAG
+    - docker push $CONTAINER_FULL_IMAGE_NAME:$CI_COMMIT_TAG
+
+# webhook:
+#   stage: webhook
+#   only:
+#     - development
+#   script:
+#     - echo "CI_COMMIT_TAG=${CI_COMMIT_TAG}"
+#     - curl --request POST "${DEV_WEBHOOK_URL}?tag=${CI_COMMIT_TAG}"
+
+
+webhook:
+  stage: webhook
+  only:
+    - development
+  script:
+    - echo "Deploying to $CAPROVER_APP_NAME with image $CONTAINER_FULL_IMAGE_NAME_WITH_TAG"
+    - docker run caprover/cli-caprover:2.2.3 caprover deploy --appToken $CAPROVER_APP_TOKEN --caproverUrl $CAPROVER_URL --imageName $CONTAINER_FULL_IMAGE_NAME_WITH_TAG --appName $CAPROVER_APP_NAME
+
+
+update-manifest-development:
+  stage: update-manifest-development
+  only:
+    - development
+  variables:
+    GIT_REPO: "https://gitlab.com/vqtuan96/vill-k8s-configs.git"
+    APP_FOLDER: "helm-dispatcher"
+  script:
+    - |
+      echo "Updating manifest for development"
+      echo "install git"
+      apk add --update git && rm -rf /var/cache/apk/*
+      echo "clone config repo"
+      touch ~/.gitconfig
+      git config --global user.username $GITLAB_CONFIG_USERNAME
+      git config --global user.password $GITLAB_CONFIG_PASSWORD
+      git config --global user.email "vqtuan96@gmail.com"
+      git config --global user.name "vo quoc tuan"
+      echo "get git config"
+      git config --list
+      git clone https://$GITLAB_CONFIG_USERNAME:$GITLAB_CONFIG_PASSWORD@gitlab.com/vqtuan96/vill-k8s-configs.git config
+      cd config/$APP_FOLDER
+      ls -la
+      echo "update image tag"
+      sed -i "s/tag:.*/tag: $COMMIT_HASH/g" values.yaml
+      git add .
+      git commit -m "update image tag to $HASH_COMMIT"
+      git remote set-url origin https://$GITLAB_CONFIG_USERNAME:$GITLAB_CONFIG_PASSWORD@gitlab.com/vqtuan96/vill-k8s-configs.git
+      git push origin main
