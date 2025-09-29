@@ -8,15 +8,19 @@ This repo contains a **FreeSWITCH** container configured to fetch **dialplan & d
 # 1) Copy env template
 cp .env.example .env
 # Edit .env as needed (tenant info, IPs, DB creds)
+# Ensure DB_HOST points to the external MySQL service you want to reuse.
 
-# 2) Launch stack
+# 2) Launch stack (reusing external MySQL)
 docker compose up --build
+
+# Optional: include the bundled MySQL service
+docker compose -f docker-compose.yml -f docker-compose.local-db.yml up --build
 ```
 
 > On macOS Docker Desktop, you can enable **host networking** in Settings (Docker Desktop ≥ 4.34). If it is unavailable, edit `docker-compose.yml` to replace the FreeSWITCH `network_mode: host` setting with explicit port mappings.
 
 ## What’s included
-- **MySQL 8** datastore managed via TypeORM (tenants, users, routing, CDR records).
+- **MySQL 8** datastore managed via TypeORM (tenants, users, routing, CDR records); reuse an external instance or add the bundled container when needed.
 - **FreeSWITCH** with `mod_xml_curl`, `mod_xml_cdr`, `mod_sofia`, `mod_lua`, `mod_opus`.
 - **NestJS** app providing `/fs/xml` endpoint generating FreeSWITCH XML for:
   - `section=dialplan` → dynamic extensions (e.g., `9xxx` → `user/xxxx@domain`), PSTN routing
@@ -40,10 +44,11 @@ docker compose up --build
 3. To see XML that FreeSWITCH fetches:
    - `curl 'http://localhost:3000/fs/xml?section=dialplan&destination_number=91001&context=context_tenant1&domain=tenant1.local'`
    - `curl 'http://localhost:3000/fs/xml?section=directory&user=1001&domain=tenant1.local'`
-4. Inspect stored CDRs (inside the MySQL container):
+4. Inspect stored CDRs (requires bundled MySQL override):
    ```bash
    docker exec -it fs-mysql mysql -ufsapp -pfsapp freeswitch -e "SELECT call_uuid, from_number, to_number, duration_seconds, hangup_cause, received_at FROM cdr_records ORDER BY received_at DESC LIMIT 5;"
    ```
+   > Skip this step if you are pointing at an external database and use your normal MySQL client instead.
 5. Query management APIs:
    ```bash
    curl http://localhost:3000/fs/status
@@ -95,6 +100,7 @@ docker compose up --build
 - **External IPs**: We set `external_sip_ip` / `external_rtp_ip` via `vars_local.xml` to `auto`. For production, set explicit public IPs.
 - **Gateways**: PSTN examples use gateway `pstn` (configure under `conf/sip_profiles/external/` as needed).
 - **Database config**: override DB settings via `.env` (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SYNC`, `DB_LOGGING`). Disable demo seed with `SEED_DEMO_DATA=false`.
+- **Local MySQL option**: run `docker compose -f docker-compose.yml -f docker-compose.local-db.yml up` if you need a sandboxed MySQL container inside the stack.
 - **CDR security**: set `CDR_HTTP_HEADERS` in `.env` if you need FreeSWITCH to send extra HTTP headers (for example `Authorization: Basic ...`) with each CDR webhook.
 - **FreeSWITCH management**: set `FS_ESL_HOST`, `FS_ESL_PORT`, and `FS_ESL_PASSWORD` so the Nest app can reach the FreeSWITCH Event Socket; recordings directory is mapped via `RECORDINGS_DIR`.
 - **API security**: lock down `/fs/xml` and `/fs/cdr` (network ACL, reverse proxy auth, or mTLS) before exposing publicly.

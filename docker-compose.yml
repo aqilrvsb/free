@@ -7,22 +7,22 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - APP_PORT=${APP_PORT:-3000}
-      - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
-      - DB_HOST=${DB_HOST:-mysql}
-      - DB_PORT=${DB_PORT:-3306}
-      - DB_USER=${DB_USER:-fsapp}
-      - DB_PASSWORD=${DB_PASSWORD:-fsapp}
-      - DB_NAME=${DB_NAME:-freeswitch}
-      - DB_LOGGING=${DB_LOGGING:-false}
-      - DB_SYNC=${DB_SYNC:-true}
-      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-true}
-      - FS_ESL_HOST=${FS_ESL_HOST:-host.docker.internal}
-      - FS_ESL_PORT=${FS_ESL_PORT:-8021}
-      - FS_ESL_PASSWORD=${FS_ESL_PASSWORD:-ClueCon}
-      - RECORDINGS_DIR=${RECORDINGS_DIR:-/recordings}
-      - FS_GATEWAY_DIR=${FS_GATEWAY_DIR:-/shared/gateways}
+      NODE_ENV: ${NODE_ENV:-development}
+      APP_PORT: ${APP_PORT:-3000}
+      TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+      DB_HOST: ${DB_HOST:?Set DB_HOST to an external MySQL host or supply docker-compose.local-db.yml}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-fsapp}
+      DB_PASSWORD: ${DB_PASSWORD:-fsapp}
+      DB_NAME: ${DB_NAME:-freeswitch}
+      DB_LOGGING: ${DB_LOGGING:-false}
+      DB_SYNC: ${DB_SYNC:-true}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      FS_ESL_HOST: ${FS_ESL_HOST:-host.docker.internal}
+      FS_ESL_PORT: ${FS_ESL_PORT:-8021}
+      FS_ESL_PASSWORD: ${FS_ESL_PASSWORD:-ClueCon}
+      RECORDINGS_DIR: ${RECORDINGS_DIR:-/recordings}
+      FS_GATEWAY_DIR: ${FS_GATEWAY_DIR:-/shared/gateways}
     entrypoint: ["/usr/local/bin/app-entrypoint.sh"]
     ports:
       - "3000:3000"
@@ -32,9 +32,6 @@ services:
       - ./docker/app-entrypoint.sh:/usr/local/bin/app-entrypoint.sh:ro
       - ./data/recordings:/recordings
       - ./freeswitch/conf/sip_profiles/external:/shared/gateways
-    depends_on:
-      mysql:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -115,28 +112,6 @@ services:
       timeout: 5s
       retries: 20
 
-  mysql:
-    image: mysql:8.0
-    container_name: fs-mysql
-    restart: unless-stopped
-    environment:
-      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-rootpass}
-      - MYSQL_DATABASE=${DB_NAME:-freeswitch}
-      - MYSQL_USER=${DB_USER:-fsapp}
-      - MYSQL_PASSWORD=${DB_PASSWORD:-fsapp}
-      - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
-    ports:
-      - "3306:3306"
-    command: ["mysqld", "--default-authentication-plugin=mysql_native_password", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p${DB_ROOT_PASSWORD:-rootpass}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
 volumes:
   app-node-modules: {}
-  mysql-data: {}
   portal-node-modules: {}
