@@ -458,7 +458,25 @@ export function DomainExtensionManager({ initialTenants, initialExtensions, tena
         method: "DELETE",
       });
       if (!response.ok) {
-        throw new Error(await response.text());
+        const raw = await response.text();
+        let message = "Không thể xóa tenant.";
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed?.message)) {
+              message = parsed.message.join("\n");
+            } else if (typeof parsed?.message === "string") {
+              message = parsed.message;
+            } else if (typeof parsed === "string") {
+              message = parsed;
+            } else {
+              message = raw;
+            }
+          } catch (error) {
+            message = raw;
+          }
+        }
+        throw new Error(message);
       }
       const wasFilterTenant = tenantFilter === tenant.id;
       const nextFilter = wasFilterTenant ? "all" : tenantFilter;
@@ -469,7 +487,8 @@ export function DomainExtensionManager({ initialTenants, initialExtensions, tena
       }
     } catch (error) {
       console.error("Failed to delete tenant", error);
-      alert("Không thể xóa tenant.");
+      const message = error instanceof Error && error.message ? error.message : "Không thể xóa tenant.";
+      alert(message);
     } finally {
       setLoading(null);
     }

@@ -170,6 +170,16 @@ export class TenantManagementService {
   }
 
   async deleteTenant(id: string): Promise<void> {
+    const tenant = await this.tenantRepo.findOne({ where: { id } });
+    if (!tenant) {
+      throw new BadRequestException('Tenant không tồn tại');
+    }
+
+    const extensionCount = await this.userRepo.count({ where: { tenantId: id } });
+    if (extensionCount > 0) {
+      throw new BadRequestException('Không thể xoá domain khi vẫn còn extension');
+    }
+
     await this.tenantRepo.delete({ id });
   }
 

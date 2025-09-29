@@ -1,12 +1,19 @@
 import { apiFetch } from "@/lib/api";
-import type { FsStatusResponse, PaginatedCdrResponse, RecordingMetadata, CommandResult, FsChannelList } from "@/lib/types";
+import type {
+  FsStatusResponse,
+  PaginatedCdrResponse,
+  RecordingMetadata,
+  CommandResult,
+  FsChannelList,
+  PaginatedResult,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/common/page-header";
 import { extractChannelCount } from "@/lib/channels";
 import { Activity, AudioLines, Waves, ScrollText } from "lucide-react";
@@ -31,15 +38,15 @@ function resolveStatusVariant(status: string) {
 }
 
 export default async function DashboardPage() {
-  const [cdr, fsStatus, recordings, channels] = await Promise.all([
+  const [cdr, fsStatus, recordingsPage, channels] = await Promise.all([
     apiFetch<PaginatedCdrResponse>(`/cdr?page=1&pageSize=5`, { cache: "no-store" }),
     apiFetch<FsStatusResponse>(`/fs/status`, { cache: "no-store" }),
-    apiFetch<RecordingMetadata[]>(`/recordings`, { cache: "no-store" }),
+    apiFetch<PaginatedResult<RecordingMetadata>>(`/recordings?page=1&pageSize=5`, { cache: "no-store" }),
     apiFetch<CommandResult<FsChannelList>>(`/fs/channels`, { cache: "no-store" }),
   ]);
 
   const activeChannels = extractChannelCount(channels.parsed);
-  const latestRecordings = recordings.slice(0, 5);
+  const latestRecordings = recordingsPage.items;
   const timezone = await getServerTimezone();
 
   return (
@@ -190,6 +197,7 @@ export default async function DashboardPage() {
                   )}
                 </TableBody>
               </Table>
+              <ScrollBar orientation="horizontal" />
             </ScrollArea>
           </CardContent>
         </Card>
@@ -233,6 +241,7 @@ export default async function DashboardPage() {
                   )}
                 </TableBody>
               </Table>
+              <ScrollBar orientation="horizontal" />
             </ScrollArea>
           </CardContent>
         </Card>
