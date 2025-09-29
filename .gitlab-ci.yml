@@ -11,8 +11,10 @@ variables:
   BRANCH_TAG: "$CI_COMMIT_REF_SLUG"
   APP_IMAGE: "$CI_REGISTRY_IMAGE/app"
   PORTAL_IMAGE: "$CI_REGISTRY_IMAGE/portal"
-  FREESWITCH_IMAGE: "$CI_REGISTRY_IMAGE/freeswitch"
   COMPOSE_FILE: docker-compose.build.yml
+  SERVICES_TO_BUILD: "app portal"
+  FREESWITCH_REMOTE_IMAGE: "docker.io/your-dockerhub-user/freeswitch"
+  FREESWITCH_REMOTE_TAG: "latest"
 
 stages:
   - build
@@ -28,9 +30,9 @@ default:
 compose-build:
   stage: build
   script:
-    - test -n "$FS_TOKEN" || (echo "FS_TOKEN variable is required" && exit 1)
-    - docker compose build --pull
-    - docker compose push
+    - docker compose build --pull $SERVICES_TO_BUILD
+    - docker compose pull freeswitch
+    - docker compose push $SERVICES_TO_BUILD
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'
@@ -42,7 +44,7 @@ push-latest:
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:
-    - for service in app portal freeswitch; do
+    - for service in $SERVICES_TO_BUILD; do
         SOURCE_IMAGE="$CI_REGISTRY_IMAGE/$service:${IMAGE_TAG}";
         TARGET_IMAGE="$CI_REGISTRY_IMAGE/$service:latest";
         docker pull "$SOURCE_IMAGE";
@@ -57,7 +59,7 @@ push-branch-tag:
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH'
   script:
-    - for service in app portal freeswitch; do
+    - for service in $SERVICES_TO_BUILD; do
         SOURCE_IMAGE="$CI_REGISTRY_IMAGE/$service:${IMAGE_TAG}";
         TARGET_IMAGE="$CI_REGISTRY_IMAGE/$service:${BRANCH_TAG}";
         docker pull "$SOURCE_IMAGE";
@@ -72,7 +74,7 @@ push-release-tag:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+(\.[0-9]+)*$/'
   script:
-    - for service in app portal freeswitch; do
+    - for service in $SERVICES_TO_BUILD; do
         SOURCE_IMAGE="$CI_REGISTRY_IMAGE/$service:${IMAGE_TAG}";
         TARGET_IMAGE="$CI_REGISTRY_IMAGE/$service:$CI_COMMIT_TAG";
         docker pull "$SOURCE_IMAGE";

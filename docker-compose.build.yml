@@ -20,12 +20,6 @@ services:
       PORT: 3001
 
   freeswitch:
-    build:
-      context: .
-      dockerfile: docker/freeswitch.Dockerfile
-      args:
-        FS_TOKEN: ${FS_TOKEN}
-    image: ${FREESWITCH_IMAGE}:${IMAGE_TAG}
+    image: ${FREESWITCH_REMOTE_IMAGE:-docker.io/your-dockerhub-user/freeswitch}:${FREESWITCH_REMOTE_TAG:-latest}
     environment:
       TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
-
