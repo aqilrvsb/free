@@ -14,6 +14,7 @@ variables:
   COMPOSE_FILE: docker-compose.build.yml
   SERVICES_TO_BUILD: "app portal freeswitch"
   FREESWITCH_IMAGE: "$CI_REGISTRY_IMAGE/freeswitch"
+  FS_TOKEN: "${FS_TOKEN:-pat_5XdJ51UgrgFDLrjDkKhcb5F6}"
 
 stages:
   - build
