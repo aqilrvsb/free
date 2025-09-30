@@ -47,7 +47,7 @@ services:
     env_file:
       - ./portal/.env
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3001
     command: ["/usr/local/bin/portal-entrypoint.sh"]
     ports:

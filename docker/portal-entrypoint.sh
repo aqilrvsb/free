@@ -24,7 +24,13 @@ install_deps() {
 
 install_deps
 
+export NODE_ENV=${NODE_ENV:-production}
+
+echo "[portal-entrypoint] Building portal for production..."
+npm run build
+
 PORT="${PORT:-3001}"
 HOST="${HOSTNAME_OVERRIDE:-0.0.0.0}"
 
-exec npm run dev -- --hostname "$HOST" --port "$PORT"
+echo "[portal-entrypoint] Starting portal in production mode on ${HOST}:${PORT}"
+exec npm run start -- --hostname "$HOST" --port "$PORT"
