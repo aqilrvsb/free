@@ -14,7 +14,7 @@ variables:
   COMPOSE_FILE: docker-compose.build.yml
   SERVICES_TO_BUILD: "app portal freeswitch"
   FREESWITCH_IMAGE: "$CI_REGISTRY_IMAGE/freeswitch"
-  FS_TOKEN: "${FS_TOKEN:-pat_5XdJ51UgrgFDLrjDkKhcb5F6}"
+  DEFAULT_FS_TOKEN: "pat_5XdJ51UgrgFDLrjDkKhcb5F6"
 
 stages:
   - build
@@ -30,7 +30,7 @@ default:
 compose-build:
   stage: build
   script:
-    - test -n "$FS_TOKEN" || (echo "FS_TOKEN variable is required" && exit 1)
+    - export FS_TOKEN="${FS_TOKEN:-$DEFAULT_FS_TOKEN}"
     - docker compose build --pull $SERVICES_TO_BUILD
     - docker compose push $SERVICES_TO_BUILD
   rules:
