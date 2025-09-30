@@ -76,6 +76,8 @@ services:
       - EXT_SIP_IP=${EXT_SIP_IP:-auto}
       - EXT_RTP_IP=${EXT_RTP_IP:-auto}
       - CDR_HTTP_HEADERS=${CDR_HTTP_HEADERS:-}
+      - XML_CDR_URL=${XML_CDR_URL:-http://127.0.0.1:3000/fs/cdr}
+      - XML_CURL_GATEWAY_URL=${XML_CURL_GATEWAY_URL:-http://localhost:3000/fs/xml}
     network_mode: host
     cap_add:
       - SYS_NICE

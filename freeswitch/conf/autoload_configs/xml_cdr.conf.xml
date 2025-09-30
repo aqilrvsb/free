@@ -1,7 +1,7 @@
 <X-PRE-PROCESS cmd="include" data="../vars_local.xml"/>
 <configuration name="xml_cdr.conf" description="XML CDR via HTTP">
   <settings>
-    <param name="url" value="http://127.0.0.1:3000/fs/cdr"/>
+    <param name="url" value="$${xml_cdr_url}"/>
     <param name="log-http-and-disk" value="true"/>
     <param name="log-dir" value="/var/log/freeswitch/xml_cdr"/>
     <param name="debug" value="1"/>

@@ -3,4 +3,8 @@
   <X-PRE-PROCESS cmd="set" data="sip_tls_version=tlsv1_2"/>
   <X-PRE-PROCESS cmd="set" data="external_sip_ip=auto-nat"/>
   <X-PRE-PROCESS cmd="set" data="external_rtp_ip=auto-nat"/>
+  <X-PRE-PROCESS cmd="set" data="xml_cdr_url=http://127.0.0.1:3000/fs/cdr"/>
+  <X-PRE-PROCESS cmd="env-set" data="xml_cdr_url=$XML_CDR_URL"/>
+  <X-PRE-PROCESS cmd="set" data="xml_curl_gateway_url=http://localhost:3000/fs/xml"/>
+  <X-PRE-PROCESS cmd="env-set" data="xml_curl_gateway_url=$XML_CURL_GATEWAY_URL"/>
 </include>
