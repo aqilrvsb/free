@@ -101,8 +101,8 @@ docker compose -f docker-compose.yml -f docker-compose.local-db.yml up --build
 - **Gateways**: PSTN examples use gateway `pstn` (configure under `conf/sip_profiles/external/` as needed).
 - **Database config**: override DB settings via `.env` (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SYNC`, `DB_LOGGING`). Disable demo seed with `SEED_DEMO_DATA=false`.
 - **Local MySQL option**: run `docker compose -f docker-compose.yml -f docker-compose.local-db.yml up` if you need a sandboxed MySQL container inside the stack.
-- **CI builds**: GitLab pipelines use `docker-compose.build.yml` to build and push production-ready images for `app`, `portal`, and `freeswitch`.
-- **Prebuilt FreeSWITCH image**: Set `FREESWITCH_REMOTE_IMAGE`/`FREESWITCH_REMOTE_TAG` in CI (and your local shell if needed) to pull a prebuilt FreeSWITCH image from Docker Hub instead of building it in the pipeline. Use `scripts/build-freeswitch-image.sh` with `docker buildx` to publish multi-arch tags before updating those variables.
+- **CI builds**: GitLab pipelines use `docker-compose.build.yml` to build and push production-ready images (`app`, `portal`, `freeswitch`) to the project’s GitLab Container Registry. Provide `FS_TOKEN`/registry credentials in CI variables so the build can fetch SignalWire packages.
+- **FreeSWITCH image tooling**: Use `scripts/build-freeswitch-image.sh` locally to publish multi-arch FreeSWITCH images (for example to `registry.gitlab.com/<group>/<project>/freeswitch`) when you need a manual rebuild.
 - **CDR security**: set `CDR_HTTP_HEADERS` in `.env` if you need FreeSWITCH to send extra HTTP headers (for example `Authorization: Basic ...`) with each CDR webhook.
 - **FreeSWITCH management**: set `FS_ESL_HOST`, `FS_ESL_PORT`, and `FS_ESL_PASSWORD` so the Nest app can reach the FreeSWITCH Event Socket; recordings directory is mapped via `RECORDINGS_DIR`.
 - **API security**: lock down `/fs/xml` and `/fs/cdr` (network ACL, reverse proxy auth, or mTLS) before exposing publicly.

@@ -5,7 +5,7 @@ set -euo pipefail
 # You can pre-export env vars or let the script prompt for missing ones.
 # Required:
 #   FS_TOKEN                SignalWire repo token used during the build step.
-#   FREESWITCH_IMAGE        Target image name, e.g. docker.io/myuser/freeswitch.
+#   FREESWITCH_IMAGE        Target image name, e.g. registry.gitlab.com/my-group/my-project/freeswitch.
 # Optional (with defaults shown when prompted):
 #   FREESWITCH_TAG          Tag to apply (default: latest).
 #   FREESWITCH_PLATFORMS    Comma-separated platform list (default: linux/amd64,linux/arm64).
@@ -46,7 +46,7 @@ prompt_optional() {
 }
 
 FS_TOKEN=$(prompt_required FS_TOKEN "Enter FS_TOKEN (SignalWire token): ")
-FREESWITCH_IMAGE=$(prompt_required FREESWITCH_IMAGE "Enter target image (e.g. docker.io/username/freeswitch): ")
+FREESWITCH_IMAGE=$(prompt_required FREESWITCH_IMAGE "Enter target image (e.g. registry.gitlab.com/group/project/freeswitch): ")
 FREESWITCH_TAG=$(prompt_optional FREESWITCH_TAG "Enter image tag [latest]: " "latest")
 FREESWITCH_PLATFORMS=$(prompt_optional FREESWITCH_PLATFORMS "Enter platform list [linux/amd64,linux/arm64]: " "linux/amd64,linux/arm64")
 FREESWITCH_BUILDER=$(prompt_optional FREESWITCH_BUILDER "Enter buildx builder name [fs-multiarch]: " "fs-multiarch")

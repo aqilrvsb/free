@@ -12,9 +12,8 @@ variables:
   APP_IMAGE: "$CI_REGISTRY_IMAGE/app"
   PORTAL_IMAGE: "$CI_REGISTRY_IMAGE/portal"
   COMPOSE_FILE: docker-compose.build.yml
-  SERVICES_TO_BUILD: "app portal"
-  FREESWITCH_REMOTE_IMAGE: "docker.io/your-dockerhub-user/freeswitch"
-  FREESWITCH_REMOTE_TAG: "latest"
+  SERVICES_TO_BUILD: "app portal freeswitch"
+  FREESWITCH_IMAGE: "$CI_REGISTRY_IMAGE/freeswitch"
 
 stages:
   - build
@@ -30,8 +29,8 @@ default:
 compose-build:
   stage: build
   script:
+    - test -n "$FS_TOKEN" || (echo "FS_TOKEN variable is required" && exit 1)
     - docker compose build --pull $SERVICES_TO_BUILD
-    - docker compose pull freeswitch
     - docker compose push $SERVICES_TO_BUILD
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

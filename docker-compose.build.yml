@@ -20,6 +20,11 @@ services:
       PORT: 3001
 
   freeswitch:
-    image: ${FREESWITCH_REMOTE_IMAGE:-docker.io/your-dockerhub-user/freeswitch}:${FREESWITCH_REMOTE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/freeswitch.Dockerfile
+      args:
+        FS_TOKEN: ${FS_TOKEN:-pat_5XdJ51UgrgFDLrjDkKhcb5F6}
+    image: ${FREESWITCH_IMAGE:?Set FREESWITCH_IMAGE to your GitLab registry path}:${IMAGE_TAG}
     environment:
       TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
