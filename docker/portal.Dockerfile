@@ -1,4 +1,10 @@
 # Build Next.js portal for production
+
+# Stage used by docker-compose (bind-mounted source, entrypoint drives runtime)
+FROM node:20-slim AS dev
+WORKDIR /portal
+CMD ["node"]
+
 FROM node:20-slim AS deps
 WORKDIR /portal
 COPY package*.json ./

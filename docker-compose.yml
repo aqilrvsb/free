@@ -1,11 +1,14 @@
 # version: "3.9"
 services:
   app:
-    image: node:20-slim
+    build:
+      context: app
+      dockerfile: ../docker/app.Dockerfile
+      target: dev
     container_name: fs-xml-app
     working_dir: /app
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:172.17.0.1"
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       APP_PORT: ${APP_PORT:-3000}
@@ -39,11 +42,14 @@ services:
       retries: 10
 
   portal:
-    image: node:20-slim
+    build:
+      context: portal
+      dockerfile: ../docker/portal.Dockerfile
+      target: dev
     container_name: fs-portal
     working_dir: /portal
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:172.17.0.1"
     env_file:
       - ./portal/.env
     environment:
