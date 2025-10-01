@@ -7,9 +7,24 @@ export const dynamic = "force-dynamic";
 
 export default async function OutboundRoutesPage() {
   const [tenants, gateways, routes] = await Promise.all([
-    apiFetch<TenantSummary[]>("/tenants", { cache: "no-store" }),
-    apiFetch<GatewaySummary[]>("/fs/gateways", { cache: "no-store" }),
-    apiFetch<OutboundRouteSummary[]>("/fs/outbound-routes", { cache: "no-store" }),
+    apiFetch<TenantSummary[]>("/tenants", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[outbound] Không thể tải tenants", error),
+    }),
+    apiFetch<GatewaySummary[]>("/fs/gateways", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[outbound] Không thể tải gateways", error),
+    }),
+    apiFetch<OutboundRouteSummary[]>("/fs/outbound-routes", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[outbound] Không thể tải outbound routes", error),
+    }),
   ]);
 
   return (

@@ -7,10 +7,30 @@ export const dynamic = "force-dynamic";
 
 export default async function InboundRoutesPage() {
   const [tenants, extensions, routes, ivrMenus] = await Promise.all([
-    apiFetch<TenantSummary[]>("/tenants", { cache: "no-store" }),
-    apiFetch<ExtensionSummary[]>("/extensions", { cache: "no-store" }),
-    apiFetch<InboundRouteSummary[]>("/fs/inbound-routes", { cache: "no-store" }),
-    apiFetch<IvrMenuSummary[]>("/fs/ivr-menus", { cache: "no-store" }),
+    apiFetch<TenantSummary[]>("/tenants", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[inbound] Không thể tải tenants", error),
+    }),
+    apiFetch<ExtensionSummary[]>("/extensions", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[inbound] Không thể tải extensions", error),
+    }),
+    apiFetch<InboundRouteSummary[]>("/fs/inbound-routes", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[inbound] Không thể tải inbound routes", error),
+    }),
+    apiFetch<IvrMenuSummary[]>("/fs/ivr-menus", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[inbound] Không thể tải IVR menus", error),
+    }),
   ]);
 
   return (

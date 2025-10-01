@@ -6,7 +6,12 @@ import { PageHeader } from "@/components/common/page-header";
 export const dynamic = "force-dynamic";
 
 export default async function GatewaysPage() {
-  const gateways = await apiFetch<GatewaySummary[]>("/fs/gateways", { cache: "no-store" });
+  const gateways = await apiFetch<GatewaySummary[]>("/fs/gateways", {
+    cache: "no-store",
+    fallbackValue: [],
+    suppressError: true,
+    onError: (error) => console.warn("[gateways] Không thể tải danh sách gateway", error),
+  });
 
   return (
     <div className="space-y-6">

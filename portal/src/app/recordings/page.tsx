@@ -38,9 +38,29 @@ export default async function RecordingsPage({ searchParams }: RecordingsPagePro
     query.set("search", search);
   }
 
+  const fallbackRecordings: PaginatedResult<RecordingMetadata> = {
+    items: [],
+    total: 0,
+    page,
+    pageSize: PAGE_SIZE,
+  };
+  const fallbackStorageConfig: RecordingStorageConfig = {
+    mode: "local",
+  };
+
   const [recordings, storageConfig] = await Promise.all([
-    apiFetch<PaginatedResult<RecordingMetadata>>(`/recordings?${query.toString()}`, { cache: "no-store" }),
-    apiFetch<RecordingStorageConfig>("/settings/recordings-storage", { cache: "no-store" }),
+    apiFetch<PaginatedResult<RecordingMetadata>>(`/recordings?${query.toString()}`, {
+      cache: "no-store",
+      fallbackValue: fallbackRecordings,
+      suppressError: true,
+      onError: (error) => console.warn("[recordings] Không thể tải danh sách ghi âm", error),
+    }),
+    apiFetch<RecordingStorageConfig>("/settings/recordings-storage", {
+      cache: "no-store",
+      fallbackValue: fallbackStorageConfig,
+      suppressError: true,
+      onError: (error) => console.warn("[recordings] Không thể tải cấu hình lưu trữ", error),
+    }),
   ]);
 
   return (

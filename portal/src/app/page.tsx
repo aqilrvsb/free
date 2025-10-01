@@ -38,15 +38,71 @@ function resolveStatusVariant(status: string) {
 }
 
 export default async function DashboardPage() {
+  const fallbackCdr: PaginatedCdrResponse = {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 5,
+  };
+  const fallbackFsStatus: FsStatusResponse = {
+    raw: "",
+    parsed: {
+      uptime: "-",
+      state: "Không rõ",
+      sessionsSinceStartup: "0",
+      sessionPeak: "0",
+      sessionRate: "0",
+      maxSessions: "0",
+      minIdleCpu: "0",
+      stackUsage: "0",
+    },
+  };
+  const fallbackRecordings: PaginatedResult<RecordingMetadata> = {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 5,
+  };
+  const fallbackChannels: CommandResult<FsChannelList> = {
+    raw: "",
+    parsed: {
+      row_count: 0,
+      rows: [],
+    },
+  };
+
   const [cdr, fsStatus, recordingsPage, channels] = await Promise.all([
-    apiFetch<PaginatedCdrResponse>(`/cdr?page=1&pageSize=5`, { cache: "no-store" }),
-    apiFetch<FsStatusResponse>(`/fs/status`, { cache: "no-store" }),
-    apiFetch<PaginatedResult<RecordingMetadata>>(`/recordings?page=1&pageSize=5`, { cache: "no-store" }),
-    apiFetch<CommandResult<FsChannelList>>(`/fs/channels`, { cache: "no-store" }),
+    apiFetch<PaginatedCdrResponse>(`/cdr?page=1&pageSize=5`, {
+      cache: "no-store",
+      fallbackValue: fallbackCdr,
+      suppressError: true,
+      onError: (error) => console.warn("[dashboard] Không thể tải danh sách CDR", error),
+    }),
+    apiFetch<FsStatusResponse>(`/fs/status`, {
+      cache: "no-store",
+      fallbackValue: fallbackFsStatus,
+      suppressError: true,
+      onError: (error) => console.warn("[dashboard] Không thể tải trạng thái FreeSWITCH", error),
+    }),
+    apiFetch<PaginatedResult<RecordingMetadata>>(`/recordings?page=1&pageSize=5`, {
+      cache: "no-store",
+      fallbackValue: fallbackRecordings,
+      suppressError: true,
+      onError: (error) => console.warn("[dashboard] Không thể tải danh sách ghi âm", error),
+    }),
+    apiFetch<CommandResult<FsChannelList>>(`/fs/channels`, {
+      cache: "no-store",
+      fallbackValue: fallbackChannels,
+      suppressError: true,
+      onError: (error) => console.warn("[dashboard] Không thể tải danh sách kênh", error),
+    }),
   ]);
 
-  const activeChannels = extractChannelCount(channels.parsed);
-  const latestRecordings = recordingsPage.items;
+  const fsStatusParsed = fsStatus.parsed ?? fallbackFsStatus.parsed;
+  const channelData = channels.parsed ?? fallbackChannels.parsed;
+  const activeChannels = extractChannelCount(channelData);
+  const cdrItems = cdr.items ?? fallbackCdr.items;
+  const latestRecordings = recordingsPage.items ?? fallbackRecordings.items;
   const timezone = await getServerTimezone();
 
   return (
@@ -62,7 +118,7 @@ export default async function DashboardPage() {
               <CardTitle className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Core status
               </CardTitle>
-              <span className="text-2xl font-semibold text-foreground">{fsStatus.parsed?.state || "Không rõ"}</span>
+              <span className="text-lg font-semibold text-foreground">{fsStatusParsed?.state || "Không rõ"}</span>
             </div>
             <span className="flex size-12 items-center justify-center rounded-2xl bg-primary/18 text-primary">
               <Activity className="size-6" />
@@ -70,7 +126,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="px-6 pb-6 text-sm text-muted-foreground">
             <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              Uptime {fsStatus.parsed?.uptime || "-"}
+              Uptime {fsStatusParsed?.uptime || "-"}
             </span>
           </CardContent>
         </Card>
@@ -96,7 +152,7 @@ export default async function DashboardPage() {
               <CardTitle className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 CDR ghi nhận
               </CardTitle>
-              <span className="text-2xl font-semibold text-foreground">{cdr.items.length}</span>
+              <span className="text-2xl font-semibold text-foreground">{cdrItems.length}</span>
             </div>
             <span className="flex size-12 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-600">
               <ScrollText className="size-6" />
@@ -148,7 +204,7 @@ export default async function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cdr.items.map((item) => (
+                  {cdrItems.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
                         <Link
@@ -188,7 +244,7 @@ export default async function DashboardPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {cdr.items.length === 0 && (
+                  {cdrItems.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground">
                         Chưa có bản ghi nào.

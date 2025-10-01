@@ -7,9 +7,37 @@ import { PageHeader } from "@/components/common/page-header";
 export const dynamic = "force-dynamic";
 
 export default async function FsStatusPage() {
+  const fallbackStatus: FsStatusResponse = {
+    raw: "",
+    parsed: {
+      state: "Không rõ",
+      uptime: "-",
+      sessionsSinceStartup: "0",
+      sessionPeak: "0",
+      sessionRate: "0",
+      maxSessions: "0",
+      minIdleCpu: "0",
+      stackUsage: "0",
+    },
+  };
+  const fallbackSofia: CommandResult = {
+    raw: "",
+    parsed: {},
+  };
+
   const [status, sofia] = await Promise.all([
-    apiFetch<FsStatusResponse>("/fs/status", { cache: "no-store" }),
-    apiFetch<CommandResult>("/fs/sofia", { cache: "no-store" }),
+    apiFetch<FsStatusResponse>("/fs/status", {
+      cache: "no-store",
+      fallbackValue: fallbackStatus,
+      suppressError: true,
+      onError: (error) => console.warn("[fs status] Không thể tải core status", error),
+    }),
+    apiFetch<CommandResult>("/fs/sofia", {
+      cache: "no-store",
+      fallbackValue: fallbackSofia,
+      suppressError: true,
+      onError: (error) => console.warn("[fs status] Không thể tải sofia jsonstatus", error),
+    }),
   ]);
 
   const parsed = status.parsed ?? ({} as FsStatusParsed);

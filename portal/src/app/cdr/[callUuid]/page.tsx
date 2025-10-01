@@ -48,7 +48,12 @@ export const dynamic = "force-dynamic";
 
 export default async function CdrDetailPage({ params }: CdrDetailPageProps) {
   const { callUuid } = await params;
-  const record = await apiFetch<CdrRecord | null>(`/cdr/call/${callUuid}`, { cache: "no-store" });
+  const record = await apiFetch<CdrRecord | null>(`/cdr/call/${callUuid}`, {
+    cache: "no-store",
+    fallbackValue: null,
+    suppressError: true,
+    onError: (error) => console.warn(`[_cdr detail] Không thể tải CDR ${callUuid}`, error),
+  });
 
   if (!record) {
     return (

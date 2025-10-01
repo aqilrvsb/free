@@ -10,9 +10,23 @@ import { getServerTimezone } from "@/lib/server-timezone";
 export const dynamic = "force-dynamic";
 
 export default async function ChannelsPage() {
-  const channels = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", { cache: "no-store" });
-  const items = extractChannelRows(channels.parsed);
-  const total = extractChannelCount(channels.parsed);
+  const fallbackChannels: CommandResult<FsChannelList> = {
+    raw: "",
+    parsed: {
+      row_count: 0,
+      rows: [],
+    },
+  };
+
+  const channels = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", {
+    cache: "no-store",
+    fallbackValue: fallbackChannels,
+    suppressError: true,
+    onError: (error) => console.warn("[channels] Không thể tải danh sách kênh", error),
+  });
+  const parsed = channels.parsed ?? fallbackChannels.parsed;
+  const items = extractChannelRows(parsed);
+  const total = extractChannelCount(parsed);
   const timezone = await getServerTimezone();
 
   return (

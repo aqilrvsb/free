@@ -13,16 +13,60 @@ import { Badge } from "@/components/ui/badge";
 export const dynamic = "force-dynamic";
 
 export default async function ManagePage() {
+  const fallbackTenantPage: PaginatedResult<TenantSummary> = {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 6,
+  };
+  const fallbackExtensionPage: PaginatedResult<ExtensionSummary> = {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 10,
+  };
+  const fallbackMetrics = {
+    tenantCount: 0,
+    routingConfiguredCount: 0,
+    extensionCount: 0,
+    topTenant: null as {
+      id: string;
+      name: string;
+      domain: string;
+      extensionCount: number;
+    } | null,
+  };
+
   const [tenants, extensions, tenantOptions, metrics] = await Promise.all([
-    apiFetch<PaginatedResult<TenantSummary>>("/tenants?page=1&pageSize=6", { cache: "no-store" }),
-    apiFetch<PaginatedResult<ExtensionSummary>>("/extensions?page=1&pageSize=10", { cache: "no-store" }),
-    apiFetch<TenantLookupItem[]>("/tenants/options", { cache: "no-store" }),
+    apiFetch<PaginatedResult<TenantSummary>>("/tenants?page=1&pageSize=6", {
+      cache: "no-store",
+      fallbackValue: fallbackTenantPage,
+      suppressError: true,
+      onError: (error) => console.warn("[manage] Không thể tải danh sách tenant", error),
+    }),
+    apiFetch<PaginatedResult<ExtensionSummary>>("/extensions?page=1&pageSize=10", {
+      cache: "no-store",
+      fallbackValue: fallbackExtensionPage,
+      suppressError: true,
+      onError: (error) => console.warn("[manage] Không thể tải danh sách extension", error),
+    }),
+    apiFetch<TenantLookupItem[]>("/tenants/options", {
+      cache: "no-store",
+      fallbackValue: [],
+      suppressError: true,
+      onError: (error) => console.warn("[manage] Không thể tải tenant options", error),
+    }),
     apiFetch<{
       tenantCount: number;
       routingConfiguredCount: number;
       extensionCount: number;
       topTenant: { id: string; name: string; domain: string; extensionCount: number } | null;
-    }>("/tenants/metrics", { cache: "no-store" }),
+    }>("/tenants/metrics", {
+      cache: "no-store",
+      fallbackValue: fallbackMetrics,
+      suppressError: true,
+      onError: (error) => console.warn("[manage] Không thể tải metrics", error),
+    }),
   ]);
 
   const tenantCount = metrics.tenantCount;

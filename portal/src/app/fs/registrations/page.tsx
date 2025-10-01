@@ -21,9 +21,20 @@ export default async function RegistrationsPage({
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const profile = getValue(resolvedSearchParams.profile) || "internal";
+  const fallback: CommandResult<SofiaRegistrationsPayload> = {
+    raw: "",
+    parsed: {
+      profiles: {},
+    },
+  };
   const data = await apiFetch<CommandResult<SofiaRegistrationsPayload>>(
     `/fs/sofia/${profile}/registrations`,
-    { cache: "no-store" },
+    {
+      cache: "no-store",
+      fallbackValue: fallback,
+      suppressError: true,
+      onError: (error) => console.warn(`[_registrations] Không thể tải dữ liệu profile ${profile}`, error),
+    },
   );
 
   const parsedPayload = data.parsed as SofiaRegistrationsPayload | undefined;

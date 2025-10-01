@@ -241,7 +241,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="px-3 pb-6 pt-4">
+      {/* <SidebarFooter className="px-3 pb-6 pt-4">
         <div className="glass-surface relative overflow-hidden rounded-2xl px-4 py-4 text-xs text-muted-foreground">
           <div className="absolute inset-0 bg-gradient-to-tr from-orange-500/15 via-transparent to-transparent" />
           <div className="relative flex flex-col gap-2">
@@ -257,7 +257,7 @@ export function AppSidebar() {
             </Link>
           </div>
         </div>
-      </SidebarFooter>
+      </SidebarFooter> */}
       <SidebarRail />
     </Sidebar>
   )

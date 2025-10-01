@@ -7,8 +7,20 @@ import { extractChannelRows } from "@/lib/channels";
 export const dynamic = "force-dynamic";
 
 export default async function CallsPage() {
-  const channelsResult = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", { cache: "no-store" });
-  const initialChannels = extractChannelRows(channelsResult.parsed);
+  const fallback: CommandResult<FsChannelList> = {
+    raw: "",
+    parsed: {
+      row_count: 0,
+      rows: [],
+    },
+  };
+  const channelsResult = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", {
+    cache: "no-store",
+    fallbackValue: fallback,
+    suppressError: true,
+    onError: (error) => console.warn("[calls] Không thể tải danh sách kênh", error),
+  });
+  const initialChannels = extractChannelRows(channelsResult.parsed ?? fallback.parsed);
 
   return (
     <div className="space-y-6">

@@ -1,9 +1,16 @@
-const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+const API_BASE_URL =
+  process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
-type FetchOptions = Omit<RequestInit, "cache" | "next"> & {
+type BaseFetchOptions = Omit<RequestInit, "cache" | "next"> & {
   revalidate?: number;
   cache?: RequestCache;
   tags?: string[];
+};
+
+export type FetchOptions<T> = BaseFetchOptions & {
+  fallbackValue?: T;
+  suppressError?: boolean;
+  onError?: (error: Error) => void;
 };
 
 function buildUrl(path: string): string {
@@ -15,14 +22,18 @@ function buildUrl(path: string): string {
   return `${base}${suffix}`;
 }
 
-export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+export async function apiFetch<T>(path: string, options?: FetchOptions<T>): Promise<T> {
+  const opts = options ?? {};
   const {
     revalidate = 10,
     cache,
     tags,
+    fallbackValue,
+    suppressError = false,
+    onError,
     headers: customHeaders,
     ...fetchOptions
-  } = options;
+  } = opts;
   const url = buildUrl(path);
 
   const nextConfig: Record<string, unknown> = {};
@@ -50,18 +61,49 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     requestInit.next = nextConfig;
   }
 
-  const response = await fetch(url, requestInit);
+  const handleError = (err: unknown): T => {
+    const error = err instanceof Error ? err : new Error(String(err));
+    if (onError) {
+      try {
+        onError(error);
+      } catch (hookError) {
+        console.error("[apiFetch] onError handler threw an error", hookError);
+      }
+    } else {
+      console.warn("[apiFetch]", error.message);
+    }
+
+    if (!suppressError && typeof fallbackValue === "undefined") {
+      throw error;
+    }
+
+    const fallbackResult = (typeof fallbackValue === "undefined" ? undefined : fallbackValue) as T;
+    return fallbackResult;
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(url, requestInit);
+  } catch (err) {
+    return handleError(err);
+  }
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`API request failed (${response.status}): ${text}`);
+    const text = await response.text().catch(() => "");
+    const error = new Error(`API request failed (${response.status}): ${text}`);
+    return handleError(error);
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    const fallbackResult = (typeof fallbackValue === "undefined" ? undefined : fallbackValue) as T;
+    return fallbackResult;
   }
 
-  return (await response.json()) as T;
+  try {
+    return (await response.json()) as T;
+  } catch (err) {
+    return handleError(err);
+  }
 }
 
 export { API_BASE_URL };

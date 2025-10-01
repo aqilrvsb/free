@@ -50,7 +50,7 @@ export default async function RootLayout({
                         </span>
                         <h1 className="text-2xl font-semibold text-foreground">PBX Portal</h1>
                         <p className="text-sm text-muted-foreground">
-                          Theo dõi CDR, trạng thái FreeSWITCH và ghi âm cuộc gọi trong một bảng điều khiển thống nhất.
+                          Theo dõi CDR, trạng thái Tổng đài và ghi âm cuộc gọi trong một bảng điều khiển thống nhất.
                         </p>
                       </div>
                     </div>
@@ -74,7 +74,7 @@ export default async function RootLayout({
                 <footer className="relative border-t border-border/60 bg-card/70">
                   <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-6 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                     <span>Build bởi Next.js · shadcn/ui · {new Date().getFullYear()}</span>
-                    <span className="text-muted-foreground/80">Đội vận hành PBX · Liên hệ: ops@example.com</span>
+                    <span className="text-muted-foreground/80">Đội vận hành PBX · Liên hệ: contact@vill.vn</span>
                   </div>
                 </footer>
               </div>

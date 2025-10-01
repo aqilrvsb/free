@@ -188,8 +188,8 @@ export function FsPortSettings({ initialConfig }: FsPortSettingsProps) {
             <Label htmlFor={`fs-port-${field.key}`}>{field.label}</Label>
             <Input
               id={`fs-port-${field.key}`}
+              type="number"
               inputMode="numeric"
-              pattern="\\d*"
               min={1}
               max={65535}
               value={formState[field.key]}

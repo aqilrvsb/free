@@ -6,7 +6,12 @@ import { SystemRecordingsManager } from "@/components/fs/system-recordings-manag
 export const dynamic = "force-dynamic";
 
 export default async function SystemRecordingsPage() {
-  const recordings = await apiFetch<SystemRecordingSummary[]>("/fs/system-recordings", { cache: "no-store" });
+  const recordings = await apiFetch<SystemRecordingSummary[]>("/fs/system-recordings", {
+    cache: "no-store",
+    fallbackValue: [],
+    suppressError: true,
+    onError: (error) => console.warn("[system recordings] Không thể tải danh sách recordings", error),
+  });
 
   return (
     <div className="space-y-6">

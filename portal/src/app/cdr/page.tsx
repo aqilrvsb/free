@@ -54,9 +54,25 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
     query.set("callUuid", callUuid);
   }
 
-  const cdr = await apiFetch<PaginatedCdrResponse>(`/cdr?${query.toString()}`, { cache: "no-store" });
+  const fallbackCdr: PaginatedCdrResponse = {
+    items: [],
+    total: 0,
+    page,
+    pageSize: 25,
+  };
+
+  const cdr = await apiFetch<PaginatedCdrResponse>(`/cdr?${query.toString()}`, {
+    cache: "no-store",
+    fallbackValue: fallbackCdr,
+    suppressError: true,
+    onError: (error) => console.warn("[cdr] Không thể tải CDR", error),
+  });
   const recordingsBaseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || "http://localhost:3000";
+  const cdrItems = cdr.items ?? fallbackCdr.items;
+  const totalRecords = cdr.total ?? fallbackCdr.total;
+  const currentPage = cdr.page ?? fallbackCdr.page;
+  const currentPageSize = cdr.pageSize ?? fallbackCdr.pageSize;
   const timezone = await getServerTimezone();
 
   return (
@@ -77,7 +93,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
       <Card>
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <CardTitle>Danh sách CDR</CardTitle>
-          <PaginationControls page={cdr.page} pageSize={cdr.pageSize} total={cdr.total} />
+          <PaginationControls page={currentPage} pageSize={currentPageSize} total={totalRecords} />
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="overflow-x-auto">
@@ -98,7 +114,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cdr.items.map((item) => (
+                {cdrItems.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="truncate max-w-[150px]">
                       <Link href={`/cdr/${item.callUuid}`} className="text-primary hover:underline">
@@ -154,7 +170,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                     </TableCell>
                   </TableRow>
                 ))}
-                {cdr.items.length === 0 && (
+                {cdrItems.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={10} className="text-center text-muted-foreground">
                       Không có dữ liệu.
