@@ -79,6 +79,23 @@ export interface RecordingMetadata {
   path: string;
 }
 
+export interface FsPortConfig {
+  internalSipPort: number;
+  internalTlsPort: number;
+  externalSipPort: number;
+  externalTlsPort: number;
+  rtpStartPort: number;
+  rtpEndPort: number;
+  eventSocketPort: number;
+  internalWsPort: number;
+  internalWssPort: number;
+}
+
+export interface FsPortConfigUpdateResult extends FsPortConfig {
+  applied: boolean;
+  requiresRestart: boolean;
+}
+
 export interface RoutingConfig {
   internalPrefix?: string;
   voicemailPrefix?: string;

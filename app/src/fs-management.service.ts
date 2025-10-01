@@ -262,6 +262,17 @@ export class FsManagementService {
     }
   }
 
+  async restartProfile(profile: string): Promise<void> {
+    try {
+      await this.runCommand(`sofia profile ${profile} restart`);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to restart profile ${profile}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
   async killGateway(profile: string, name: string): Promise<void> {
     try {
       await this.runCommand(`sofia profile ${profile} killgw ${name}`);
@@ -488,5 +499,9 @@ export class FsManagementService {
       score += 1;
     }
     return score;
+  }
+
+  async executeCommand(command: string): Promise<string> {
+    return this.runCommand(command);
   }
 }

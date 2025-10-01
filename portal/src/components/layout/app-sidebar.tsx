@@ -29,6 +29,7 @@ import {
   ScrollText,
   UserCog,
   Waves,
+  Settings,
   Workflow,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -136,6 +137,12 @@ const NAV_SECTIONS: Array<{
           description: "Kịch bản trả lời tự động",
           href: "/fs/ivr",
           icon: Workflow,
+        },
+        {
+          title: "FS Settings",
+          description: "Điều chỉnh port & kết nối",
+          href: "/fs/settings",
+          icon: Settings,
         },
         {
           title: "System Recordings",
