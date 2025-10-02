@@ -15,6 +15,8 @@ variables:
   SERVICES_TO_BUILD: "app portal freeswitch"
   FREESWITCH_IMAGE: "$CI_REGISTRY_IMAGE/freeswitch"
   DEFAULT_FS_TOKEN: "pat_5XdJ51UgrgFDLrjDkKhcb5F6"
+  BUILD_PLATFORMS: "linux/amd64,linux/arm64"
+  BUILDX_BUILDER: "fs-multiarch"
 
 stages:
   - build
@@ -31,8 +33,49 @@ compose-build:
   stage: build
   script:
     - export FS_TOKEN="${FS_TOKEN:-$DEFAULT_FS_TOKEN}"
-    - docker compose build --pull $SERVICES_TO_BUILD
-    - docker compose push $SERVICES_TO_BUILD
+    - |
+      set -e
+      if ! docker buildx inspect "$BUILDX_BUILDER" >/dev/null 2>&1; then
+        docker buildx create --name "$BUILDX_BUILDER" --use
+      else
+        docker buildx use "$BUILDX_BUILDER"
+      fi
+      docker buildx inspect --bootstrap "$BUILDX_BUILDER"
+    - |
+      set -e
+      for service in $SERVICES_TO_BUILD; do
+        case "$service" in
+          app)
+            docker buildx build \
+              --platform "$BUILD_PLATFORMS" \
+              -f docker/app.Dockerfile \
+              -t "$APP_IMAGE:${IMAGE_TAG}" \
+              --push \
+              app
+            ;;
+          portal)
+            docker buildx build \
+              --platform "$BUILD_PLATFORMS" \
+              -f docker/portal.Dockerfile \
+              -t "$PORTAL_IMAGE:${IMAGE_TAG}" \
+              --push \
+              portal
+            ;;
+          freeswitch)
+            docker buildx build \
+              --platform "$BUILD_PLATFORMS" \
+              --build-arg FS_TOKEN="$FS_TOKEN" \
+              -f docker/freeswitch.Dockerfile \
+              -t "$FREESWITCH_IMAGE:${IMAGE_TAG}" \
+              --push \
+              .
+            ;;
+          *)
+            echo "Unknown service $service" >&2
+            exit 1
+            ;;
+        esac
+      done
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'

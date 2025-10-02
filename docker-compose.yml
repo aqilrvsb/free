@@ -53,8 +53,8 @@ services:
     ports:
       - "${PORTAL_HOST_PORT:-3001}:3001"
     volumes:
-      - ./portal:/portal
-      - portal-node-modules:/portal/node_modules
+      # - ./portal:/portal
+      # - portal-node-modules:/portal/node_modules
       - ./docker/portal-entrypoint.sh:/usr/local/bin/portal-entrypoint.sh:ro
     depends_on:
       - app
