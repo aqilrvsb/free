@@ -1,3 +1,7 @@
+x-build-platforms: &multi_arch_platforms
+  - ${BUILD_PLATFORM_1:-linux/amd64}
+  - ${BUILD_PLATFORM_2:-linux/arm64}
+
 services:
   app:
     build:
@@ -6,6 +10,7 @@ services:
       args:
         NODE_ENV: production
     image: ${APP_IMAGE}:${IMAGE_TAG}
+    platforms: *multi_arch_platforms
     environment:
       NODE_ENV: production
       APP_PORT: 3000
@@ -15,6 +20,7 @@ services:
       context: portal
       dockerfile: ../docker/portal.Dockerfile
     image: ${PORTAL_IMAGE}:${IMAGE_TAG}
+    platforms: *multi_arch_platforms
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -26,5 +32,6 @@ services:
       args:
         FS_TOKEN: ${FS_TOKEN:-pat_5XdJ51UgrgFDLrjDkKhcb5F6}
     image: ${FREESWITCH_IMAGE:?Set FREESWITCH_IMAGE to your GitLab registry path}:${IMAGE_TAG}
+    platforms: *multi_arch_platforms
     environment:
       TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
