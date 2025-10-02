@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: app
+      dockerfile: ../docker/app.Dockerfile
+    working_dir: /app
+    extra_hosts:
+      - "host.docker.internal:172.17.0.1"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      APP_PORT: ${APP_PORT:-3000}
+      TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
+      DB_HOST: ${DB_HOST:?Set DB_HOST to an external MySQL host or supply docker-compose.local-db.yml}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-fsapp}
+      DB_PASSWORD: ${DB_PASSWORD:-fsapp}
+      DB_NAME: ${DB_NAME:-freeswitch}
+      DB_LOGGING: ${DB_LOGGING:-false}
+      DB_SYNC: ${DB_SYNC:-true}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      FS_ESL_HOST: ${FS_ESL_HOST:-host.docker.internal}
+      FS_ESL_PORT: ${FS_ESL_PORT:-8021}
+      FS_ESL_PASSWORD: ${FS_ESL_PASSWORD:-ClueCon}
+      RECORDINGS_DIR: ${RECORDINGS_DIR:-/recordings}
+      FS_GATEWAY_DIR: ${FS_GATEWAY_DIR:-/shared/gateways}
+      FS_CONFIG_DIR: /fs-conf
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/recordings:/recordings
+      - ./freeswitch/conf/sip_profiles/external:/shared/gateways
+      - ./freeswitch/conf:/fs-conf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  portal:
+    build:
+      context: portal
+      dockerfile: ../docker/portal.Dockerfile
+    working_dir: /portal
+    extra_hosts:
+      - "host.docker.internal:172.17.0.1"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      API_BASE_URL: ${API_BASE_URL:-http://app:3000}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_WS_BASE_URL: ${NEXT_PUBLIC_WS_BASE_URL:-http://localhost:3000}
+    ports:
+      - "${PORTAL_HOST_PORT:-3001}:3001"
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  freeswitch:
+    build:
+      context: .
+      dockerfile: docker/freeswitch.Dockerfile
+      args:
+        FS_TOKEN: ${FS_TOKEN:-pat_5XdJ51UgrgFDLrjDkKhcb5F6}
+    depends_on:
+      - app
+    environment:
+      - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
+      - EXT_SIP_IP=${EXT_SIP_IP:-auto}
+      - EXT_RTP_IP=${EXT_RTP_IP:-auto}
+      - CDR_HTTP_HEADERS=${CDR_HTTP_HEADERS:-}
+      - XML_CDR_URL=${XML_CDR_URL:-http://127.0.0.1:3000/fs/cdr}
+      - XML_CURL_GATEWAY_URL=${XML_CURL_GATEWAY_URL:-http://localhost:3000/fs/xml}
+    network_mode: host
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      nice: -20
+    volumes:
+      - ./freeswitch/conf/autoload_configs/event_socket.conf.xml:/etc/freeswitch/autoload_configs/event_socket.conf.xml
+      - ./freeswitch/conf/autoload_configs/xml_curl.conf.xml:/etc/freeswitch/autoload_configs/xml_curl.conf.xml
+      - ./freeswitch/conf/autoload_configs/xml_cdr.conf.xml:/etc/freeswitch/autoload_configs/xml_cdr.conf.xml
+      - ./freeswitch/conf/autoload_configs/modules.conf.xml:/etc/freeswitch/autoload_configs/modules.conf.xml
+      - ./freeswitch/conf/vars_local.xml:/etc/freeswitch/vars_local.xml
+      - ./freeswitch/conf/vars_local.d:/etc/freeswitch/vars_local.d
+      - ./freeswitch/conf/sip_profiles/internal.xml:/etc/freeswitch/sip_profiles/internal.xml
+      - ./freeswitch/conf/sip_profiles/external.xml:/etc/freeswitch/sip_profiles/external.xml
+      - ./freeswitch/conf/sip_profiles/external:/etc/freeswitch/sip_profiles/external
+      - ./docker/fs-entrypoint.sh:/usr/local/bin/fs-entrypoint.sh:ro
+      - ./data/recordings:/var/lib/freeswitch/recordings
+      - ./data/log:/var/log/freeswitch
+      - ./data/lib:/var/lib/freeswitch
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "fs_cli -P 8021 -p ClueCon -x 'status' | grep -q UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  app-node-modules: {}
+  portal-node-modules: {}

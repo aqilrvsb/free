@@ -29,100 +29,97 @@ default:
     - apk add --no-cache curl
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
 
-compose-build:
+build:app:
   stage: build
-  artifacts:
-    paths:
-      - services-built.txt
-    reports:
-      dotenv: build.env
-  script:
-    - export FS_TOKEN="${FS_TOKEN:-$DEFAULT_FS_TOKEN}"
-    - |
-      set -e
-      if ! docker buildx inspect "$BUILDX_BUILDER" >/dev/null 2>&1; then
-        docker buildx create --name "$BUILDX_BUILDER" --use
-      else
-        docker buildx use "$BUILDX_BUILDER"
-      fi
-      docker buildx inspect --bootstrap "$BUILDX_BUILDER"
-    - |
-      set -e
-      git fetch origin "$CI_DEFAULT_BRANCH" --depth=1 >/dev/null 2>&1 || true
-      BASE_SHA="$CI_COMMIT_BEFORE_SHA"
-      if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
-        BASE_SHA=$(git merge-base "$CI_COMMIT_SHA" "origin/$CI_DEFAULT_BRANCH")
-      fi
-      echo "Comparing changes against $BASE_SHA"
-      git diff --name-only "$BASE_SHA" "$CI_COMMIT_SHA" | sort -u > changed_files.txt
-      : > services-built.txt
-      mark_service() {
-        dir="$1"
-        service="$2"
-        if grep -q "^${dir}/" changed_files.txt || grep -q "^docker/" changed_files.txt || grep -q "^docker-compose.build.yml$" changed_files.txt || grep -q "^.gitlab-ci.yml$" changed_files.txt; then
-          if ! grep -Fxq "$service" services-built.txt; then
-            echo "$service" >> services-built.txt
-          fi
-        fi
-      }
-      mark_service app app
-      mark_service portal portal
-      mark_service freeswitch freeswitch
-      if [ ! -s services-built.txt ]; then
-        echo "SKIP_TAG_JOBS=true" > build.env
-        echo "No relevant changes detected; skipping build."
-        exit 0
-      fi
-      echo "SKIP_TAG_JOBS=false" > build.env
-      printf "Services to build:\n"
-      cat services-built.txt
-      while IFS= read -r service || [ -n "$service" ]; do
-        case "$service" in
-          app)
-            docker buildx build \
-              --platform "$BUILD_PLATFORMS" \
-              -f docker/app.Dockerfile \
-              -t "$APP_IMAGE:${IMAGE_TAG}" \
-              --push \
-              app
-            ;;
-          portal)
-            docker buildx build \
-              --platform "$BUILD_PLATFORMS" \
-              -f docker/portal.Dockerfile \
-              -t "$PORTAL_IMAGE:${IMAGE_TAG}" \
-              --push \
-              portal
-            ;;
-          freeswitch)
-            docker buildx build \
-              --platform "$BUILD_PLATFORMS" \
-              --build-arg FS_TOKEN="$FS_TOKEN" \
-              -f docker/freeswitch.Dockerfile \
-              -t "$FREESWITCH_IMAGE:${IMAGE_TAG}" \
-              --push \
-              .
-            ;;
-          *)
-            echo "Unknown service $service" >&2
-            exit 1
-            ;;
-        esac
-      done < services-built.txt
+  needs: []
   rules:
+    - changes:
+        - app/**
+        - docker/app.Dockerfile
+        - docker-compose.build.yml
+        - .gitlab-ci.yml
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'
+  script:
+    - docker buildx create --use --name "$BUILDX_BUILDER" || docker buildx use "$BUILDX_BUILDER"
+    - docker buildx inspect --bootstrap "$BUILDX_BUILDER"
+    - docker buildx build \
+        --platform "$BUILD_PLATFORMS" \
+        -f docker/app.Dockerfile \
+        -t "$APP_IMAGE:${IMAGE_TAG}" \
+        --push \
+        app
+  artifacts:
+    reports:
+      dotenv: app.build.env
+    expire_in: 1 hour
+
+build:portal:
+  stage: build
+  needs: []
+  rules:
+    - changes:
+        - portal/**
+        - docker/portal.Dockerfile
+        - docker-compose.build.yml
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+  script:
+    - docker buildx create --use --name "$BUILDX_BUILDER" || docker buildx use "$BUILDX_BUILDER"
+    - docker buildx inspect --bootstrap "$BUILDX_BUILDER"
+    - docker buildx build \
+        --platform "$BUILD_PLATFORMS" \
+        -f docker/portal.Dockerfile \
+        -t "$PORTAL_IMAGE:${IMAGE_TAG}" \
+        --push \
+        portal
+  artifacts:
+    reports:
+      dotenv: portal.build.env
+    expire_in: 1 hour
+
+build:freeswitch:
+  stage: build
+  needs: []
+  rules:
+    - changes:
+        - docker/freeswitch.Dockerfile
+        - docker/fs-entrypoint.sh
+        - freeswitch/**
+        - docker-compose.build.yml
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+  script:
+    - docker buildx create --use --name "$BUILDX_BUILDER" || docker buildx use "$BUILDX_BUILDER"
+    - docker buildx inspect --bootstrap "$BUILDX_BUILDER"
+    - docker buildx build \
+        --platform "$BUILD_PLATFORMS" \
+        --build-arg FS_TOKEN="${FS_TOKEN:-$DEFAULT_FS_TOKEN}" \
+        -f docker/freeswitch.Dockerfile \
+        -t "$FREESWITCH_IMAGE:${IMAGE_TAG}" \
+        --push \
+        .
+  artifacts:
+    reports:
+      dotenv: freeswitch.build.env
+    expire_in: 1 hour
 
 push-latest:
   stage: tag
   needs:
-    - compose-build
+    - build:app
+    - build:portal
+    - build:freeswitch
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:
-    - if [ "${SKIP_TAG_JOBS}" = "true" ]; then echo "Skipping push-latest"; exit 0; fi
-    - SERVICES=$(cat services-built.txt)
-    - if [ -z "$SERVICES" ]; then echo "No services to tag"; exit 0; fi
+    - SERVICES=""
+    - if [ -f app.build.env ]; then . app.build.env; SERVICES="$SERVICES app"; fi
+    - if [ -f portal.build.env ]; then . portal.build.env; SERVICES="$SERVICES portal"; fi
+    - if [ -f freeswitch.build.env ]; then . freeswitch.build.env; SERVICES="$SERVICES freeswitch"; fi
+    - if [ -z "${SERVICES// }" ]; then echo "No images built; skipping push-latest"; exit 0; fi
     - for service in $SERVICES; do
         SOURCE_IMAGE="$CI_REGISTRY_IMAGE/$service:${IMAGE_TAG}";
         TARGET_IMAGE="$CI_REGISTRY_IMAGE/$service:latest";
@@ -134,13 +131,17 @@ push-latest:
 push-branch-tag:
   stage: tag
   needs:
-    - compose-build
+    - build:app
+    - build:portal
+    - build:freeswitch
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH'
   script:
-    - if [ "${SKIP_TAG_JOBS}" = "true" ]; then echo "Skipping push-branch-tag"; exit 0; fi
-    - SERVICES=$(cat services-built.txt)
-    - if [ -z "$SERVICES" ]; then echo "No services to tag"; exit 0; fi
+    - SERVICES=""
+    - if [ -f app.build.env ]; then . app.build.env; SERVICES="$SERVICES app"; fi
+    - if [ -f portal.build.env ]; then . portal.build.env; SERVICES="$SERVICES portal"; fi
+    - if [ -f freeswitch.build.env ]; then . freeswitch.build.env; SERVICES="$SERVICES freeswitch"; fi
+    - if [ -z "${SERVICES// }" ]; then echo "No images built; skipping push-branch-tag"; exit 0; fi
     - for service in $SERVICES; do
         SOURCE_IMAGE="$CI_REGISTRY_IMAGE/$service:${IMAGE_TAG}";
         TARGET_IMAGE="$CI_REGISTRY_IMAGE/$service:${BRANCH_TAG}";
@@ -152,13 +153,17 @@ push-branch-tag:
 push-release-tag:
   stage: tag
   needs:
-    - compose-build
+    - build:app
+    - build:portal
+    - build:freeswitch
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+(\.[0-9]+)*$/'
   script:
-    - if [ "${SKIP_TAG_JOBS}" = "true" ]; then echo "Skipping push-release-tag"; exit 0; fi
-    - SERVICES=$(cat services-built.txt)
-    - if [ -z "$SERVICES" ]; then echo "No services to tag"; exit 0; fi
+    - SERVICES=""
+    - if [ -f app.build.env ]; then . app.build.env; SERVICES="$SERVICES app"; fi
+    - if [ -f portal.build.env ]; then . portal.build.env; SERVICES="$SERVICES portal"; fi
+    - if [ -f freeswitch.build.env ]; then . freeswitch.build.env; SERVICES="$SERVICES freeswitch"; fi
+    - if [ -z "${SERVICES// }" ]; then echo "No images built; skipping push-release-tag"; exit 0; fi
     - for service in $SERVICES; do
         SOURCE_IMAGE="$CI_REGISTRY_IMAGE/$service:${IMAGE_TAG}";
         TARGET_IMAGE="$CI_REGISTRY_IMAGE/$service:$CI_COMMIT_TAG";
@@ -170,11 +175,11 @@ push-release-tag:
 webhook:
   stage: webhook
   needs:
-    - compose-build
+    - build:app
   rules:
     - if: '$CI_COMMIT_BRANCH == "development"'
   script:
-    - if [ "${SKIP_TAG_JOBS}" = "true" ]; then echo "Skipping webhook deployment"; exit 0; fi
+    - if [ ! -f app.build.env ]; then echo "App image not built; skipping deployment"; exit 0; fi
     - DEPLOY_IMAGE="$APP_IMAGE:${IMAGE_TAG}"
     - echo "Deploying $DEPLOY_IMAGE to CapRover app $CAPROVER_APP_NAME"
     - docker run --rm caprover/cli-caprover:2.2.3 caprover deploy --appToken "$CAPROVER_APP_TOKEN" --caproverUrl "$CAPROVER_URL" --imageName "$DEPLOY_IMAGE" --appName "$CAPROVER_APP_NAME"
@@ -182,14 +187,14 @@ webhook:
 update-manifest-development:
   stage: update-manifest-development
   needs:
-    - compose-build
+    - build:app
   rules:
     - if: '$CI_COMMIT_BRANCH == "development"'
   variables:
     GIT_REPO: "https://gitlab.com/vqtuan96/vill-k8s-configs.git"
     APP_FOLDER: "helm-dispatcher"
   script:
-    - if [ "${SKIP_TAG_JOBS}" = "true" ]; then echo "Skipping manifest update"; exit 0; fi
+    - if [ ! -f app.build.env ]; then echo "App image not built; skipping manifest update"; exit 0; fi
     - |
       set -e
       apk add --no-cache git
