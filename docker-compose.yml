@@ -2,12 +2,11 @@
 services:
   app:
     image: ${APP_IMAGE:?Set APP_IMAGE in .env}
-    container_name: fs-xml-app
     working_dir: /app
     extra_hosts:
       - "host.docker.internal:172.17.0.1"
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: ${NODE_ENV:-production}
       APP_PORT: ${APP_PORT:-3000}
       TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
       DB_HOST: ${DB_HOST:?Set DB_HOST to an external MySQL host or supply docker-compose.local-db.yml}
@@ -24,16 +23,13 @@ services:
       RECORDINGS_DIR: ${RECORDINGS_DIR:-/recordings}
       FS_GATEWAY_DIR: ${FS_GATEWAY_DIR:-/shared/gateways}
       FS_CONFIG_DIR: /fs-conf
-    entrypoint: ["/usr/local/bin/app-entrypoint.sh"]
     ports:
       - "3000:3000"
     volumes:
-      # - ./app:/app
-      # - app-node-modules:/app/node_modules
-      - ./docker/app-entrypoint.sh:/usr/local/bin/app-entrypoint.sh:ro
       - ./data/recordings:/recordings
       - ./freeswitch/conf/sip_profiles/external:/shared/gateways
       - ./freeswitch/conf:/fs-conf
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -42,27 +38,23 @@ services:
 
   portal:
     image: ${PORTAL_IMAGE:?Set PORTAL_IMAGE in .env}
-    container_name: fs-portal
     working_dir: /portal
     extra_hosts:
       - "host.docker.internal:172.17.0.1"
     environment:
-      - NODE_ENV=production
-      - PORT=3001
-    command: ["/usr/local/bin/portal-entrypoint.sh"]
+      NODE_ENV: production
+      PORT: 3001
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_WS_BASE_URL: ${NEXT_PUBLIC_WS_BASE_URL:-http://localhost:3000}
     ports:
       - "${PORTAL_HOST_PORT:-3001}:3001"
-    volumes:
-      # - ./portal:/portal
-      # - portal-node-modules:/portal/node_modules
-      - ./docker/portal-entrypoint.sh:/usr/local/bin/portal-entrypoint.sh:ro
     depends_on:
       - app
+    restart: unless-stopped
 
   freeswitch:
     # platform: linux/amd64
     image: ${FREESWITCH_IMAGE:?Set FREESWITCH_IMAGE in .env}
-    container_name: freeswitch-core
     depends_on:
       - app
     environment:
@@ -94,6 +86,7 @@ services:
       - ./data/recordings:/var/lib/freeswitch/recordings
       - ./data/log:/var/log/freeswitch
       - ./data/lib:/var/lib/freeswitch
+    restart: unless-stopped
     # ports:
     #   - "5060:5060/udp"
     #   - "5060:5060/tcp"
@@ -109,6 +102,3 @@ services:
       timeout: 5s
       retries: 20
 
-volumes:
-  app-node-modules: {}
-  portal-node-modules: {}
