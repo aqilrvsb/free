@@ -57,16 +57,14 @@ services:
       - portal-node-modules:/portal/node_modules
       - ./docker/portal-entrypoint.sh:/usr/local/bin/portal-entrypoint.sh:ro
     depends_on:
-      app:
-        condition: service_started
+      - app
 
   freeswitch:
     # platform: linux/amd64
     image: ${FREESWITCH_IMAGE:?Set FREESWITCH_IMAGE in .env}:${IMAGE_TAG:-latest}
     container_name: freeswitch-core
     depends_on:
-      app:
-        condition: service_healthy
+      - app
     environment:
       - TZ=${TIMEZONE:-Asia/Ho_Chi_Minh}
       - EXT_SIP_IP=${EXT_SIP_IP:-auto}
