@@ -43,12 +43,14 @@ build:app:
   script:
     - docker buildx create --use --name "$BUILDX_BUILDER" || docker buildx use "$BUILDX_BUILDER"
     - docker buildx inspect --bootstrap "$BUILDX_BUILDER"
-    - docker buildx build \
+    - |
+      docker buildx build \
         --platform "$BUILD_PLATFORMS" \
         -f docker/app.Dockerfile \
         -t "$APP_IMAGE:${IMAGE_TAG}" \
         --push \
         app
+    - echo "APP_BUILT=true" > app.build.env
   artifacts:
     reports:
       dotenv: app.build.env
@@ -68,12 +70,14 @@ build:portal:
   script:
     - docker buildx create --use --name "$BUILDX_BUILDER" || docker buildx use "$BUILDX_BUILDER"
     - docker buildx inspect --bootstrap "$BUILDX_BUILDER"
-    - docker buildx build \
+    - |
+      docker buildx build \
         --platform "$BUILD_PLATFORMS" \
         -f docker/portal.Dockerfile \
         -t "$PORTAL_IMAGE:${IMAGE_TAG}" \
         --push \
         portal
+    - echo "PORTAL_BUILT=true" > portal.build.env
   artifacts:
     reports:
       dotenv: portal.build.env
@@ -94,13 +98,15 @@ build:freeswitch:
   script:
     - docker buildx create --use --name "$BUILDX_BUILDER" || docker buildx use "$BUILDX_BUILDER"
     - docker buildx inspect --bootstrap "$BUILDX_BUILDER"
-    - docker buildx build \
+    - |
+      docker buildx build \
         --platform "$BUILD_PLATFORMS" \
         --build-arg FS_TOKEN="${FS_TOKEN:-$DEFAULT_FS_TOKEN}" \
         -f docker/freeswitch.Dockerfile \
         -t "$FREESWITCH_IMAGE:${IMAGE_TAG}" \
         --push \
         .
+    - echo "FREESWITCH_BUILT=true" > freeswitch.build.env
   artifacts:
     reports:
       dotenv: freeswitch.build.env
