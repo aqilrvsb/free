@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { resolveClientBaseUrl } from "@/lib/browser";
 
 interface InboundRoutesManagerProps {
   tenants: TenantSummary[];
@@ -48,16 +49,6 @@ const defaultForm: FormState = {
   enabled: true,
 };
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMenus }: InboundRoutesManagerProps) {
   const [routes, setRoutes] = useState<InboundRouteSummary[]>(initialRoutes);
   const [selectedTenant, setSelectedTenant] = useState<string>("all");
@@ -67,7 +58,10 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
   const [editing, setEditing] = useState<InboundRouteSummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
 
-  const apiBase = useMemo(() => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  const apiBase = useMemo(
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    [],
+  );
 
   const filteredRoutes = useMemo(() => {
     if (selectedTenant === "all") {

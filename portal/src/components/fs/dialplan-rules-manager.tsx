@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { resolveClientBaseUrl } from "@/lib/browser";
 
 interface DialplanRulesManagerProps {
   tenants: TenantSummary[];
@@ -111,16 +112,6 @@ const ruleTemplates: Array<{
   },
 ];
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 function toActionForm(action: DialplanActionConfig): ActionFormState {
   return {
     id: action.id,
@@ -140,7 +131,10 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
 
-  const apiBase = useMemo(() => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  const apiBase = useMemo(
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    [],
+  );
   const activeTemplate = selectedTemplate
     ? ruleTemplates.find((template) => template.id === selectedTemplate)
     : undefined;

@@ -6,6 +6,7 @@ import type { FsPortConfig, FsPortConfigUpdateResult } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { resolveClientBaseUrl } from "@/lib/browser";
 
 interface FsPortSettingsProps {
   initialConfig: FsPortConfig;
@@ -67,19 +68,12 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
   },
 ];
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 export function FsPortSettings({ initialConfig }: FsPortSettingsProps) {
   const router = useRouter();
-  const apiBase = useMemo(() => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  const apiBase = useMemo(
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    [],
+  );
 
   const [formState, setFormState] = useState<Record<FieldKey, string>>({
     internalSipPort: String(initialConfig.internalSipPort ?? ""),

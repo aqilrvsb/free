@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { resolveClientBaseUrl } from "@/lib/browser";
 
 interface IvrMenuManagerProps {
   tenants: TenantSummary[];
@@ -73,16 +74,6 @@ function formatBytes(bytes: number) {
   return `${bytes} B`;
 }
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecordings }: IvrMenuManagerProps) {
   const [menus, setMenus] = useState<IvrMenuSummary[]>(initialMenus);
   const [selectedTenant, setSelectedTenant] = useState<string>("all");
@@ -93,7 +84,10 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
   const [editing, setEditing] = useState<IvrMenuSummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
 
-  const apiBase = useMemo(() => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  const apiBase = useMemo(
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    [],
+  );
 
   const filteredMenus = useMemo(() => {
     if (selectedTenant === "all") {

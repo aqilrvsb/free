@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<include>
+  <gateway name="test-gw">
+    <param name="register" value="true"/>
+    <param name="enabled" value="true"/>
+  </gateway>
+</include>

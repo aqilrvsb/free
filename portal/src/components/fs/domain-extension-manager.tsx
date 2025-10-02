@@ -25,6 +25,7 @@ import type {
   TenantLookupItem,
   TenantSummary,
 } from "@/lib/types";
+import { resolveClientBaseUrl } from "@/lib/browser";
 import { Clipboard, Check, ChevronLeft, ChevronRight, QrCode } from "lucide-react";
 import QRCode from "qrcode";
 
@@ -54,16 +55,6 @@ const defaultExtensionForm = {
   password: "",
   displayName: "",
 };
-
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
 
 export function DomainExtensionManager({ initialTenants, initialExtensions, tenantOptions: initialTenantOptions }: DomainExtensionManagerProps) {
   const TENANTS_PER_PAGE = initialTenants.pageSize || 6;
@@ -110,7 +101,7 @@ export function DomainExtensionManager({ initialTenants, initialExtensions, tena
   const [extensionLoading, setExtensionLoading] = useState(false);
 
   const apiBase = useMemo(
-    () => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
   const zoiperQrBase = useMemo(() => process.env.NEXT_PUBLIC_ZOIPER_QR_BASE_URL?.trim() || "", []);

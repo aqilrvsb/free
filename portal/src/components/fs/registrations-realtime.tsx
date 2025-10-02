@@ -25,6 +25,7 @@ import {
   type ExtensionPresence,
 } from "@/lib/registrations";
 import { Loader2, RefreshCw, Signal, Wifi } from "lucide-react";
+import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
 
 interface RegistrationsRealtimeProps {
   profile: string;
@@ -111,16 +112,6 @@ interface RegistrationRow {
   online: boolean;
 }
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 export function RegistrationsRealtime({ profile, initialSnapshot }: RegistrationsRealtimeProps) {
   const [snapshot, setSnapshot] = useState<RegistrationSnapshot>(initialSnapshot);
   const [connected, setConnected] = useState(false);
@@ -135,11 +126,11 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const apiBase = useMemo(
-    () => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
   const wsBase = useMemo(
-    () => resolveBaseUrl(process.env.NEXT_PUBLIC_WS_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL),
+    () => resolveClientWsUrl(process.env.NEXT_PUBLIC_WS_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
 

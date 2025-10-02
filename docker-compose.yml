@@ -44,6 +44,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      API_BASE_URL: ${API_BASE_URL:-http://app:3000}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
       NEXT_PUBLIC_WS_BASE_URL: ${NEXT_PUBLIC_WS_BASE_URL:-http://localhost:3000}
     ports:
@@ -101,4 +102,3 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
-

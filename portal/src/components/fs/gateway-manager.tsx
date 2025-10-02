@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { resolveClientBaseUrl } from "@/lib/browser";
 import {
   Dialog,
   DialogContent,
@@ -39,16 +40,6 @@ const defaultForm = {
   callerIdNumber: "",
 };
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 export function GatewayManager({ initialGateways }: GatewayManagerProps) {
   const [gateways, setGateways] = useState<GatewaySummary[]>(initialGateways);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -57,7 +48,10 @@ export function GatewayManager({ initialGateways }: GatewayManagerProps) {
   const [editing, setEditing] = useState<GatewaySummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
 
-  const apiBase = useMemo(() => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  const apiBase = useMemo(
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    [],
+  );
 
   const openCreate = () => {
     setDialogMode("create");

@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { resolveClientBaseUrl } from "@/lib/browser";
 
 interface OutboundRoutesManagerProps {
   tenants: TenantSummary[];
@@ -35,16 +36,6 @@ const defaultForm = {
   enabled: true,
 };
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: OutboundRoutesManagerProps) {
   const [routes, setRoutes] = useState<OutboundRouteSummary[]>(initialRoutes);
   const [selectedTenant, setSelectedTenant] = useState<string>("all");
@@ -54,7 +45,10 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
   const [editing, setEditing] = useState<OutboundRouteSummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
 
-  const apiBase = useMemo(() => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  const apiBase = useMemo(
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    [],
+  );
 
   const filteredRoutes = useMemo(() => {
     if (selectedTenant === "all") {

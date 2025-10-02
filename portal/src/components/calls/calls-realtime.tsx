@@ -9,6 +9,7 @@ import type { CallEvent, FsChannel } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { extractChannelCount, extractChannelRows } from "@/lib/channels";
 import { Loader2, PhoneCall, PhoneOff } from "lucide-react";
+import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
 
 interface CallsRealtimeProps {
   initialChannels: FsChannel[];
@@ -60,16 +61,6 @@ function stateLabel(state?: string | null) {
 }
 
 
-function resolveBaseUrl(envValue?: string) {
-  if (envValue && envValue.length > 0) {
-    return envValue.replace(/\/$/, "");
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.host}`;
-  }
-  return "";
-}
-
 export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
   const [channels, setChannels] = useState<FsChannel[]>(initialChannels);
   const [channelCount, setChannelCount] = useState<number>(initialChannels.length);
@@ -81,11 +72,14 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const apiBase = useMemo(
-    () => resolveBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
   const wsBase = useMemo(
-    () => resolveBaseUrl(process.env.NEXT_PUBLIC_WS_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL),
+    () =>
+      resolveClientWsUrl(
+        process.env.NEXT_PUBLIC_WS_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL,
+      ),
     [],
   );
 
