@@ -54,28 +54,29 @@ compose-build:
         BASE_SHA=$(git merge-base "$CI_COMMIT_SHA" "origin/$CI_DEFAULT_BRANCH")
       fi
       echo "Comparing changes against $BASE_SHA"
-      CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$CI_COMMIT_SHA")
-      printf '%s\n' "$CHANGED_FILES" | sort | uniq > changed_files.txt
-      declare -a CHANGED_SERVICES=()
+      git diff --name-only "$BASE_SHA" "$CI_COMMIT_SHA" | sort -u > changed_files.txt
+      : > services-built.txt
       mark_service() {
-        local dir="$1"
-        local service="$2"
+        dir="$1"
+        service="$2"
         if grep -q "^${dir}/" changed_files.txt || grep -q "^docker/" changed_files.txt || grep -q "^docker-compose.build.yml$" changed_files.txt || grep -q "^.gitlab-ci.yml$" changed_files.txt; then
-          CHANGED_SERVICES+=("$service")
+          if ! grep -Fxq "$service" services-built.txt; then
+            echo "$service" >> services-built.txt
+          fi
         fi
       }
-      mark_service "app" "app"
-      mark_service "portal" "portal"
-      mark_service "freeswitch" "freeswitch"
-      printf "%s\n" "${CHANGED_SERVICES[@]}" | sort -u > services-built.txt
-      if [ ${#CHANGED_SERVICES[@]} -eq 0 ]; then
+      mark_service app app
+      mark_service portal portal
+      mark_service freeswitch freeswitch
+      if [ ! -s services-built.txt ]; then
         echo "SKIP_TAG_JOBS=true" > build.env
         echo "No relevant changes detected; skipping build."
         exit 0
       fi
       echo "SKIP_TAG_JOBS=false" > build.env
-      printf "Services to build: %s\n" "${CHANGED_SERVICES[*]}"
-      for service in "${CHANGED_SERVICES[@]}"; do
+      printf "Services to build:\n"
+      cat services-built.txt
+      while IFS= read -r service || [ -n "$service" ]; do
         case "$service" in
           app)
             docker buildx build \
@@ -107,7 +108,7 @@ compose-build:
             exit 1
             ;;
         esac
-      done
+      done < services-built.txt
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'
