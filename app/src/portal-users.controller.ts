@@ -46,8 +46,9 @@ export class PortalUsersController {
       email: string;
       password: string;
       displayName?: string;
-      role?: 'admin' | 'viewer';
+      role?: string;
       isActive?: boolean;
+      permissions?: string[];
     },
   ) {
     return this.portalUsersService.createUser(body);
@@ -60,8 +61,9 @@ export class PortalUsersController {
     body: {
       email?: string;
       displayName?: string | null;
-      role?: 'admin' | 'viewer';
+      role?: string;
       isActive?: boolean;
+      permissions?: string[];
     },
   ) {
     return this.portalUsersService.updateUser(id, body);

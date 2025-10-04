@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PaginatedResult, PortalUserSummary } from "@/lib/types";
+import type { PaginatedResult, PortalRoleSummary, PortalUserSummary } from "@/lib/types";
+import type { PermissionKey } from "@/lib/permissions";
+import {
+  FALLBACK_ROLE_DEFS,
+  PERMISSION_KEYS,
+  PERMISSION_OPTIONS,
+  filterValidPermissions,
+  type PermissionOption,
+} from "@/lib/permission-options";
 import { resolveClientBaseUrl } from "@/lib/browser";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,14 +33,18 @@ import { cn } from "@/lib/utils";
 
 interface PortalUserManagerProps {
   initialUsers: PaginatedResult<PortalUserSummary>;
+  roles: PortalRoleSummary[];
 }
+
+type PortalUserRole = string;
 
 interface PortalUserFormState {
   email: string;
   displayName: string;
-  role: "admin" | "viewer";
+  role: PortalUserRole;
   isActive: boolean;
   password: string;
+  permissions: PermissionKey[];
 }
 
 interface PasswordFormState {
@@ -46,12 +58,31 @@ const defaultFormState: PortalUserFormState = {
   role: "viewer",
   isActive: true,
   password: "",
+  permissions: [],
 };
 
 const defaultPasswordForm: PasswordFormState = {
   password: "",
   confirmPassword: "",
 };
+
+function getDefaultPermissionsForRole(
+  role: PortalUserRole,
+  roleMap: Map<string, PortalRoleSummary>,
+): PermissionKey[] {
+  const roleDefinition = roleMap.get(role);
+  if (roleDefinition) {
+    return filterValidPermissions(roleDefinition.permissions);
+  }
+
+  const fallbackRole = roleMap.get('viewer');
+  if (fallbackRole) {
+    return filterValidPermissions(fallbackRole.permissions);
+  }
+
+  const firstRole = roleMap.values().next().value as PortalRoleSummary | undefined;
+  return filterValidPermissions(firstRole?.permissions);
+}
 
 function readCookie(name: string): string | null {
   if (typeof document === "undefined") {
@@ -121,12 +152,29 @@ function updatePortalUserCookie(user: PortalUserSummary) {
   }
 }
 
-export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
+export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProps) {
   const PAGE_SIZE = initialUsers.pageSize || 10;
   const apiBase = useMemo(
     () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
+  const normalizedRoles = useMemo(() => {
+    return roles.length > 0 ? roles : FALLBACK_ROLE_DEFS;
+  }, [roles]);
+  const roleMap = useMemo(() => {
+    const map = new Map<string, PortalRoleSummary>();
+    normalizedRoles.forEach((role) => {
+      map.set(role.key, role);
+    });
+    return map;
+  }, [normalizedRoles]);
+  const defaultRoleKey = useMemo(() => {
+    if (roleMap.has('viewer')) {
+      return 'viewer';
+    }
+    const iterator = roleMap.keys().next();
+    return (iterator.value ?? 'viewer') as PortalUserRole;
+  }, [roleMap]);
   const [data, setData] = useState<PaginatedResult<PortalUserSummary>>(initialUsers);
   const [search, setSearch] = useState<string>("");
   const [page, setPage] = useState<number>(initialUsers.page || 1);
@@ -137,7 +185,11 @@ export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
   });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
-  const [formState, setFormState] = useState<PortalUserFormState>(defaultFormState);
+  const [formState, setFormState] = useState<PortalUserFormState>(() => ({
+    ...defaultFormState,
+    role: defaultRoleKey,
+    permissions: getDefaultPermissionsForRole(defaultRoleKey, roleMap),
+  }));
   const [activeUser, setActiveUser] = useState<PortalUserSummary | null>(null);
   const [saving, setSaving] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -206,30 +258,92 @@ export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
     [PAGE_SIZE, apiBase, buildHeaders, search],
   );
 
-  const resetFormState = useCallback(() => {
-    setFormState(defaultFormState);
-    setActiveUser(null);
-    setDialogMode("create");
-  }, []);
+  const resetFormState = useCallback(
+    (role: PortalUserRole = defaultRoleKey) => {
+      setFormState({
+        email: "",
+        displayName: "",
+        role,
+        isActive: true,
+        password: "",
+        permissions: getDefaultPermissionsForRole(role, roleMap),
+      });
+      setActiveUser(null);
+      setDialogMode("create");
+    },
+    [defaultRoleKey, roleMap],
+  );
 
   const handleOpenCreate = () => {
-    resetFormState();
+    resetFormState(defaultRoleKey);
     setDialogMode("create");
     setDialogOpen(true);
   };
 
   const handleOpenEdit = (user: PortalUserSummary) => {
     setActiveUser(user);
+    const roleKey = (user.roleKey || user.role || defaultRoleKey) as PortalUserRole;
+    const existingPermissions = Array.isArray(user.permissions)
+      ? user.permissions.filter((perm): perm is PermissionKey => PERMISSION_KEYS.has(perm as PermissionKey))
+      : [];
     setFormState({
       email: user.email,
       displayName: user.displayName || "",
-      role: user.role,
+      role: roleKey,
       isActive: user.isActive,
       password: "",
+      permissions:
+        existingPermissions.length > 0
+          ? existingPermissions
+          : getDefaultPermissionsForRole(roleKey, roleMap),
     });
     setDialogMode("edit");
     setDialogOpen(true);
   };
+  const permissionGroups = useMemo(() => {
+    const map = new Map<string, PermissionOption[]>();
+    PERMISSION_OPTIONS.forEach((option) => {
+      const list = map.get(option.group);
+      if (list) {
+        list.push(option);
+      } else {
+        map.set(option.group, [option]);
+      }
+    });
+    return Array.from(map.entries()).map(([group, options]) => ({ group, options }));
+  }, []);
+
+  const handlePermissionToggle = useCallback((permission: PermissionKey) => {
+    setFormState((prev) => {
+      const exists = prev.permissions.includes(permission);
+      const nextPermissions = exists
+        ? prev.permissions.filter((item) => item !== permission)
+        : [...prev.permissions, permission];
+      return {
+        ...prev,
+        permissions: nextPermissions,
+      };
+    });
+  }, []);
+
+  const handleRoleSelect = useCallback(
+    (value: string) => {
+      const role = value as PortalUserRole;
+      setFormState((prev) => ({
+        ...prev,
+        role,
+        permissions: dialogMode === "create" ? getDefaultPermissionsForRole(role, roleMap) : prev.permissions,
+      }));
+    },
+    [dialogMode, roleMap],
+  );
+
+  const applyRoleDefaults = useCallback(() => {
+    setFormState((prev) => ({
+      ...prev,
+      permissions: getDefaultPermissionsForRole(prev.role, roleMap),
+    }));
+  }, [roleMap]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -237,11 +351,14 @@ export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
       return;
     }
 
+    const normalizedPermissions = filterValidPermissions(formState.permissions);
+
     const payload: Record<string, unknown> = {
       email: formState.email.trim().toLowerCase(),
       displayName: formState.displayName.trim() || undefined,
       role: formState.role,
       isActive: formState.isActive,
+      permissions: normalizedPermissions,
     };
 
     if (dialogMode === "create") {
@@ -460,8 +577,16 @@ export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
                           <div className="text-xs text-muted-foreground">{user.displayName || "Không có tên hiển thị"}</div>
                         </TableCell>
                         <TableCell className="align-middle">
-                          <Badge variant={user.role === "admin" ? "default" : "secondary"} className="rounded-full">
-                            {user.role === "admin" ? "Quản trị" : "Quan sát"}
+                          <Badge
+                            variant={(() => {
+                              const key = (user.roleKey || user.role || '').toLowerCase();
+                              if (key === 'admin') return 'default';
+                              if (key === 'operator') return 'outline';
+                              return 'secondary';
+                            })()}
+                            className="rounded-full"
+                          >
+                            {user.roleName || user.roleKey || user.role || 'Không rõ'}
                           </Badge>
                         </TableCell>
                         <TableCell className="align-middle">
@@ -590,18 +715,21 @@ export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Vai trò</Label>
-                <Select
-                  value={formState.role}
-                  onValueChange={(value) =>
-                    setFormState((prev) => ({ ...prev, role: value as PortalUserFormState["role"] }))
-                  }
-                >
+                <Select value={formState.role} onValueChange={handleRoleSelect}>
                   <SelectTrigger className="rounded-lg">
                     <SelectValue placeholder="Chọn vai trò" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Quản trị (toàn quyền)</SelectItem>
-                    <SelectItem value="viewer">Quan sát (chỉ xem)</SelectItem>
+                    {normalizedRoles.map((role) => (
+                      <SelectItem key={role.key} value={role.key}>
+                        <div className="flex flex-col">
+                          <span>{role.name}</span>
+                          {role.description ? (
+                            <span className="text-xs text-muted-foreground">{role.description}</span>
+                          ) : null}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -642,6 +770,54 @@ export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
                 </p>
               </div>
             ) : null}
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <Label>Quyền hạn</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Tùy chỉnh quyền truy cập cho tài khoản, có thể khác với mặc định của vai trò.
+                  </p>
+                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={applyRoleDefaults} disabled={saving}>
+                  Khôi phục theo vai trò
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {permissionGroups.map(({ group, options }) => (
+                  <div key={group} className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
+                    <h4 className="text-sm font-semibold text-foreground">{group}</h4>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {options.map((option) => {
+                        const checked = formState.permissions.includes(option.key);
+                        return (
+                          <label
+                            key={option.key}
+                            className={cn(
+                              "flex cursor-pointer items-start gap-2 rounded-lg border bg-background/60 p-3 text-sm transition",
+                              checked ? "border-primary/60" : "border-border/60 hover:border-primary/40",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4"
+                              checked={checked}
+                              onChange={() => handlePermissionToggle(option.key)}
+                            />
+                            <span className="flex flex-col">
+                              <span className="font-medium text-foreground">{option.label}</span>
+                              {option.description ? (
+                                <span className="text-xs text-muted-foreground">{option.description}</span>
+                              ) : null}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <DialogFooter className="flex flex-col gap-2 sm:flex-row">
               <Button

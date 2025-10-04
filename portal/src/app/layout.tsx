@@ -10,6 +10,7 @@ import { TimezoneProvider, TimezoneSync } from "@/components/common/timezone-pro
 import { getServerTimezone } from "@/lib/server-timezone";
 import { UserAccountMenu } from "@/components/layout/user-account-menu";
 import { parsePortalUserCookie } from "@/lib/auth";
+import { resolvePermissions } from "@/lib/permissions";
 import { apiFetch } from "@/lib/api";
 import type { PortalUserSummary } from "@/lib/types";
 
@@ -47,7 +48,8 @@ export default async function RootLayout({
     });
   }
 
-  const isAuthenticated = Boolean(token && currentUser);
+  const permissions = resolvePermissions(currentUser);
+  const isAuthenticated = Boolean(token && currentUser && currentUser.isActive !== false);
   const isAdmin = currentUser?.role === "admin";
 
   if (!isAuthenticated) {
@@ -68,7 +70,11 @@ export default async function RootLayout({
         <TimezoneProvider initialTimezone={timezone}>
           <TimezoneSync />
           <SidebarProvider>
-            <AppSidebar userRole={currentUser?.role} isAuthenticated={isAuthenticated} />
+            <AppSidebar
+              userRole={currentUser?.role}
+              isAuthenticated={isAuthenticated}
+              permissions={permissions}
+            />
             <SidebarInset className="relative">
               <div className="relative flex min-h-screen flex-col">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_50%_-20%,rgba(234,88,12,0.18),transparent),radial-gradient(120%_120%_at_25%_20%,rgba(249,115,22,0.12),transparent)]" />

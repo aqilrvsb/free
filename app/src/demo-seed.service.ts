@@ -2,9 +2,10 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PortalUserEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import { PortalRoleEntity, PortalUserEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
 import { hash } from 'bcryptjs';
 import { SeedRouting, SeedTenants, SeedUsers } from './data/seed-data';
+import { PortalRolesService } from './portal-roles.service';
 
 @Injectable()
 export class DemoSeedService implements OnApplicationBootstrap {
@@ -16,6 +17,8 @@ export class DemoSeedService implements OnApplicationBootstrap {
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
     @InjectRepository(PortalUserEntity) private readonly portalUserRepo: Repository<PortalUserEntity>,
+    @InjectRepository(PortalRoleEntity) private readonly portalRoleRepo: Repository<PortalRoleEntity>,
+    private readonly portalRolesService: PortalRolesService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -44,18 +47,24 @@ export class DemoSeedService implements OnApplicationBootstrap {
       return;
     }
 
+    await this.portalRolesService.ensureDefaultRoles();
+
     const email = (this.configService.get('PORTAL_ADMIN_EMAIL') || 'admin@local').trim().toLowerCase();
     const password = this.configService.get('PORTAL_ADMIN_PASSWORD') || 'ChangeMe123!';
     const displayName = this.configService.get('PORTAL_ADMIN_NAME') || 'PBX Administrator';
 
     const passwordHash = await hash(password, 10);
 
+    const adminRole = await this.portalRoleRepo.findOne({ where: { key: 'admin' } });
+
     const admin = this.portalUserRepo.create({
       email,
       passwordHash,
       displayName,
-      role: 'admin',
+      roleKey: adminRole?.key || 'admin',
+      roleDefinition: adminRole || undefined,
       isActive: true,
+      permissions: [],
     });
     await this.portalUserRepo.save(admin);
     this.logger.log(`Created default portal admin account for ${email}`);

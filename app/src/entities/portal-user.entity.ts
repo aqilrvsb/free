@@ -1,6 +1,16 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  Unique,
+  UpdateDateColumn,
+} from 'typeorm';
+import { PortalRoleEntity } from './portal-role.entity';
 
-export type PortalUserRole = 'admin' | 'viewer';
+export type PortalUserRole = string;
 
 @Entity({ name: 'portal_users' })
 @Unique(['email'])
@@ -17,11 +27,18 @@ export class PortalUserEntity {
   @Column({ name: 'password_hash', type: 'varchar', length: 255 })
   passwordHash!: string;
 
-  @Column({ type: 'varchar', length: 32, default: 'admin' })
-  role!: PortalUserRole;
+  @Column({ name: 'role_key', type: 'varchar', length: 64, default: 'viewer' })
+  roleKey!: PortalUserRole;
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
+
+  @Column({ name: 'permissions', type: 'json', nullable: true })
+  permissions?: string[] | null;
+
+  @ManyToOne(() => PortalRoleEntity, (role) => role.users, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'role_key', referencedColumnName: 'key' })
+  roleDefinition?: PortalRoleEntity | null;
 
   @Column({ name: 'last_login_at', type: 'datetime', nullable: true })
   lastLoginAt?: Date | null;

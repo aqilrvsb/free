@@ -25,6 +25,7 @@ import {
   IvrMenuOptionEntity,
   SystemRecordingEntity,
   PortalUserEntity,
+  PortalRoleEntity,
 } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
@@ -47,6 +48,8 @@ import { SystemRecordingsService } from './system-recordings.service';
 import { SystemRecordingsController } from './system-recordings.controller';
 import { PortalUsersController } from './portal-users.controller';
 import { PortalUsersService } from './portal-users.service';
+import { PortalRolesController } from './portal-roles.controller';
+import { PortalRolesService } from './portal-roles.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -84,6 +87,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
           IvrMenuOptionEntity,
           SystemRecordingEntity,
           PortalUserEntity,
+          PortalRoleEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -108,6 +112,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
       IvrMenuOptionEntity,
       SystemRecordingEntity,
       PortalUserEntity,
+      PortalRoleEntity,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt', session: false }),
     JwtModule.registerAsync({
@@ -134,6 +139,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
     DialplanConfigController,
     SettingsController,
     PortalUsersController,
+    PortalRolesController,
     AuthController,
   ],
   providers: [
@@ -154,6 +160,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
     SettingsService,
     DialplanConfigService,
     PortalUsersService,
+    PortalRolesService,
     AuthService,
     JwtStrategy,
     JwtAuthGuard,

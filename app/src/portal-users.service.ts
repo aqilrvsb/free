@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { PortalUserEntity, PortalUserRole } from './entities';
+import { PortalRoleEntity, PortalUserEntity, PortalUserRole } from './entities';
 import { hash, compare } from 'bcryptjs';
 
 export interface CreatePortalUserDto {
@@ -10,6 +10,7 @@ export interface CreatePortalUserDto {
   displayName?: string;
   role?: PortalUserRole;
   isActive?: boolean;
+  permissions?: string[];
 }
 
 export interface UpdatePortalUserDto {
@@ -17,6 +18,7 @@ export interface UpdatePortalUserDto {
   displayName?: string | null;
   role?: PortalUserRole;
   isActive?: boolean;
+  permissions?: string[];
 }
 
 @Injectable()
@@ -24,10 +26,15 @@ export class PortalUsersService {
   constructor(
     @InjectRepository(PortalUserEntity)
     private readonly portalUserRepo: Repository<PortalUserEntity>,
+    @InjectRepository(PortalRoleEntity)
+    private readonly portalRoleRepo: Repository<PortalRoleEntity>,
   ) {}
 
   async listUsers(options?: { search?: string | null }): Promise<Array<Record<string, any>>> {
-    const query = this.portalUserRepo.createQueryBuilder('user').orderBy('user.createdAt', 'DESC');
+    const query = this.portalUserRepo
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.roleDefinition', 'role')
+      .orderBy('user.createdAt', 'DESC');
 
     if (options?.search) {
       const term = `%${options.search.toLowerCase()}%`;
@@ -35,7 +42,8 @@ export class PortalUsersService {
         new Brackets((qb) => {
           qb.where('LOWER(user.email) LIKE :term', { term })
             .orWhere('LOWER(user.displayName) LIKE :term', { term })
-            .orWhere('LOWER(user.role) LIKE :term', { term });
+            .orWhere('LOWER(user.roleKey) LIKE :term', { term })
+            .orWhere('LOWER(role.name) LIKE :term', { term });
         }),
       );
     }
@@ -52,6 +60,7 @@ export class PortalUsersService {
     const { page, pageSize, search } = params;
     const query = this.portalUserRepo
       .createQueryBuilder('user')
+      .leftJoinAndSelect('user.roleDefinition', 'role')
       .orderBy('user.createdAt', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
@@ -62,7 +71,8 @@ export class PortalUsersService {
         new Brackets((qb) => {
           qb.where('LOWER(user.email) LIKE :term', { term })
             .orWhere('LOWER(user.displayName) LIKE :term', { term })
-            .orWhere('LOWER(user.role) LIKE :term', { term });
+            .orWhere('LOWER(user.roleKey) LIKE :term', { term })
+            .orWhere('LOWER(role.name) LIKE :term', { term });
         }),
       );
     }
@@ -77,7 +87,7 @@ export class PortalUsersService {
   }
 
   async getUser(id: string): Promise<Record<string, any>> {
-    const user = await this.portalUserRepo.findOne({ where: { id } });
+    const user = await this.portalUserRepo.findOne({ where: { id }, relations: ['roleDefinition'] });
     if (!user) {
       throw new NotFoundException('Portal user không tồn tại');
     }
@@ -86,7 +96,7 @@ export class PortalUsersService {
 
   async findRawByEmail(email: string): Promise<PortalUserEntity | null> {
     const normalized = email.trim().toLowerCase();
-    return this.portalUserRepo.findOne({ where: { email: normalized } });
+    return this.portalUserRepo.findOne({ where: { email: normalized }, relations: ['roleDefinition'] });
   }
 
   async createUser(dto: CreatePortalUserDto): Promise<Record<string, any>> {
@@ -105,12 +115,20 @@ export class PortalUsersService {
 
     const passwordHash = await hash(dto.password.trim(), 10);
 
+    const roleKey = (dto.role || 'viewer').trim().toLowerCase();
+    const roleDefinition = await this.portalRoleRepo.findOne({ where: { key: roleKey } });
+    if (!roleDefinition) {
+      throw new BadRequestException('Role không tồn tại');
+    }
+
     const user = this.portalUserRepo.create({
       email,
       passwordHash,
       displayName: dto.displayName?.trim() || null,
-      role: dto.role || 'viewer',
+      roleKey,
+      roleDefinition,
       isActive: dto.isActive !== undefined ? Boolean(dto.isActive) : true,
+      permissions: this.normalizePermissions(dto.permissions),
     });
 
     await this.portalUserRepo.save(user);
@@ -118,7 +136,7 @@ export class PortalUsersService {
   }
 
   async updateUser(id: string, dto: UpdatePortalUserDto): Promise<Record<string, any>> {
-    const user = await this.portalUserRepo.findOne({ where: { id } });
+    const user = await this.portalUserRepo.findOne({ where: { id }, relations: ['roleDefinition'] });
     if (!user) {
       throw new NotFoundException('Portal user không tồn tại');
     }
@@ -140,11 +158,21 @@ export class PortalUsersService {
     }
 
     if (dto.role !== undefined) {
-      user.role = dto.role;
+      const roleKey = dto.role.trim().toLowerCase();
+      const roleDefinition = await this.portalRoleRepo.findOne({ where: { key: roleKey } });
+      if (!roleDefinition) {
+        throw new BadRequestException('Role không tồn tại');
+      }
+      user.roleKey = roleKey;
+      user.roleDefinition = roleDefinition;
     }
 
     if (dto.isActive !== undefined) {
       user.isActive = Boolean(dto.isActive);
+    }
+
+    if (dto.permissions !== undefined) {
+      user.permissions = this.normalizePermissions(dto.permissions);
     }
 
     await this.portalUserRepo.save(user);
@@ -156,7 +184,7 @@ export class PortalUsersService {
       throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự');
     }
 
-    const user = await this.portalUserRepo.findOne({ where: { id } });
+    const user = await this.portalUserRepo.findOne({ where: { id }, relations: ['roleDefinition'] });
     if (!user) {
       throw new NotFoundException('Portal user không tồn tại');
     }
@@ -184,15 +212,37 @@ export class PortalUsersService {
   }
 
   sanitizeUser(user: PortalUserEntity): Record<string, any> {
+    const roleName = (user as any).roleDefinition?.name || (user as any).roleKey || null;
+    const rolePermissions = Array.isArray((user as any).roleDefinition?.permissions)
+      ? ((user as any).roleDefinition?.permissions as string[])
+      : [];
+    const permissions = this.normalizePermissions(user.permissions || []);
     return {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
-      role: user.role,
+      role: user.roleKey,
+      roleKey: user.roleKey,
+      roleName,
+      rolePermissions,
       isActive: user.isActive,
+      permissions,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  private normalizePermissions(list: string[] | undefined): string[] {
+    if (!Array.isArray(list)) {
+      return [];
+    }
+    const normalized = new Set<string>();
+    list.forEach((item) => {
+      if (typeof item === 'string' && item.trim()) {
+        normalized.add(item.trim());
+      }
+    });
+    return Array.from(normalized.values());
   }
 }

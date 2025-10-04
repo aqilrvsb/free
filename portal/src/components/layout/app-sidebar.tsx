@@ -31,10 +31,27 @@ import {
   Waves,
   Settings,
   Workflow,
+  ShieldCheck,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
-type NavRole = "admin" | "viewer";
+type NavRole = string;
+
+type PermissionKey =
+  | "view_dashboard"
+  | "view_cdr"
+  | "view_recordings"
+  | "view_channels"
+  | "manage_gateways"
+  | "manage_tenants"
+  | "manage_dialplan"
+  | "manage_inbound"
+  | "manage_outbound"
+  | "manage_ivr"
+  | "manage_settings"
+  | "manage_recordings"
+  | "manage_portal_users"
+  | "manage_roles";
 
 interface NavItem {
   title: string
@@ -43,6 +60,7 @@ interface NavItem {
   icon: LucideIcon
   exact?: boolean
   roles?: NavRole[]
+  permission?: PermissionKey
 }
 
 const NAV_SECTIONS: Array<{
@@ -69,36 +87,42 @@ const NAV_SECTIONS: Array<{
           description: "Nhật ký cuộc gọi",
           href: "/cdr",
           icon: ScrollText,
+          permission: "view_cdr",
         },
         {
           title: "Trạng thái",
           description: "Core & Sofia",
           href: "/fs/status",
           icon: Activity,
+          permission: "view_channels",
         },
         {
           title: "Kênh",
           description: "Phiên đang hoạt động",
           href: "/fs/channels",
           icon: Waves,
+          permission: "view_channels",
         },
         {
           title: "Cuộc gọi",
           description: "Theo dõi realtime",
           href: "/fs/calls",
           icon: Activity,
+          permission: "view_channels",
         },
         {
           title: "Đăng ký",
           description: "Thiết bị SIP",
           href: "/fs/registrations",
           icon: RadioTower,
+          permission: "view_channels",
         },
         {
           title: "Ghi âm",
           description: "Tệp lưu lại",
           href: "/recordings",
           icon: FileAudio,
+          permission: "view_recordings",
         },
       ],
     },
@@ -111,6 +135,7 @@ const NAV_SECTIONS: Array<{
           href: "/fs/manage",
           icon: UserCog,
           roles: ["admin"],
+          permission: "manage_tenants",
         },
         {
           title: "Portal Users",
@@ -118,6 +143,15 @@ const NAV_SECTIONS: Array<{
           href: "/admin/users",
           icon: Users,
           roles: ["admin"],
+          permission: "manage_portal_users",
+        },
+        {
+          title: "Role & Quyền",
+          description: "Tạo role và phân quyền",
+          href: "/admin/roles",
+          icon: ShieldCheck,
+          roles: ["admin"],
+          permission: "manage_roles",
         },
         {
           title: "Gateway / Trunk",
@@ -125,6 +159,7 @@ const NAV_SECTIONS: Array<{
           href: "/fs/gateways",
           icon: Globe2,
           roles: ["admin"],
+          permission: "manage_gateways",
         },
         {
           title: "Dialplan",
@@ -132,6 +167,7 @@ const NAV_SECTIONS: Array<{
           href: "/fs/dialplan",
           icon: GitBranch,
           roles: ["admin"],
+          permission: "manage_dialplan",
         },
         {
           title: "Outbound Routing",
@@ -139,20 +175,23 @@ const NAV_SECTIONS: Array<{
           href: "/fs/outbound",
           icon: RadioTower,
           roles: ["admin"],
+          permission: "manage_outbound",
         },
         {
           title: "Inbound Routing",
           description: "Định tuyến DID vào",
           href: "/fs/inbound",
           icon: PhoneIncoming,
-          roles: ["admin"],
+          roles: ["admin", "operator"],
+          permission: "manage_inbound",
         },
         {
           title: "IVR",
           description: "Kịch bản trả lời tự động",
           href: "/fs/ivr",
           icon: Workflow,
-          roles: ["admin"],
+          roles: ["admin", "operator"],
+          permission: "manage_ivr",
         },
         {
           title: "FS Settings",
@@ -160,13 +199,15 @@ const NAV_SECTIONS: Array<{
           href: "/fs/settings",
           icon: Settings,
           roles: ["admin"],
+          permission: "manage_settings",
         },
         {
           title: "System Recordings",
           description: "Kho âm thanh dùng chung",
           href: "/fs/system-recordings",
           icon: FileAudio,
-          roles: ["admin"],
+          roles: ["admin", "operator"],
+          permission: "manage_recordings",
         },
       ],
     },
@@ -185,28 +226,30 @@ function isActivePath(pathname: string, item: NavItem) {
 interface AppSidebarProps {
   userRole?: NavRole
   isAuthenticated?: boolean
+  permissions?: Record<PermissionKey, boolean>
 }
 
-function filterNavItems(items: NavItem[], userRole?: NavRole, isAuthenticated?: boolean) {
+function filterNavItems(
+  items: NavItem[],
+  userRole?: NavRole,
+  isAuthenticated?: boolean,
+  permissions?: Record<PermissionKey, boolean>,
+) {
   if (!isAuthenticated) {
     return []
   }
   return items.filter((item) => {
-    if (!item.roles || item.roles.length === 0) {
-      return true
-    }
-    if (!userRole) {
-      return false
-    }
-    return item.roles.includes(userRole)
+    const roleAllowed = !item.roles || item.roles.length === 0 || Boolean(userRole && item.roles.includes(userRole))
+    const permissionAllowed = !item.permission || Boolean(permissions?.[item.permission])
+    return roleAllowed && permissionAllowed
   })
 }
 
-export function AppSidebar({ userRole, isAuthenticated }: AppSidebarProps) {
+export function AppSidebar({ userRole, isAuthenticated, permissions }: AppSidebarProps) {
   const pathname = usePathname()
   const sections = NAV_SECTIONS.map((section) => ({
     label: section.label,
-    items: filterNavItems(section.items, userRole, isAuthenticated),
+    items: filterNavItems(section.items, userRole, isAuthenticated, permissions),
   })).filter((section) => section.items.length > 0)
 
   return (

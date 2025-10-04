@@ -239,11 +239,25 @@ export interface SystemRecordingSummary {
   updatedAt?: string;
 }
 
+export interface PortalRoleSummary {
+  key: string;
+  name: string;
+  description?: string | null;
+  permissions: string[];
+  isSystem: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PortalUserSummary {
   id: string;
   email: string;
   displayName?: string | null;
-  role: 'admin' | 'viewer';
+  role: string;
+  roleKey?: string;
+  roleName?: string | null;
+  rolePermissions?: string[];
+  permissions?: string[];
   isActive: boolean;
   lastLoginAt?: string | null;
   createdAt?: string;
