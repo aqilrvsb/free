@@ -239,6 +239,17 @@ export interface SystemRecordingSummary {
   updatedAt?: string;
 }
 
+export interface PortalUserSummary {
+  id: string;
+  email: string;
+  displayName?: string | null;
+  role: 'admin' | 'viewer';
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface RecordingStorageAwsConfig {
   accessKeyId?: string;
   secretAccessKey?: string;

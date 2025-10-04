@@ -2,7 +2,8 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import { PortalUserEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import { hash } from 'bcryptjs';
 import { SeedRouting, SeedTenants, SeedUsers } from './data/seed-data';
 
 @Injectable()
@@ -14,9 +15,12 @@ export class DemoSeedService implements OnApplicationBootstrap {
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
+    @InjectRepository(PortalUserEntity) private readonly portalUserRepo: Repository<PortalUserEntity>,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    await this.ensureInitialPortalAdmin();
+
     const shouldSeed = this.configService.get('SEED_DEMO_DATA', 'false');
     if (!['true', '1', 'yes'].includes(String(shouldSeed).toLowerCase())) {
       return;
@@ -32,6 +36,29 @@ export class DemoSeedService implements OnApplicationBootstrap {
     await this.seedUsers();
     await this.seedRouting();
     this.logger.log('Demo data seeding completed');
+  }
+
+  private async ensureInitialPortalAdmin(): Promise<void> {
+    const existingAdmins = await this.portalUserRepo.count();
+    if (existingAdmins > 0) {
+      return;
+    }
+
+    const email = (this.configService.get('PORTAL_ADMIN_EMAIL') || 'admin@local').trim().toLowerCase();
+    const password = this.configService.get('PORTAL_ADMIN_PASSWORD') || 'ChangeMe123!';
+    const displayName = this.configService.get('PORTAL_ADMIN_NAME') || 'PBX Administrator';
+
+    const passwordHash = await hash(password, 10);
+
+    const admin = this.portalUserRepo.create({
+      email,
+      passwordHash,
+      displayName,
+      role: 'admin',
+      isActive: true,
+    });
+    await this.portalUserRepo.save(admin);
+    this.logger.log(`Created default portal admin account for ${email}`);
   }
 
   private async seedTenants(): Promise<void> {

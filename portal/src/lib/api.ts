@@ -45,13 +45,58 @@ export async function apiFetch<T>(path: string, options?: FetchOptions<T>): Prom
     nextConfig.revalidate = revalidate;
   }
 
+  const headers = new Headers({ "Content-Type": "application/json" });
+
+  if (customHeaders) {
+    if (customHeaders instanceof Headers) {
+      customHeaders.forEach((value, key) => headers.set(key, value));
+    } else if (Array.isArray(customHeaders)) {
+      customHeaders.forEach(([key, value]) => headers.set(key, value));
+    } else {
+      Object.entries(customHeaders).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          headers.set(key, value.join(","));
+        } else if (value !== undefined) {
+          headers.set(key, String(value));
+        }
+      });
+    }
+  }
+
   const requestInit: RequestInit = {
     ...fetchOptions,
-    headers: {
-      "Content-Type": "application/json",
-      ...(customHeaders || {}),
-    },
+    headers,
   };
+
+  let authToken: string | null = null;
+  if (typeof window === "undefined") {
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      authToken = cookieStore.get("portal_token")?.value ?? null;
+    } catch (error) {
+      console.warn("[apiFetch] Unable to read cookies on server", error);
+    }
+  } else {
+    try {
+      authToken = window.localStorage?.getItem("portal_token") ?? null;
+      if (!authToken) {
+        const cookieMatch = document.cookie
+          .split(";")
+          .map((part) => part.trim())
+          .find((part) => part.startsWith("portal_token="));
+        if (cookieMatch) {
+          authToken = decodeURIComponent(cookieMatch.split("=")[1]);
+        }
+      }
+    } catch (error) {
+      console.warn("[apiFetch] Unable to resolve client token", error);
+    }
+  }
+
+  if (authToken) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
 
   if (cache) {
     requestInit.cache = cache;

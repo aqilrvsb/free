@@ -463,7 +463,7 @@ export function DomainExtensionManager({ initialTenants, initialExtensions, tena
             } else {
               message = raw;
             }
-          } catch (error) {
+          } catch {
             message = raw;
           }
         }

@@ -11,3 +11,4 @@ export * from './inbound-route.entity';
 export * from './ivr-menu.entity';
 export * from './ivr-menu-option.entity';
 export * from './system-recording.entity';
+export * from './portal-user.entity';

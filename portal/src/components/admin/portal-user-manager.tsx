@@ -1,0 +1,743 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { PaginatedResult, PortalUserSummary } from "@/lib/types";
+import { resolveClientBaseUrl } from "@/lib/browser";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
+import { Loader2, PencilLine, PlusCircle, RefreshCw, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface PortalUserManagerProps {
+  initialUsers: PaginatedResult<PortalUserSummary>;
+}
+
+interface PortalUserFormState {
+  email: string;
+  displayName: string;
+  role: "admin" | "viewer";
+  isActive: boolean;
+  password: string;
+}
+
+interface PasswordFormState {
+  password: string;
+  confirmPassword: string;
+}
+
+const defaultFormState: PortalUserFormState = {
+  email: "",
+  displayName: "",
+  role: "viewer",
+  isActive: true,
+  password: "",
+};
+
+const defaultPasswordForm: PasswordFormState = {
+  password: "",
+  confirmPassword: "",
+};
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const raw = document.cookie
+    .split(";")
+    .map((chunk) => chunk.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  if (!raw) {
+    return null;
+  }
+  const value = raw.slice(name.length + 1);
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function getPortalToken(): string | null {
+  return readCookie("portal_token");
+}
+
+function getPortalUserMeta(): PortalUserSummary | null {
+  const payload = readCookie("portal_user");
+  if (!payload) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(payload) as PortalUserSummary;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function extractErrorMessage(response: Response): Promise<string> {
+  try {
+    const cloned = response.clone();
+    const data = await cloned.json();
+    const message = Array.isArray(data?.message) ? data.message.join(", ") : data?.message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  } catch {}
+  try {
+    const text = await response.text();
+    if (text) {
+      return text;
+    }
+  } catch {}
+  return `Yêu cầu thất bại (${response.status})`;
+}
+
+function updatePortalUserCookie(user: PortalUserSummary) {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const secureFlag = window.location.protocol === "https:" ? "; Secure" : "";
+  const maxAge = 60 * 60 * 12; // 12 hours
+  document.cookie = `portal_user=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+  try {
+    window.localStorage.setItem("portal_user", JSON.stringify(user));
+  } catch (error) {
+    console.warn("[portal-user] Không thể đồng bộ localStorage", error);
+  }
+}
+
+export function PortalUserManager({ initialUsers }: PortalUserManagerProps) {
+  const PAGE_SIZE = initialUsers.pageSize || 10;
+  const apiBase = useMemo(
+    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
+    [],
+  );
+  const [data, setData] = useState<PaginatedResult<PortalUserSummary>>(initialUsers);
+  const [search, setSearch] = useState<string>("");
+  const [page, setPage] = useState<number>(initialUsers.page || 1);
+  const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<{ error: string | null; success: string | null }>({
+    error: null,
+    success: null,
+  });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
+  const [formState, setFormState] = useState<PortalUserFormState>(defaultFormState);
+  const [activeUser, setActiveUser] = useState<PortalUserSummary | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordTarget, setPasswordTarget] = useState<PortalUserSummary | null>(null);
+  const [passwordForm, setPasswordForm] = useState<PasswordFormState>(defaultPasswordForm);
+  const [resetting, setResetting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const currentUserMeta = useMemo(() => getPortalUserMeta(), []);
+
+  useEffect(() => {
+    setData(initialUsers);
+    setPage(initialUsers.page || 1);
+  }, [initialUsers]);
+
+  const buildHeaders = useCallback(
+    (isJson: boolean = false): HeadersInit => {
+      const headers: Record<string, string> = {};
+      if (isJson) {
+        headers["Content-Type"] = "application/json";
+      }
+      const token = getPortalToken();
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      return headers;
+    },
+    [],
+  );
+
+  const fetchUsers = useCallback(
+    async (targetPage: number, searchValue: string = search) => {
+      if (!apiBase) {
+        return;
+      }
+      setLoading(true);
+      setFeedback((prev) => ({ ...prev, error: null }));
+      try {
+        const params = new URLSearchParams({
+          page: String(Math.max(1, targetPage)),
+          pageSize: String(PAGE_SIZE),
+        });
+        if (searchValue.trim()) {
+          params.set("search", searchValue.trim());
+        }
+        const response = await fetch(`${apiBase}/portal-users?${params.toString()}`, {
+          method: "GET",
+          headers: buildHeaders(),
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(await extractErrorMessage(response));
+        }
+        const payload = (await response.json()) as PaginatedResult<PortalUserSummary>;
+        setData(payload);
+        setPage(payload.page);
+      } catch (error) {
+        setFeedback({
+          error: (error as Error).message || "Không thể tải danh sách người dùng",
+          success: null,
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [PAGE_SIZE, apiBase, buildHeaders, search],
+  );
+
+  const resetFormState = useCallback(() => {
+    setFormState(defaultFormState);
+    setActiveUser(null);
+    setDialogMode("create");
+  }, []);
+
+  const handleOpenCreate = () => {
+    resetFormState();
+    setDialogMode("create");
+    setDialogOpen(true);
+  };
+
+  const handleOpenEdit = (user: PortalUserSummary) => {
+    setActiveUser(user);
+    setFormState({
+      email: user.email,
+      displayName: user.displayName || "",
+      role: user.role,
+      isActive: user.isActive,
+      password: "",
+    });
+    setDialogMode("edit");
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!apiBase) {
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      email: formState.email.trim().toLowerCase(),
+      displayName: formState.displayName.trim() || undefined,
+      role: formState.role,
+      isActive: formState.isActive,
+    };
+
+    if (dialogMode === "create") {
+      if (!formState.password || formState.password.trim().length < 6) {
+        setFeedback({ error: "Mật khẩu phải có ít nhất 6 ký tự", success: null });
+        return;
+      }
+      payload.password = formState.password.trim();
+    }
+
+    setSaving(true);
+    setFeedback({ error: null, success: null });
+
+    try {
+      const url = dialogMode === "create" ? `${apiBase}/portal-users` : `${apiBase}/portal-users/${activeUser?.id}`;
+      const method = dialogMode === "create" ? "POST" : "PUT";
+
+      const response = await fetch(url, {
+        method,
+        headers: buildHeaders(true),
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response));
+      }
+
+      const saved = (await response.json()) as PortalUserSummary;
+      setDialogOpen(false);
+      setFeedback({
+        error: null,
+        success: dialogMode === "create" ? "Đã tạo người dùng portal thành công" : "Đã cập nhật thông tin người dùng",
+      });
+      resetFormState();
+      if (dialogMode === "create") {
+        await fetchUsers(1, search);
+      } else {
+        await fetchUsers(page, search);
+        if (currentUserMeta && saved.id === currentUserMeta.id) {
+          updatePortalUserCookie(saved);
+        }
+      }
+    } catch (error) {
+      setFeedback({ error: (error as Error).message || "Không thể lưu người dùng", success: null });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!apiBase || !passwordTarget) {
+      return;
+    }
+    if (!passwordForm.password || passwordForm.password.trim().length < 6) {
+      setFeedback({ error: "Mật khẩu mới phải có ít nhất 6 ký tự", success: null });
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirmPassword) {
+      setFeedback({ error: "Xác nhận mật khẩu không khớp", success: null });
+      return;
+    }
+
+    setResetting(true);
+    setFeedback({ error: null, success: null });
+    try {
+      const response = await fetch(`${apiBase}/portal-users/${passwordTarget.id}/reset-password`, {
+        method: "POST",
+        headers: buildHeaders(true),
+        credentials: "include",
+        body: JSON.stringify({ password: passwordForm.password.trim() }),
+      });
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response));
+      }
+      const updated = (await response.json()) as PortalUserSummary;
+      setFeedback({ error: null, success: "Đã đặt lại mật khẩu thành công" });
+      setPasswordDialogOpen(false);
+      setPasswordForm(defaultPasswordForm);
+      if (currentUserMeta && updated.id === currentUserMeta.id) {
+        updatePortalUserCookie(updated);
+      }
+    } catch (error) {
+      setFeedback({ error: (error as Error).message || "Không thể đặt lại mật khẩu", success: null });
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleDelete = async (user: PortalUserSummary) => {
+    if (!apiBase) {
+      return;
+    }
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn xoá tài khoản ${user.email}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(user.id);
+    setFeedback({ error: null, success: null });
+    try {
+      const response = await fetch(`${apiBase}/portal-users/${user.id}`, {
+        method: "DELETE",
+        headers: buildHeaders(),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response));
+      }
+      setFeedback({ error: null, success: "Đã xoá tài khoản portal" });
+      if (data.items.length === 1 && page > 1) {
+        await fetchUsers(page - 1, search);
+      } else {
+        await fetchUsers(page, search);
+      }
+    } catch (error) {
+      setFeedback({ error: (error as Error).message || "Không thể xoá tài khoản", success: null });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const openPasswordDialog = (user: PortalUserSummary) => {
+    setPasswordTarget(user);
+    setPasswordForm(defaultPasswordForm);
+    setPasswordDialogOpen(true);
+  };
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(data.total / PAGE_SIZE)), [data.total, PAGE_SIZE]);
+
+  return (
+    <div className="space-y-5">
+      <Card className="glass-surface border border-primary/10">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="text-base font-semibold text-foreground">Danh sách tài khoản portal</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Người dùng được cấp quyền đăng nhập vào PBX Portal để quản trị và theo dõi hệ thống.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <div className="flex w-full flex-1 gap-2">
+              <Input
+                placeholder="Tìm kiếm theo email, tên hoặc vai trò"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    void fetchUsers(1, event.currentTarget.value);
+                  }
+                }}
+                className="rounded-xl border border-border/70"
+              />
+              <Button
+                variant="secondary"
+                className="rounded-xl"
+                onClick={() => void fetchUsers(1, search)}
+                disabled={loading}
+              >
+                <RefreshCw className={cn("mr-2 h-4 w-4", loading ? "animate-spin" : undefined)} />
+                Lọc
+              </Button>
+            </div>
+            <Button
+              onClick={handleOpenCreate}
+              className="rounded-xl bg-primary text-primary-foreground shadow-primary/40"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Thêm người dùng
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {feedback.error ? (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {feedback.error}
+            </div>
+          ) : null}
+          {feedback.success ? (
+            <div className="rounded-xl border border-emerald-300/40 bg-emerald-100/20 px-4 py-3 text-sm text-emerald-700">
+              {feedback.success}
+            </div>
+          ) : null}
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/60">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead className="min-w-[220px]">Người dùng</TableHead>
+                  <TableHead>Vai trò</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead>Lần cuối đăng nhập</TableHead>
+                  <TableHead>Tạo lúc</TableHead>
+                  <TableHead className="w-[160px] text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                      {loading ? "Đang tải dữ liệu…" : "Chưa có tài khoản portal nào."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data.items.map((user) => {
+                    const lastLoginLabel = user.lastLoginAt
+                      ? formatDistanceToNow(new Date(user.lastLoginAt), { addSuffix: true, locale: vi })
+                      : "Chưa đăng nhập";
+                    const createdLabel = user.createdAt
+                      ? formatDistanceToNow(new Date(user.createdAt), { addSuffix: true, locale: vi })
+                      : "-";
+                    return (
+                      <TableRow key={user.id} className="hover:bg-muted/30">
+                        <TableCell className="space-y-1 align-middle">
+                          <div className="text-sm font-semibold text-foreground">{user.email}</div>
+                          <div className="text-xs text-muted-foreground">{user.displayName || "Không có tên hiển thị"}</div>
+                        </TableCell>
+                        <TableCell className="align-middle">
+                          <Badge variant={user.role === "admin" ? "default" : "secondary"} className="rounded-full">
+                            {user.role === "admin" ? "Quản trị" : "Quan sát"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="align-middle">
+                          <Badge
+                            variant={user.isActive ? "outline" : "destructive"}
+                            className={cn("rounded-full", user.isActive ? "border-emerald-400 text-emerald-600" : undefined)}
+                          >
+                            {user.isActive ? "Đang hoạt động" : "Bị vô hiệu"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="align-middle text-sm text-muted-foreground">{lastLoginLabel}</TableCell>
+                        <TableCell className="align-middle text-sm text-muted-foreground">{createdLabel}</TableCell>
+                        <TableCell className="align-middle text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-lg"
+                              onClick={() => handleOpenEdit(user)}
+                            >
+                              <PencilLine className="mr-1 h-4 w-4" />
+                              Sửa
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-lg"
+                              onClick={() => openPasswordDialog(user)}
+                            >
+                              <RefreshCw className="mr-1 h-4 w-4" />
+                              Mật khẩu
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-lg text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(user)}
+                              disabled={deletingId === user.id}
+                            >
+                              {deletingId === user.id ? (
+                                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="mr-1 h-4 w-4" />
+                              )}
+                              Xoá
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-3 text-sm sm:flex-row">
+            <span className="text-muted-foreground">
+              Trang {Math.min(page, totalPages)} / {totalPages} • Tổng {data.total} tài khoản
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                disabled={loading || page <= 1}
+                onClick={() => void fetchUsers(page - 1, search)}
+              >
+                Trước
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                disabled={loading || page >= totalPages}
+                onClick={() => void fetchUsers(page + 1, search)}
+              >
+                Tiếp
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            resetFormState();
+            setFeedback((prev) => ({ ...prev, error: null }));
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{dialogMode === "create" ? "Thêm người dùng portal" : "Cập nhật người dùng"}</DialogTitle>
+            <DialogDescription>
+              {dialogMode === "create"
+                ? "Tạo tài khoản mới để truy cập PBX Portal. Người dùng sẽ đăng nhập bằng email và mật khẩu được cấp."
+                : `Chỉnh sửa thông tin hiển thị và quyền hạn của ${activeUser?.email}.`}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="portal-user-email">Email</Label>
+                <Input
+                  id="portal-user-email"
+                  type="email"
+                  required
+                  value={formState.email}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
+                  className="rounded-lg"
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="portal-user-display">Tên hiển thị</Label>
+                <Input
+                  id="portal-user-display"
+                  value={formState.displayName}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, displayName: event.target.value }))}
+                  placeholder="VD: Nguyễn Văn A"
+                  className="rounded-lg"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Vai trò</Label>
+                <Select
+                  value={formState.role}
+                  onValueChange={(value) =>
+                    setFormState((prev) => ({ ...prev, role: value as PortalUserFormState["role"] }))
+                  }
+                >
+                  <SelectTrigger className="rounded-lg">
+                    <SelectValue placeholder="Chọn vai trò" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Quản trị (toàn quyền)</SelectItem>
+                    <SelectItem value="viewer">Quan sát (chỉ xem)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Trạng thái</Label>
+                <Select
+                  value={formState.isActive ? "active" : "inactive"}
+                  onValueChange={(value) =>
+                    setFormState((prev) => ({ ...prev, isActive: value === "active" }))
+                  }
+                >
+                  <SelectTrigger className="rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Đang hoạt động</SelectItem>
+                    <SelectItem value="inactive">Vô hiệu hoá</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {dialogMode === "create" ? (
+              <div className="space-y-2">
+                <Label htmlFor="portal-user-password">Mật khẩu tạm</Label>
+                <Input
+                  id="portal-user-password"
+                  type="password"
+                  required
+                  minLength={6}
+                  value={formState.password}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, password: event.target.value }))}
+                  placeholder="Ít nhất 6 ký tự"
+                  className="rounded-lg"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Người dùng nên thay đổi mật khẩu sau lần đăng nhập đầu tiên.
+                </p>
+              </div>
+            ) : null}
+
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-xl sm:w-auto"
+                onClick={() => setDialogOpen(false)}
+                disabled={saving}
+              >
+                Huỷ
+              </Button>
+              <Button type="submit" className="w-full rounded-xl sm:w-auto" disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang lưu…
+                  </>
+                ) : dialogMode === "create" ? (
+                  "Tạo người dùng"
+                ) : (
+                  "Lưu thay đổi"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={passwordDialogOpen}
+        onOpenChange={(open) => {
+          setPasswordDialogOpen(open);
+          if (!open) {
+            setPasswordTarget(null);
+            setPasswordForm(defaultPasswordForm);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Đặt lại mật khẩu</DialogTitle>
+            <DialogDescription>
+              Cập nhật mật khẩu mới cho người dùng {passwordTarget?.email}. Mật khẩu cần tối thiểu 6 ký tự.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleResetPassword}>
+            <div className="space-y-2">
+              <Label htmlFor="reset-password">Mật khẩu mới</Label>
+              <Input
+                id="reset-password"
+                type="password"
+                minLength={6}
+                required
+                value={passwordForm.password}
+                onChange={(event) => setPasswordForm((prev) => ({ ...prev, password: event.target.value }))}
+                className="rounded-lg"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reset-password-confirm">Xác nhận mật khẩu</Label>
+              <Input
+                id="reset-password-confirm"
+                type="password"
+                minLength={6}
+                required
+                value={passwordForm.confirmPassword}
+                onChange={(event) =>
+                  setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                }
+                className="rounded-lg"
+              />
+            </div>
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-xl sm:w-auto"
+                onClick={() => setPasswordDialogOpen(false)}
+                disabled={resetting}
+              >
+                Huỷ
+              </Button>
+              <Button type="submit" className="w-full rounded-xl sm:w-auto" disabled={resetting}>
+                {resetting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang cập nhật…
+                  </>
+                ) : (
+                  "Lưu mật khẩu"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

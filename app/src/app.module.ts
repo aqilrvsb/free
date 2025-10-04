@@ -24,6 +24,7 @@ import {
   IvrMenuEntity,
   IvrMenuOptionEntity,
   SystemRecordingEntity,
+  PortalUserEntity,
 } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
@@ -44,6 +45,15 @@ import { IvrMenuService } from './ivr-menu.service';
 import { IvrMenuController } from './ivr-menu.controller';
 import { SystemRecordingsService } from './system-recordings.service';
 import { SystemRecordingsController } from './system-recordings.controller';
+import { PortalUsersController } from './portal-users.controller';
+import { PortalUsersService } from './portal-users.service';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { JwtStrategy } from './jwt.strategy';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { PassportModule } from '@nestjs/passport';
+import { JwtModule } from '@nestjs/jwt';
+import { RolesGuard } from './roles.guard';
 
 @Module({
   imports: [
@@ -71,6 +81,7 @@ import { SystemRecordingsController } from './system-recordings.controller';
           IvrMenuEntity,
           IvrMenuOptionEntity,
           SystemRecordingEntity,
+          PortalUserEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -94,7 +105,18 @@ import { SystemRecordingsController } from './system-recordings.controller';
       IvrMenuEntity,
       IvrMenuOptionEntity,
       SystemRecordingEntity,
+      PortalUserEntity,
     ]),
+    PassportModule.register({ defaultStrategy: 'jwt', session: false }),
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get('PORTAL_JWT_SECRET', 'change-me'),
+        signOptions: {
+          expiresIn: config.get('PORTAL_JWT_EXPIRES', '1h'),
+        },
+      }),
+    }),
   ],
   controllers: [
     FsXmlController,
@@ -109,6 +131,8 @@ import { SystemRecordingsController } from './system-recordings.controller';
     SystemRecordingsController,
     DialplanConfigController,
     SettingsController,
+    PortalUsersController,
+    AuthController,
   ],
   providers: [
     FsService,
@@ -127,6 +151,11 @@ import { SystemRecordingsController } from './system-recordings.controller';
     SystemRecordingsService,
     SettingsService,
     DialplanConfigService,
+    PortalUsersService,
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
   ],
 })
 export class AppModule {}

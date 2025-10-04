@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -28,11 +27,14 @@ import {
   RadioTower,
   ScrollText,
   UserCog,
+  Users,
   Waves,
   Settings,
   Workflow,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+
+type NavRole = "admin" | "viewer";
 
 interface NavItem {
   title: string
@@ -40,6 +42,7 @@ interface NavItem {
   href: string
   icon: LucideIcon
   exact?: boolean
+  roles?: NavRole[]
 }
 
 const NAV_SECTIONS: Array<{
@@ -107,48 +110,63 @@ const NAV_SECTIONS: Array<{
           description: "Thiết lập tenant và máy nhánh",
           href: "/fs/manage",
           icon: UserCog,
+          roles: ["admin"],
+        },
+        {
+          title: "Portal Users",
+          description: "Quản lý tài khoản đăng nhập",
+          href: "/admin/users",
+          icon: Users,
+          roles: ["admin"],
         },
         {
           title: "Gateway / Trunk",
           description: "Kết nối Telco bên ngoài",
           href: "/fs/gateways",
           icon: Globe2,
+          roles: ["admin"],
         },
         {
           title: "Dialplan",
           description: "Quy tắc gọi nội bộ & outbound",
           href: "/fs/dialplan",
           icon: GitBranch,
+          roles: ["admin"],
         },
         {
           title: "Outbound Routing",
           description: "Quy tắc gọi ra ngoài",
           href: "/fs/outbound",
           icon: RadioTower,
+          roles: ["admin"],
         },
         {
           title: "Inbound Routing",
           description: "Định tuyến DID vào",
           href: "/fs/inbound",
           icon: PhoneIncoming,
+          roles: ["admin"],
         },
         {
           title: "IVR",
           description: "Kịch bản trả lời tự động",
           href: "/fs/ivr",
           icon: Workflow,
+          roles: ["admin"],
         },
         {
           title: "FS Settings",
           description: "Điều chỉnh port & kết nối",
           href: "/fs/settings",
           icon: Settings,
+          roles: ["admin"],
         },
         {
           title: "System Recordings",
           description: "Kho âm thanh dùng chung",
           href: "/fs/system-recordings",
           icon: FileAudio,
+          roles: ["admin"],
         },
       ],
     },
@@ -164,8 +182,32 @@ function isActivePath(pathname: string, item: NavItem) {
   return pathname === item.href || pathname.startsWith(`${item.href}/`)
 }
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  userRole?: NavRole
+  isAuthenticated?: boolean
+}
+
+function filterNavItems(items: NavItem[], userRole?: NavRole, isAuthenticated?: boolean) {
+  if (!isAuthenticated) {
+    return []
+  }
+  return items.filter((item) => {
+    if (!item.roles || item.roles.length === 0) {
+      return true
+    }
+    if (!userRole) {
+      return false
+    }
+    return item.roles.includes(userRole)
+  })
+}
+
+export function AppSidebar({ userRole, isAuthenticated }: AppSidebarProps) {
   const pathname = usePathname()
+  const sections = NAV_SECTIONS.map((section) => ({
+    label: section.label,
+    items: filterNavItems(section.items, userRole, isAuthenticated),
+  })).filter((section) => section.items.length > 0)
 
   return (
     <Sidebar collapsible="icon" className="backdrop-blur-xl">
@@ -195,7 +237,7 @@ export function AppSidebar() {
         />
       </SidebarHeader>
       <SidebarContent className="space-y-6 px-2 pb-6">
-        {NAV_SECTIONS.map((section, index) => (
+        {sections.map((section, index) => (
           <SidebarGroup key={section.label}>
             <SidebarGroupLabel className="px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/65">
               {section.label}

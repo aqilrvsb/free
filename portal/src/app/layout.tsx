@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { cookies } from "next/headers";
+import Link from "next/link";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { TimezoneProvider, TimezoneSync } from "@/components/common/timezone-provider";
 import { getServerTimezone } from "@/lib/server-timezone";
+import { UserAccountMenu } from "@/components/layout/user-account-menu";
+import { parsePortalUserCookie } from "@/lib/auth";
+import { apiFetch } from "@/lib/api";
+import type { PortalUserSummary } from "@/lib/types";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,6 +34,33 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const timezone = await getServerTimezone();
+  const cookieStore = await cookies();
+  const token = cookieStore.get("portal_token")?.value ?? null;
+  const rawUser = cookieStore.get("portal_user")?.value ?? null;
+  let currentUser: PortalUserSummary | null = parsePortalUserCookie(rawUser);
+
+  if (!currentUser && token) {
+    currentUser = await apiFetch<PortalUserSummary | null>("/auth/profile", {
+      cache: "no-store",
+      suppressError: true,
+      fallbackValue: null,
+    });
+  }
+
+  const isAuthenticated = Boolean(token && currentUser);
+  const isAdmin = currentUser?.role === "admin";
+
+  if (!isAuthenticated) {
+    return (
+      <html lang="vi">
+        <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
+          <main className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-12">
+            <div className="w-full max-w-xl">{children}</div>
+          </main>
+        </body>
+      </html>
+    );
+  }
 
   return (
     <html lang="vi">
@@ -36,7 +68,7 @@ export default async function RootLayout({
         <TimezoneProvider initialTimezone={timezone}>
           <TimezoneSync />
           <SidebarProvider>
-            <AppSidebar />
+            <AppSidebar userRole={currentUser?.role} isAuthenticated={isAuthenticated} />
             <SidebarInset className="relative">
               <div className="relative flex min-h-screen flex-col">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_50%_-20%,rgba(234,88,12,0.18),transparent),radial-gradient(120%_120%_at_25%_20%,rgba(249,115,22,0.12),transparent)]" />
@@ -62,9 +94,16 @@ export default async function RootLayout({
                         </span>
                         <span className="hidden md:inline">Tỷ lệ uptime 99.98%</span>
                       </div>
-                      <Button asChild variant="default" className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold shadow-primary/25">
-                        <Link href="/fs/manage">Tạo tenant mới</Link>
-                      </Button>
+                      {isAdmin ? (
+                        <Button
+                          asChild
+                          variant="default"
+                          className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold shadow-primary/25"
+                        >
+                          <Link href="/fs/manage">Tạo tenant mới</Link>
+                        </Button>
+                      ) : null}
+                      <UserAccountMenu user={currentUser} />
                     </div>
                   </div>
                 </header>
