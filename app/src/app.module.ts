@@ -54,6 +54,8 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { RolesGuard } from './roles.guard';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor';
 
 @Module({
   imports: [
@@ -156,6 +158,10 @@ import { RolesGuard } from './roles.guard';
     JwtStrategy,
     JwtAuthGuard,
     RolesGuard,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpLoggingInterceptor,
+    },
   ],
 })
 export class AppModule {}
