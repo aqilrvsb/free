@@ -36,7 +36,7 @@ export class PortalUserEntity {
   @Column({ name: 'permissions', type: 'json', nullable: true })
   permissions?: string[] | null;
 
-  @ManyToOne(() => PortalRoleEntity, (role) => role.users, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => PortalRoleEntity, (role) => role.users, { nullable: false, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'role_key', referencedColumnName: 'key' })
   roleDefinition?: PortalRoleEntity | null;
 

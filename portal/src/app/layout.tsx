@@ -2,10 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cookies } from "next/headers";
-import Link from "next/link";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 import { TimezoneProvider, TimezoneSync } from "@/components/common/timezone-provider";
 import { getServerTimezone } from "@/lib/server-timezone";
 import { UserAccountMenu } from "@/components/layout/user-account-menu";
@@ -50,7 +48,6 @@ export default async function RootLayout({
 
   const permissions = resolvePermissions(currentUser);
   const isAuthenticated = Boolean(token && currentUser && currentUser.isActive !== false);
-  const isAdmin = currentUser?.role === "admin";
 
   if (!isAuthenticated) {
     return (
@@ -100,16 +97,7 @@ export default async function RootLayout({
                         </span>
                         <span className="hidden md:inline">Tỷ lệ uptime 99.98%</span>
                       </div>
-                      {isAdmin ? (
-                        <Button
-                          asChild
-                          variant="default"
-                          className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold shadow-primary/25"
-                        >
-                          <Link href="/fs/manage">Tạo tenant mới</Link>
-                        </Button>
-                      ) : null}
-                      <UserAccountMenu user={currentUser} />
+                      <UserAccountMenu user={currentUser} permissions={permissions} />
                     </div>
                   </div>
                 </header>

@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import type { LucideIcon } from "lucide-react"
 import {
@@ -247,6 +248,7 @@ function filterNavItems(
 
 export function AppSidebar({ userRole, isAuthenticated, permissions }: AppSidebarProps) {
   const pathname = usePathname()
+  const { open } = useSidebar()
   const sections = NAV_SECTIONS.map((section) => ({
     label: section.label,
     items: filterNavItems(section.items, userRole, isAuthenticated, permissions),
@@ -254,8 +256,8 @@ export function AppSidebar({ userRole, isAuthenticated, permissions }: AppSideba
 
   return (
     <Sidebar collapsible="icon" className="backdrop-blur-xl">
-      <SidebarHeader className="gap-4 px-3 pb-4 pt-6">
-        <div className="glass-surface relative overflow-hidden rounded-2xl px-3 py-3">
+      <SidebarHeader data-active={open} className="gap-4 data-[active=true]:px-3 data-[active=false]:px-1 pb-4 pt-6">
+        {open ? <div className="glass-surface relative overflow-hidden rounded-2xl px-3 py-3">
           <div className="absolute inset-0 bg-gradient-to-r from-primary/25 via-orange-400/15 to-transparent" />
           <div className="relative flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -273,7 +275,9 @@ export function AppSidebar({ userRole, isAuthenticated, permissions }: AppSideba
               Stable · v1.0
             </Badge>
           </div>
-        </div>
+        </div> : <div className="flex size-10 items-center justify-center rounded-full border border-primary/40 bg-primary/90 text-primary-foreground font-semibold shadow-lg shadow-primary/30">
+          PBX
+        </div>}
         <SidebarInput
           placeholder="Tìm kiếm (Ctrl+B)"
           className="hidden h-9 rounded-xl border border-border/70 bg-white/70 text-sm placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/60 md:block"
