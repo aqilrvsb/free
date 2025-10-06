@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiTags } from '@nestjs/swagger';
 import {
   RecordingStorageConfigDto,
   SettingsService,
@@ -19,6 +19,7 @@ export class SettingsController {
   }
 
   @Put('recordings-storage')
+  @ApiBody({ description: 'Cấu hình lưu trữ ghi âm', type: Object })
   async updateRecordingStorage(@Body() body: RecordingStorageConfigDto) {
     return this.settingsService.updateRecordingStorageConfig(body);
   }
@@ -29,6 +30,7 @@ export class SettingsController {
   }
 
   @Put('fs-ports')
+  @ApiBody({ description: 'Cập nhật cấu hình port FreeSWITCH', type: Object })
   async updateFsPorts(@Body() body: Partial<FsPortConfigDto>): Promise<FsPortConfigUpdateResult> {
     return this.settingsService.updateFsPortConfig(body);
   }

@@ -1,17 +1,4 @@
-import {
-  Body,
-  Controller,
-  DefaultValuePipe,
-  Delete,
-  Get,
-  Param,
-  ParseIntPipe,
-  Post,
-  Put,
-  Query,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PortalUsersService } from './portal-users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -19,6 +6,13 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import type { Request } from 'express';
 import { SwaggerTags } from '../swagger/swagger-tags';
+import {
+  CreatePortalUserDto,
+  ListPortalUsersQueryDto,
+  PortalUserIdParamDto,
+  ResetPortalUserPasswordDto,
+  UpdatePortalUserDto,
+} from './dto';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -46,70 +40,50 @@ export class PortalUsersController {
   }
 
   @Get('/portal-users')
-  async listPortalUsers(
-    @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number,
-    @Query('pageSize', new DefaultValuePipe(0), ParseIntPipe) pageSize: number,
-    @Query('search') search?: string,
-    @Req() req?: AuthenticatedRequest,
-  ) {
+  async listPortalUsers(@Query() query: ListPortalUsersQueryDto, @Req() req?: AuthenticatedRequest) {
+    const pageRaw = Number(query.page ?? 0);
+    const pageSizeRaw = Number(query.pageSize ?? 0);
+    const page = Number.isFinite(pageRaw) ? pageRaw : 0;
+    const pageSize = Number.isFinite(pageSizeRaw) ? pageSizeRaw : 0;
+    const search = query.search?.trim();
     const scope = this.resolveScope(req);
     if (page > 0 && pageSize > 0) {
-      return this.portalUsersService.listUsersPaginated({ page, pageSize, search: search?.trim() }, scope);
+      return this.portalUsersService.listUsersPaginated({ page, pageSize, search }, scope);
     }
-    return this.portalUsersService.listUsers({ search: search?.trim() }, scope);
+    return this.portalUsersService.listUsers({ search }, scope);
   }
 
   @Get('/portal-users/:id')
-  async getPortalUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.portalUsersService.getUser(id, this.resolveScope(req));
+  async getPortalUser(@Param() params: PortalUserIdParamDto, @Req() req: AuthenticatedRequest) {
+    return this.portalUsersService.getUser(params.id, this.resolveScope(req));
   }
 
   @Post('/portal-users')
-  async createPortalUser(
-    @Body()
-    body: {
-      email: string;
-      password: string;
-      displayName?: string;
-      role?: string;
-      isActive?: boolean;
-      permissions?: string[];
-      tenantIds?: string[];
-    },
-    @Req() req: AuthenticatedRequest,
-  ) {
+  async createPortalUser(@Body() body: CreatePortalUserDto, @Req() req: AuthenticatedRequest) {
     return this.portalUsersService.createUser(body, this.resolveScope(req));
   }
 
   @Put('/portal-users/:id')
   async updatePortalUser(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      email?: string;
-      displayName?: string | null;
-      role?: string;
-      isActive?: boolean;
-      permissions?: string[];
-      tenantIds?: string[] | null;
-    },
+    @Param() params: PortalUserIdParamDto,
+    @Body() body: UpdatePortalUserDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.portalUsersService.updateUser(id, body, this.resolveScope(req));
+    return this.portalUsersService.updateUser(params.id, body, this.resolveScope(req));
   }
 
   @Post('/portal-users/:id/reset-password')
   async resetPassword(
-    @Param('id') id: string,
-    @Body() body: { password: string },
+    @Param() params: PortalUserIdParamDto,
+    @Body() body: ResetPortalUserPasswordDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.portalUsersService.resetPassword(id, body.password, this.resolveScope(req));
+    return this.portalUsersService.resetPassword(params.id, body.password, this.resolveScope(req));
   }
 
   @Delete('/portal-users/:id')
-  async deletePortalUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    await this.portalUsersService.deleteUser(id, this.resolveScope(req));
+  async deletePortalUser(@Param() params: PortalUserIdParamDto, @Req() req: AuthenticatedRequest) {
+    await this.portalUsersService.deleteUser(params.id, this.resolveScope(req));
     return { success: true };
   }
 }

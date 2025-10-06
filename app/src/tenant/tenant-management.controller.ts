@@ -1,17 +1,4 @@
-import {
-  Body,
-  Controller,
-  DefaultValuePipe,
-  Delete,
-  Get,
-  Param,
-  ParseIntPipe,
-  Post,
-  Put,
-  Query,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { TenantManagementService } from './tenant-management.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -19,6 +6,16 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import type { Request } from 'express';
 import { SwaggerTags } from '../swagger/swagger-tags';
+import {
+  CreateExtensionDto,
+  CreateTenantDto,
+  ExtensionIdParamDto,
+  ListExtensionsQueryDto,
+  ListTenantsQueryDto,
+  TenantIdParamDto,
+  UpdateExtensionDto,
+  UpdateTenantDto,
+} from './dto';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -46,17 +43,15 @@ export class TenantManagementController {
   }
 
   @Get('/tenants')
-  async listTenants(
-    @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number,
-    @Query('pageSize', new DefaultValuePipe(0), ParseIntPipe) pageSize: number,
-    @Query('search') search?: string,
-    @Req() req?: AuthenticatedRequest,
-  ) {
+  async listTenants(@Query() query: ListTenantsQueryDto, @Req() req?: AuthenticatedRequest) {
+    const page = Number(query.page ?? 0) || 0;
+    const pageSize = Number(query.pageSize ?? 0) || 0;
+    const search = query.search?.trim();
     const scope = this.resolveScope(req);
     if (page > 0 && pageSize > 0) {
-      return this.managementService.listTenantsPaginated({ page, pageSize, search: search?.trim() }, scope);
+      return this.managementService.listTenantsPaginated({ page, pageSize, search }, scope);
     }
-    return this.managementService.listTenants({ search: search?.trim() }, scope);
+    return this.managementService.listTenants({ search }, scope);
   }
 
   @Get('/tenants/options')
@@ -71,96 +66,66 @@ export class TenantManagementController {
 
   @Roles('super_admin')
   @Post('/tenants')
-  async createTenant(
-    @Body()
-    body: {
-      id?: string;
-      name: string;
-      domain: string;
-      internalPrefix?: string;
-      voicemailPrefix?: string;
-      pstnGateway?: string;
-      enableE164?: boolean;
-      codecString?: string;
-    },
-  ) {
+  async createTenant(@Body() body: CreateTenantDto) {
     return this.managementService.createTenant(body);
   }
 
   @Put('/tenants/:id')
   async updateTenant(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      name?: string;
-      domain?: string;
-      internalPrefix?: string;
-      voicemailPrefix?: string;
-      pstnGateway?: string;
-      enableE164?: boolean;
-      codecString?: string;
-    },
+    @Param() params: TenantIdParamDto,
+    @Body() body: UpdateTenantDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.managementService.updateTenant(id, body, this.resolveScope(req));
+    return this.managementService.updateTenant(params.id, body, this.resolveScope(req));
   }
 
   @Roles('super_admin')
   @Delete('/tenants/:id')
-  async deleteTenant(@Param('id') id: string) {
-    await this.managementService.deleteTenant(id);
+  async deleteTenant(@Param() params: TenantIdParamDto) {
+    await this.managementService.deleteTenant(params.id);
     return { success: true };
   }
 
   @Get('/extensions')
-  async listExtensions(
-    @Query('tenantId') tenantId?: string,
-    @Query('search') search?: string,
-    @Query('page', new DefaultValuePipe(0), ParseIntPipe) page: number = 0,
-    @Query('pageSize', new DefaultValuePipe(0), ParseIntPipe) pageSize: number = 0,
-    @Req() req?: AuthenticatedRequest,
-  ) {
-    const normalizedTenantId = tenantId?.trim() || undefined;
-    const normalizedSearch = search?.trim() || undefined;
+  async listExtensions(@Query() query: ListExtensionsQueryDto, @Req() req?: AuthenticatedRequest) {
+    const tenantId = query.tenantId?.trim() || undefined;
+    const search = query.search?.trim() || undefined;
+    const page = Number(query.page ?? 0) || 0;
+    const pageSize = Number(query.pageSize ?? 0) || 0;
     const scope = this.resolveScope(req);
     if (page > 0 && pageSize > 0) {
       return this.managementService.listExtensionsPaginated({
-        tenantId: normalizedTenantId,
-        search: normalizedSearch,
+        tenantId,
+        search,
         page,
         pageSize,
       }, scope);
     }
-    return this.managementService.listExtensions(normalizedTenantId, normalizedSearch, scope);
+    return this.managementService.listExtensions(tenantId, search, scope);
   }
 
   @Post('/extensions')
-  async createExtension(
-    @Body()
-    body: { id: string; tenantId: string; password?: string; displayName?: string },
-    @Req() req: AuthenticatedRequest,
-  ) {
+  async createExtension(@Body() body: CreateExtensionDto, @Req() req: AuthenticatedRequest) {
     return this.managementService.createExtension(body, this.resolveScope(req));
   }
 
   @Put('/extensions/:id')
   async updateExtension(
-    @Param('id') id: string,
-    @Body()
-    body: { password?: string; displayName?: string },
+    @Param() params: ExtensionIdParamDto,
+    @Body() body: UpdateExtensionDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.managementService.updateExtension(id, body, this.resolveScope(req));
+    return this.managementService.updateExtension(params.id, body, this.resolveScope(req));
   }
 
   @Delete('/extensions/:id')
-  async deleteExtension(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    await this.managementService.deleteExtension(id, this.resolveScope(req));
+  async deleteExtension(@Param() params: ExtensionIdParamDto, @Req() req: AuthenticatedRequest) {
+    await this.managementService.deleteExtension(params.id, this.resolveScope(req));
     return { success: true };
   }
 
   @Get('/extensions/:id/password')
-  async getExtensionSecret(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.managementService.getExtensionSecret(id, this.resolveScope(req));
+  async getExtensionSecret(@Param() params: ExtensionIdParamDto, @Req() req: AuthenticatedRequest) {
+    return this.managementService.getExtensionSecret(params.id, this.resolveScope(req));
   }
 }

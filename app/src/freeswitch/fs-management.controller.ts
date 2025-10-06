@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FsManagementService } from './fs-management.service';
 import { SwaggerTags } from '../swagger/swagger-tags';
+import { ChannelUuidParamDto, SofiaProfileParamDto, SofiaRegistrationsQueryDto } from './dto';
 
 @ApiTags(SwaggerTags.FreeSWITCH)
 @Controller('fs')
@@ -20,12 +21,14 @@ export class FsManagementController {
 
   @Get('sofia/:profile/registrations')
   async sofiaRegistrations(
-    @Param('profile') profile: string,
-    @Query('tenantId') tenantId?: string,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
+    @Param() params: SofiaProfileParamDto,
+    @Query() query: SofiaRegistrationsQueryDto,
   ) {
-    return this.fsManagementService.getSofiaRegistrations(profile, { tenantId, status, search });
+    return this.fsManagementService.getSofiaRegistrations(params.profile, {
+      tenantId: query.tenantId,
+      status: query.status,
+      search: query.search,
+    });
   }
 
   @Get('channels')
@@ -35,8 +38,8 @@ export class FsManagementController {
 
   @Post('channels/:uuid/hangup')
   @HttpCode(HttpStatus.ACCEPTED)
-  async hangup(@Param('uuid') uuid: string) {
-    await this.fsManagementService.hangupCall(uuid);
+  async hangup(@Param() params: ChannelUuidParamDto) {
+    await this.fsManagementService.hangupCall(params.uuid);
     return { success: true };
   }
 }

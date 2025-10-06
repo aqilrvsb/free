@@ -1,15 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  ForbiddenException,
-  Get,
-  Param,
-  Post,
-  Put,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PortalRolesService } from './portal-roles.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -17,6 +6,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import type { Request } from 'express';
 import { SwaggerTags } from '../swagger/swagger-tags';
+import { CreatePortalRoleDto, PortalRoleKeyParamDto, UpdatePortalRoleDto } from './dto';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -49,7 +39,8 @@ export class PortalRolesController {
 
   @Roles('super_admin', 'tenant_admin')
   @Get('/portal-roles/:key')
-  async getRole(@Param('key') key: string, @Req() req: AuthenticatedRequest) {
+  async getRole(@Param() params: PortalRoleKeyParamDto, @Req() req: AuthenticatedRequest) {
+    const { key } = params;
     if (!this.isSuperAdmin(req) && key === 'super_admin') {
       throw new ForbiddenException('Không có quyền xem role này');
     }
@@ -58,41 +49,25 @@ export class PortalRolesController {
 
   @Roles('super_admin')
   @Post('/portal-roles')
-  async createRole(
-    @Body()
-    body: {
-      key: string;
-      name: string;
-      description?: string;
-      permissions?: string[];
-    },
-  ) {
+  async createRole(@Body() body: CreatePortalRoleDto) {
     return this.rolesService.createRole({
       key: body.key,
       name: body.name,
       description: body.description,
-      permissions: body.permissions || [],
+      permissions: body.permissions,
     });
   }
 
   @Roles('super_admin')
   @Put('/portal-roles/:key')
-  async updateRole(
-    @Param('key') key: string,
-    @Body()
-    body: {
-      name?: string;
-      description?: string | null;
-      permissions?: string[];
-    },
-  ) {
-    return this.rolesService.updateRole(key, body);
+  async updateRole(@Param() params: PortalRoleKeyParamDto, @Body() body: UpdatePortalRoleDto) {
+    return this.rolesService.updateRole(params.key, body);
   }
 
   @Roles('super_admin')
   @Delete('/portal-roles/:key')
-  async deleteRole(@Param('key') key: string) {
-    await this.rolesService.deleteRole(key);
+  async deleteRole(@Param() params: PortalRoleKeyParamDto) {
+    await this.rolesService.deleteRole(params.key);
     return { success: true };
   }
 }

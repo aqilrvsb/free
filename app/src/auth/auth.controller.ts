@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import type { Request } from 'express';
 import { SwaggerTags } from '../swagger/swagger-tags';
+import { LoginRequestDto } from './dto/login-request.dto';
 
 @ApiTags(SwaggerTags.Auth)
 @Controller()
@@ -11,13 +12,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('/auth/login')
-  async login(
-    @Body()
-    body: {
-      email: string;
-      password: string;
-    },
-  ) {
+  async login(@Body() body: LoginRequestDto) {
     const email = body.email?.trim().toLowerCase() || '';
     const password = body.password || '';
     return this.authService.login(email, password);

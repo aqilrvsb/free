@@ -4,6 +4,7 @@ import { Request } from 'express';
 import { FsService } from './fs.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
 import { SwaggerTags } from '../swagger/swagger-tags';
+import { FsXmlGetQueryDto, FsXmlPostBodyDto } from './dto';
 
 @ApiTags(SwaggerTags.FreeSWITCH)
 @Controller()
@@ -18,13 +19,10 @@ export class FsXmlController {
   @Get('/fs/xml')
   @Header('Content-Type', 'application/xml')
   async handle(
-    @Query('section') section: string,
-    @Query('context') context?: string,
-    @Query('destination_number') destination_number?: string,
-    @Query('domain') domain?: string,
-    @Query('user') user?: string,
+    @Query() query: FsXmlGetQueryDto,
     @Req() req?: Request,
   ): Promise<string> {
+    const { section, context, destination_number, domain, user } = query;
     if (req) {
       // eslint-disable-next-line no-console
       console.log('[fs/xml][query]', req.query);
@@ -35,7 +33,7 @@ export class FsXmlController {
   @Post('/fs/xml')
   @HttpCode(200)
   @Header('Content-Type', 'application/xml')
-  async handlePost(@Body() body: Record<string, string>, @Req() req: Request): Promise<string> {
+  async handlePost(@Body() body: FsXmlPostBodyDto, @Req() req: Request): Promise<string> {
     if (req?.body) {
       // eslint-disable-next-line no-console
       console.log('[fs/xml][body]', req.body);

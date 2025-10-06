@@ -1,18 +1,8 @@
-import {
-  Body,
-  Controller,
-  DefaultValuePipe,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  ParseIntPipe,
-  Post,
-  Query,
-} from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { ApiBody, ApiTags } from '@nestjs/swagger';
 import { CdrService } from './cdr.service';
 import { SwaggerTags } from '../swagger/swagger-tags';
+import { CallUuidParamDto, CdrIdParamDto, ListCdrQueryDto } from './dto';
 
 @ApiTags(SwaggerTags.Telephony)
 @Controller()
@@ -21,28 +11,29 @@ export class CdrController {
 
   @Post('/fs/cdr')
   @HttpCode(HttpStatus.ACCEPTED)
+  @ApiBody({
+    description: 'Payload CDR thô do FreeSWITCH gửi tới',
+    schema: {
+      type: 'object',
+      additionalProperties: true,
+    },
+  })
   async ingest(@Body() body: any): Promise<{ accepted: boolean }> {
     await this.cdrService.ingestCdr(body);
     return { accepted: true };
   }
 
   @Get('/cdr')
-  async list(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('pageSize', new DefaultValuePipe(20), ParseIntPipe) pageSize: number,
-    @Query('tenantId') tenantId?: string,
-    @Query('direction') direction?: string,
-    @Query('callUuid') callUuid?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    const fromDate = from ? new Date(from) : undefined;
-    const toDate = to ? new Date(to) : undefined;
+  async list(@Query() query: ListCdrQueryDto) {
+    const page = Number(query.page ?? 1) || 1;
+    const pageSize = Number(query.pageSize ?? 20) || 20;
+    const fromDate = query.from ? new Date(query.from) : undefined;
+    const toDate = query.to ? new Date(query.to) : undefined;
 
     return this.cdrService.listCdrs({
-      tenantId: tenantId?.trim() || undefined,
-      direction: direction?.trim() || undefined,
-      callUuid: callUuid?.trim() || undefined,
+      tenantId: query.tenantId?.trim() || undefined,
+      direction: query.direction?.trim() || undefined,
+      callUuid: query.callUuid?.trim() || undefined,
       fromDate: fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : undefined,
       toDate: toDate && !Number.isNaN(toDate.getTime()) ? toDate : undefined,
       page,
@@ -51,13 +42,13 @@ export class CdrController {
   }
 
   @Get('/cdr/:id')
-  async getById(@Param('id') id: string) {
-    return this.cdrService.getById(id);
+  async getById(@Param() params: CdrIdParamDto) {
+    return this.cdrService.getById(params.id);
   }
 
   @Get('/cdr/call/:callUuid')
-  async getByCallUuid(@Param('callUuid') callUuid: string) {
-    const record = await this.cdrService.getByCallUuid(callUuid);
+  async getByCallUuid(@Param() params: CallUuidParamDto) {
+    const record = await this.cdrService.getByCallUuid(params.callUuid);
     if (!record) {
       return {};
     }
