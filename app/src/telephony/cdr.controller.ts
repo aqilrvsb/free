@@ -1,17 +1,20 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   Post,
   Query,
-  DefaultValuePipe,
-  ParseIntPipe,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { CdrService } from './cdr.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.Telephony)
 @Controller()
 export class CdrController {
   constructor(private readonly cdrService: CdrService) {}

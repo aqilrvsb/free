@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { InboundRoutingService, CreateInboundRouteDto, UpdateInboundRouteDto } from './inbound-routing.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.Routing)
 @Controller('fs/inbound-routes')
 export class InboundRoutingController {
   constructor(private readonly inboundService: InboundRoutingService) {}

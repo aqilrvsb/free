@@ -1,11 +1,14 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import {
   RecordingStorageConfigDto,
   SettingsService,
   FsPortConfigDto,
   FsPortConfigUpdateResult,
 } from './settings.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.Telephony)
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}

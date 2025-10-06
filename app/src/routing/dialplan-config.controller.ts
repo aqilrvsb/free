@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { DialplanConfigService, DialplanRuleInput } from './dialplan-config.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.Routing)
 @Controller('fs/dialplan/rules')
 export class DialplanConfigController {
   constructor(private readonly dialplanConfigService: DialplanConfigService) {}

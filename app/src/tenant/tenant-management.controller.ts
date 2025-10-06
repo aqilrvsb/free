@@ -12,11 +12,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { TenantManagementService } from './tenant-management.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import type { Request } from 'express';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -25,6 +27,8 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
+@ApiTags(SwaggerTags.Tenant)
+@ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('super_admin', 'tenant_admin')
 @Controller()

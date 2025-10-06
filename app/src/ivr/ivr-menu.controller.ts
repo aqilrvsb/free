@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { IvrMenuService, CreateIvrMenuDto, UpdateIvrMenuDto } from './ivr-menu.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.IVR)
 @Controller('fs/ivr-menus')
 export class IvrMenuController {
   constructor(private readonly ivrService: IvrMenuService) {}

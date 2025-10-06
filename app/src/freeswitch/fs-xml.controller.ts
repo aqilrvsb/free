@@ -1,8 +1,11 @@
 import { Controller, Get, Header, Query, Body, Post, HttpCode, Req } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { FsService } from './fs.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.FreeSWITCH)
 @Controller()
 export class FsXmlController {
   constructor(private readonly fsService: FsService, private readonly registrationsGateway: FsRegistrationsGateway) {}

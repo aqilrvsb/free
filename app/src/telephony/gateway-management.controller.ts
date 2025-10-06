@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { GatewayManagementService, CreateGatewayDto, UpdateGatewayDto } from './gateway-management.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.Telephony)
 @Controller('fs/gateways')
 export class GatewayManagementController {
   constructor(private readonly gatewayService: GatewayManagementService) {}

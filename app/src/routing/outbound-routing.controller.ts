@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { OutboundRoutingService, CreateOutboundRouteDto, UpdateOutboundRouteDto } from './outbound-routing.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.Routing)
 @Controller('fs/outbound-routes')
 export class OutboundRoutingController {
   constructor(private readonly outboundService: OutboundRoutingService) {}

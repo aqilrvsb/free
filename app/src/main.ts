@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerTags } from './swagger/swagger-tags';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: ['error','warn','log'] });
@@ -20,11 +21,25 @@ async function bootstrap() {
   app.use(json({ limit: '5mb' }));
   app.use(urlencoded({ extended: true, limit: '5mb' }));
 
-  const config = new DocumentBuilder()
+  const builder = new DocumentBuilder()
     .setTitle('FreeSWITCH Management API')
     .setDescription('Tài liệu API cho các endpoint quản lý FreeSWITCH')
     .setVersion('1.0.0')
-    .build();
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Nhập access token nhận được từ /auth/login',
+      },
+      'jwt',
+    );
+
+  Object.values(SwaggerTags).forEach((tag) => {
+    builder.addTag(tag);
+  });
+
+  const config = builder.build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {

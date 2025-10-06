@@ -1,6 +1,9 @@
-import { Controller, Get, Param, Post, Query, HttpCode, HttpStatus, Body } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { FsManagementService } from './fs-management.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.FreeSWITCH)
 @Controller('fs')
 export class FsManagementController {
   constructor(private readonly fsManagementService: FsManagementService) {}

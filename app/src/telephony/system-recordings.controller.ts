@@ -1,10 +1,13 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Response } from 'express';
 import { createReadStream } from 'fs';
 import { SystemRecordingsService, type SystemRecordingSummary, type SystemRecordingUploadFile } from './system-recordings.service';
+import { SwaggerTags } from '../swagger/swagger-tags';
 
+@ApiTags(SwaggerTags.Telephony)
 @Controller('fs/system-recordings')
 export class SystemRecordingsController {
   constructor(private readonly recordingsService: SystemRecordingsService) {}
