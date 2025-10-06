@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { PortalUsersService } from './portal-users.service';
+import { PortalUsersService } from '../portal/portal-users.service';
 
 interface JwtPayload {
   sub: string;

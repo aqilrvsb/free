@@ -11,9 +11,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { PortalRolesService } from './portal-roles.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { RolesGuard } from './roles.guard';
-import { Roles } from './roles.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import type { Request } from 'express';
 
 interface AuthenticatedRequest extends Request {

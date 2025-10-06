@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CdrController } from './cdr.controller';
-import { CdrService } from './cdr.service';
+import { CdrController } from './telephony/cdr.controller';
+import { CdrService } from './telephony/cdr.service';
 import { DemoSeedService } from './demo-seed.service';
-import { FsXmlController } from './fs-xml.controller';
-import { FsService } from './fs.service';
-import { FsManagementController } from './fs-management.controller';
-import { FsManagementService } from './fs-management.service';
-import { RecordingsController } from './recordings.controller';
-import { RecordingsService } from './recordings.service';
+import { FsXmlController } from './freeswitch/fs-xml.controller';
+import { FsService } from './freeswitch/fs.service';
+import { FsManagementController } from './freeswitch/fs-management.controller';
+import { FsManagementService } from './freeswitch/fs-management.service';
+import { RecordingsController } from './telephony/recordings.controller';
+import { RecordingsService } from './telephony/recordings.service';
 import {
   CdrEntity,
   DialplanActionEntity,
@@ -28,36 +28,36 @@ import {
   PortalRoleEntity,
   PortalUserTenantEntity,
 } from './entities';
-import { FsEventsService } from './fs-events.service';
-import { FsRegistrationsGateway } from './fs-registrations.gateway';
-import { FsCallsGateway } from './fs-calls.gateway';
-import { TenantManagementController } from './tenant-management.controller';
-import { TenantManagementService } from './tenant-management.service';
-import { GatewayManagementController } from './gateway-management.controller';
-import { GatewayManagementService } from './gateway-management.service';
-import { OutboundRoutingService } from './outbound-routing.service';
-import { OutboundRoutingController } from './outbound-routing.controller';
-import { SettingsService } from './settings.service';
-import { SettingsController } from './settings.controller';
-import { DialplanConfigController } from './dialplan-config.controller';
-import { DialplanConfigService } from './dialplan-config.service';
-import { InboundRoutingService } from './inbound-routing.service';
-import { InboundRoutingController } from './inbound-routing.controller';
-import { IvrMenuService } from './ivr-menu.service';
-import { IvrMenuController } from './ivr-menu.controller';
-import { SystemRecordingsService } from './system-recordings.service';
-import { SystemRecordingsController } from './system-recordings.controller';
-import { PortalUsersController } from './portal-users.controller';
-import { PortalUsersService } from './portal-users.service';
-import { PortalRolesController } from './portal-roles.controller';
-import { PortalRolesService } from './portal-roles.service';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { JwtStrategy } from './jwt.strategy';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { FsEventsService } from './freeswitch/fs-events.service';
+import { FsRegistrationsGateway } from './freeswitch/fs-registrations.gateway';
+import { FsCallsGateway } from './freeswitch/fs-calls.gateway';
+import { TenantManagementController } from './tenant/tenant-management.controller';
+import { TenantManagementService } from './tenant/tenant-management.service';
+import { GatewayManagementController } from './telephony/gateway-management.controller';
+import { GatewayManagementService } from './telephony/gateway-management.service';
+import { OutboundRoutingService } from './routing/outbound-routing.service';
+import { OutboundRoutingController } from './routing/outbound-routing.controller';
+import { SettingsService } from './telephony/settings.service';
+import { SettingsController } from './telephony/settings.controller';
+import { DialplanConfigController } from './routing/dialplan-config.controller';
+import { DialplanConfigService } from './routing/dialplan-config.service';
+import { InboundRoutingService } from './routing/inbound-routing.service';
+import { InboundRoutingController } from './routing/inbound-routing.controller';
+import { IvrMenuService } from './ivr/ivr-menu.service';
+import { IvrMenuController } from './ivr/ivr-menu.controller';
+import { SystemRecordingsService } from './telephony/system-recordings.service';
+import { SystemRecordingsController } from './telephony/system-recordings.controller';
+import { PortalUsersController } from './portal/portal-users.controller';
+import { PortalUsersService } from './portal/portal-users.service';
+import { PortalRolesController } from './portal/portal-roles.controller';
+import { PortalRolesService } from './portal/portal-roles.service';
+import { AuthController } from './auth/auth.controller';
+import { AuthService } from './auth/auth.service';
+import { JwtStrategy } from './auth/jwt.strategy';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
-import { RolesGuard } from './roles.guard';
+import { RolesGuard } from './auth/roles.guard';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor';
 

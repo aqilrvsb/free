@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { SettingEntity } from './entities';
-import { FsManagementService } from './fs-management.service';
+import { SettingEntity } from '../entities';
+import { FsManagementService } from '../freeswitch/fs-management.service';
 import { promises as fs } from 'fs';
 import { dirname, join } from 'path';
 

@@ -3,8 +3,15 @@ import { create } from 'xmlbuilder2';
 import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RoutingConfigEntity, TenantEntity, UserEntity, OutboundRuleEntity, InboundRouteEntity, IvrMenuEntity } from './entities';
-import { DialplanConfigService } from './dialplan-config.service';
+import {
+  RoutingConfigEntity,
+  TenantEntity,
+  UserEntity,
+  OutboundRuleEntity,
+  InboundRouteEntity,
+  IvrMenuEntity,
+} from '../entities';
+import { DialplanConfigService } from '../routing/dialplan-config.service';
 
 interface DialplanParams {
   context?: string;

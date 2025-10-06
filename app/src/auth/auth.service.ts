@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PortalUsersService } from './portal-users.service';
+import { PortalUsersService } from '../portal/portal-users.service';
 
 @Injectable()
 export class AuthService {

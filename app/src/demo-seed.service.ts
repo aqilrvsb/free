@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { PortalRoleEntity, PortalUserEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
 import { hash } from 'bcryptjs';
 import { SeedRouting, SeedTenants, SeedUsers } from './data/seed-data';
-import { PortalRolesService } from './portal-roles.service';
+import { PortalRolesService } from './portal/portal-roles.service';
 
 @Injectable()
 export class DemoSeedService implements OnApplicationBootstrap {

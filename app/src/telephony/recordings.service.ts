@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'path';
 import { Readable } from 'stream';
 import { S3Client, ListObjectsV2Command, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SettingsService, RecordingStorageConfigDto, RecordingStorageAwsConfigDto } from './settings.service';
-import { FsManagementService } from './fs-management.service';
+import { FsManagementService } from '../freeswitch/fs-management.service';
 
 export interface RecordingMetadata {
   name: string;

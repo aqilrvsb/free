@@ -8,8 +8,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { TenantEntity } from './tenant.entity';
-import { GatewayEntity } from './gateway.entity';
+import { GatewayEntity } from '../telephony/gateway.entity';
+import { TenantEntity } from '../tenant/tenant.entity';
 
 @Entity('fs_outbound_rules')
 @Index('idx_outbound_rules_tenant_priority', ['tenantId', 'priority'])

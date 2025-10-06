@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { PortalRoleEntity, PortalUserEntity } from './entities';
+import { PortalRoleEntity, PortalUserEntity } from '../entities';
 
 interface CreatePortalRoleDto {
   key: string;

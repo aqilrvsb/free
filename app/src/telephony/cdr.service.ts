@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { Repository } from 'typeorm';
-import { CdrEntity } from './entities';
+import { CdrEntity } from '../entities';
 import { RecordingsService } from './recordings.service';
 
 interface ParsedEpochInput {

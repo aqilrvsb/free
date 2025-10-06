@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
-import { TenantEntity } from './tenant.entity';
+import { TenantEntity } from '../tenant/tenant.entity';
 
 export type InboundDestinationType = 'extension' | 'sip_uri' | 'ivr' | 'voicemail';
 

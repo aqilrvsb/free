@@ -7,7 +7,7 @@ import {
   DialplanRuleKind,
   DialplanRuleMatchType,
   TenantEntity,
-} from './entities';
+} from '../entities';
 
 export interface DialplanActionInput {
   id?: string;

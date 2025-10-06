@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Connection } from 'modesl';
 import { posix as pathPosix } from 'path';
 import { XMLParser } from 'fast-xml-parser';
-import { TenantManagementService } from './tenant-management.service';
+import { TenantManagementService } from '../tenant/tenant-management.service';
 
 interface CommandResult<T = string> {
   raw: string;

@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
-import { TenantEntity } from './tenant.entity';
 import { DialplanActionEntity } from './dialplan-action.entity';
+import { TenantEntity } from '../tenant/tenant.entity';
 
 export type DialplanRuleKind = 'internal' | 'external';
 export type DialplanRuleMatchType = 'regex' | 'prefix' | 'exact';

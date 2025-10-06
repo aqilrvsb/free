@@ -4,8 +4,8 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import { promises as fs } from 'fs';
-import { GatewayEntity } from './entities';
-import { FsManagementService } from './fs-management.service';
+import { GatewayEntity } from '../entities';
+import { FsManagementService } from '../freeswitch/fs-management.service';
 
 export interface CreateGatewayDto {
   name: string;

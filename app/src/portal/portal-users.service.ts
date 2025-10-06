@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
-import { PortalRoleEntity, PortalUserEntity, PortalUserRole, PortalUserTenantEntity, TenantEntity } from './entities';
+import { PortalRoleEntity, PortalUserEntity, PortalUserRole, PortalUserTenantEntity, TenantEntity } from '../entities';
 import { hash, compare } from 'bcryptjs';
 
 export interface CreatePortalUserDto {

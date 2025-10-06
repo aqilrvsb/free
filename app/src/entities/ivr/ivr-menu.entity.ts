@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { TenantEntity } from './tenant.entity';
+import { TenantEntity } from '../tenant/tenant.entity';
 import { IvrMenuOptionEntity } from './ivr-menu-option.entity';
 
 @Entity('fs_ivr_menus')

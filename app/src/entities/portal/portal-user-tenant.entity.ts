@@ -7,8 +7,8 @@ import {
   PrimaryGeneratedColumn,
   Unique,
 } from 'typeorm';
+import { TenantEntity } from '../tenant/tenant.entity';
 import { PortalUserEntity } from './portal-user.entity';
-import { TenantEntity } from './tenant.entity';
 
 @Entity({ name: 'portal_user_tenants' })
 @Unique(['portalUserId', 'tenantId'])

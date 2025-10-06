@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
-import { TenantEntity, RoutingConfigEntity, UserEntity } from './entities';
+import { TenantEntity, RoutingConfigEntity, UserEntity } from '../entities';
 import { randomUUID } from 'crypto';
 
 interface CreateTenantDto {

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OutboundRuleEntity, GatewayEntity, TenantEntity } from './entities';
+import { OutboundRuleEntity, GatewayEntity, TenantEntity } from '../entities';
 
 export interface CreateOutboundRouteDto {
   tenantId: string;

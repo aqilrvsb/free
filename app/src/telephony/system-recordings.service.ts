@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 import { join, resolve } from 'path';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
-import { SystemRecordingEntity } from './entities';
+import { SystemRecordingEntity } from '../entities';
 import { ConfigService } from '@nestjs/config';
 
 export type SystemRecordingUploadFile = {

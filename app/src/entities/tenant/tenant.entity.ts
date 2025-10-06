@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, OneToMany, OneToOne, PrimaryColumn, Unique, UpdateDateColumn } from 'typeorm';
-import { UserEntity } from './user.entity';
+import { PortalUserTenantEntity } from '../portal/portal-user-tenant.entity';
 import { RoutingConfigEntity } from './routing-config.entity';
-import { PortalUserTenantEntity } from './portal-user-tenant.entity';
+import { UserEntity } from './user.entity';
 
 @Entity({ name: 'tenants' })
 @Unique(['domain'])
