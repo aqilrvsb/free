@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, OneToMany, OneToOne, PrimaryColumn, Unique, UpdateDateColumn } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { RoutingConfigEntity } from './routing-config.entity';
+import { PortalUserTenantEntity } from './portal-user-tenant.entity';
 
 @Entity({ name: 'tenants' })
 @Unique(['domain'])
@@ -25,4 +26,7 @@ export class TenantEntity {
 
   @OneToOne(() => RoutingConfigEntity, (routing) => routing.tenant)
   routing?: RoutingConfigEntity;
+
+  @OneToMany(() => PortalUserTenantEntity, (link) => link.tenant)
+  portalUserMemberships?: PortalUserTenantEntity[];
 }

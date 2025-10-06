@@ -55,13 +55,13 @@ export class DemoSeedService implements OnApplicationBootstrap {
 
     const passwordHash = await hash(password, 10);
 
-    const adminRole = await this.portalRoleRepo.findOne({ where: { key: 'admin' } });
+    const adminRole = await this.portalRoleRepo.findOne({ where: { key: 'super_admin' } });
 
     const admin = this.portalUserRepo.create({
       email,
       passwordHash,
       displayName,
-      roleKey: adminRole?.key || 'admin',
+      roleKey: adminRole?.key || 'super_admin',
       roleDefinition: adminRole || undefined,
       isActive: true,
       permissions: [],

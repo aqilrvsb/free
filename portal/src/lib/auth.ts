@@ -37,6 +37,7 @@ export function buildLoginRedirect(pathname: string, search?: string): string {
 export const ADMIN_PATH_PREFIXES = [
   "/admin",
   "/fs/manage",
+  "/fs/extensions",
   "/fs/gateways",
   "/fs/dialplan",
   "/fs/outbound",
@@ -46,6 +47,15 @@ export const ADMIN_PATH_PREFIXES = [
   "/fs/system-recordings",
 ];
 
+export const SUPER_ADMIN_ONLY_PATHS = [
+  "/admin/roles",
+  "/fs/manage",
+];
+
 export function requiresAdminAccess(pathname: string): boolean {
   return ADMIN_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+export function requiresSuperAdminAccess(pathname: string): boolean {
+  return SUPER_ADMIN_ONLY_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }

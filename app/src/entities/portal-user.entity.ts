@@ -4,11 +4,13 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
 import { PortalRoleEntity } from './portal-role.entity';
+import { PortalUserTenantEntity } from './portal-user-tenant.entity';
 
 export type PortalUserRole = string;
 
@@ -48,4 +50,7 @@ export class PortalUserEntity {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
+
+  @OneToMany(() => PortalUserTenantEntity, (link) => link.portalUser)
+  tenantMemberships?: PortalUserTenantEntity[];
 }

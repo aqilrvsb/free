@@ -258,6 +258,7 @@ export interface PortalUserSummary {
   roleName?: string | null;
   rolePermissions?: string[];
   permissions?: string[];
+  tenantIds?: string[];
   isActive: boolean;
   lastLoginAt?: string | null;
   createdAt?: string;

@@ -33,6 +33,7 @@ import {
   Settings,
   Workflow,
   ShieldCheck,
+  PhoneCall,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -131,19 +132,26 @@ const NAV_SECTIONS: Array<{
       label: "Quản trị",
       items: [
         {
-          title: "Domain & Extension",
-          description: "Thiết lập tenant và máy nhánh",
+          title: "Domains",
+          description: "Quản lý tenant & cấu hình dialplan",
           href: "/fs/manage",
           icon: UserCog,
-          roles: ["admin"],
+          roles: ["super_admin"],
           permission: "manage_tenants",
+        },
+        {
+          title: "Extensions",
+          description: "Quản lý danh sách máy nhánh",
+          href: "/fs/extensions",
+          icon: PhoneCall,
+          roles: ["super_admin", "tenant_admin"],
         },
         {
           title: "Portal Users",
           description: "Quản lý tài khoản đăng nhập",
           href: "/admin/users",
           icon: Users,
-          roles: ["admin"],
+          roles: ["super_admin", "tenant_admin"],
           permission: "manage_portal_users",
         },
         {
@@ -151,7 +159,7 @@ const NAV_SECTIONS: Array<{
           description: "Tạo role và phân quyền",
           href: "/admin/roles",
           icon: ShieldCheck,
-          roles: ["admin"],
+          roles: ["super_admin"],
           permission: "manage_roles",
         },
         {
@@ -159,7 +167,7 @@ const NAV_SECTIONS: Array<{
           description: "Kết nối Telco bên ngoài",
           href: "/fs/gateways",
           icon: Globe2,
-          roles: ["admin"],
+          roles: ["super_admin", "tenant_admin"],
           permission: "manage_gateways",
         },
         {
@@ -167,7 +175,7 @@ const NAV_SECTIONS: Array<{
           description: "Quy tắc gọi nội bộ & outbound",
           href: "/fs/dialplan",
           icon: GitBranch,
-          roles: ["admin"],
+          roles: ["super_admin", "tenant_admin"],
           permission: "manage_dialplan",
         },
         {
@@ -175,7 +183,7 @@ const NAV_SECTIONS: Array<{
           description: "Quy tắc gọi ra ngoài",
           href: "/fs/outbound",
           icon: RadioTower,
-          roles: ["admin"],
+          roles: ["super_admin", "tenant_admin"],
           permission: "manage_outbound",
         },
         {
@@ -183,7 +191,7 @@ const NAV_SECTIONS: Array<{
           description: "Định tuyến DID vào",
           href: "/fs/inbound",
           icon: PhoneIncoming,
-          roles: ["admin", "operator"],
+          roles: ["super_admin", "tenant_admin", "operator"],
           permission: "manage_inbound",
         },
         {
@@ -191,7 +199,7 @@ const NAV_SECTIONS: Array<{
           description: "Kịch bản trả lời tự động",
           href: "/fs/ivr",
           icon: Workflow,
-          roles: ["admin", "operator"],
+          roles: ["super_admin", "tenant_admin", "operator"],
           permission: "manage_ivr",
         },
         {
@@ -199,7 +207,7 @@ const NAV_SECTIONS: Array<{
           description: "Điều chỉnh port & kết nối",
           href: "/fs/settings",
           icon: Settings,
-          roles: ["admin"],
+          roles: ["super_admin", "tenant_admin"],
           permission: "manage_settings",
         },
         {
@@ -207,7 +215,7 @@ const NAV_SECTIONS: Array<{
           description: "Kho âm thanh dùng chung",
           href: "/fs/system-recordings",
           icon: FileAudio,
-          roles: ["admin", "operator"],
+          roles: ["super_admin", "tenant_admin", "operator"],
           permission: "manage_recordings",
         },
       ],
@@ -239,8 +247,10 @@ function filterNavItems(
   if (!isAuthenticated) {
     return []
   }
+  const normalizedRole = userRole === "admin" ? "super_admin" : userRole
   return items.filter((item) => {
-    const roleAllowed = !item.roles || item.roles.length === 0 || Boolean(userRole && item.roles.includes(userRole))
+    const roleAllowed =
+      !item.roles || item.roles.length === 0 || Boolean(normalizedRole && item.roles.includes(normalizedRole))
     const permissionAllowed = !item.permission || Boolean(permissions?.[item.permission])
     return roleAllowed && permissionAllowed
   })

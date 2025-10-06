@@ -13,6 +13,7 @@ export type PermissionKey =
   | "manage_ivr"
   | "manage_settings"
   | "manage_recordings"
+  | "manage_extensions"
   | "manage_portal_users"
   | "manage_roles";
 
@@ -31,6 +32,7 @@ const BASE_PERMISSIONS: PermissionSet = {
   manage_ivr: false,
   manage_settings: false,
   manage_recordings: false,
+  manage_extensions: false,
   manage_portal_users: false,
   manage_roles: false,
 };
@@ -43,6 +45,24 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
     manage_outbound: true,
     manage_ivr: true,
     manage_recordings: true,
+  },
+  tenant_admin: {
+    ...BASE_PERMISSIONS,
+    manage_gateways: true,
+    manage_dialplan: true,
+    manage_inbound: true,
+    manage_outbound: true,
+    manage_ivr: true,
+    manage_settings: true,
+    manage_recordings: true,
+    manage_extensions: true,
+    manage_portal_users: true,
+  },
+  super_admin: {
+    ...Object.keys(BASE_PERMISSIONS).reduce((acc, key) => {
+      acc[key as PermissionKey] = true;
+      return acc;
+    }, {} as PermissionSet),
   },
   admin: {
     ...Object.keys(BASE_PERMISSIONS).reduce((acc, key) => {

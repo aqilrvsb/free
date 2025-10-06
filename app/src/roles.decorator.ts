@@ -1,6 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
 
-export type PortalRole = 'admin' | 'viewer';
+export type PortalRole = 'super_admin' | 'tenant_admin' | 'operator' | 'viewer';
 
 export const ROLES_KEY = 'portal_roles';
 

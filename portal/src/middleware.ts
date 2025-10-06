@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { parsePortalUserCookie, requiresAdminAccess, buildLoginRedirect } from "@/lib/auth";
+import {
+  parsePortalUserCookie,
+  requiresAdminAccess,
+  requiresSuperAdminAccess,
+  buildLoginRedirect,
+} from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login", "/_next", "/_next/data", "/favicon.ico", "/manifest.json", "/assets", "/api/session"];
 
@@ -28,7 +33,13 @@ export function middleware(request: NextRequest) {
 
   if (requiresAdminAccess(pathname)) {
     const user = parsePortalUserCookie(request.cookies.get("portal_user")?.value);
-    if (!user || user.role !== "admin") {
+    const role = user?.role === "admin" ? "super_admin" : user?.role;
+    const isPrivileged = role === "super_admin" || role === "tenant_admin";
+    if (!isPrivileged) {
+      const redirectUrl = new URL("/", request.url);
+      return NextResponse.redirect(redirectUrl);
+    }
+    if (requiresSuperAdminAccess(pathname) && role !== "super_admin") {
       const redirectUrl = new URL("/", request.url);
       return NextResponse.redirect(redirectUrl);
     }

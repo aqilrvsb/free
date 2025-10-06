@@ -23,6 +23,7 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { key: "manage_ivr", label: "Quản lý IVR", description: "Kịch bản trả lời tự động", group: "Quản trị" },
   { key: "manage_settings", label: "Cấu hình hệ thống", description: "Thay đổi cấu hình FreeSWITCH", group: "Quản trị" },
   { key: "manage_recordings", label: "Quản lý ghi âm", description: "Xử lý ghi âm hệ thống", group: "Quản trị" },
+  { key: "manage_extensions", label: "Quản lý extension", description: "Thêm/sửa/xoá máy nhánh SIP", group: "Quản trị" },
 ];
 
 export const PERMISSION_KEYS = new Set<PermissionKey>(PERMISSION_OPTIONS.map((option) => option.key));
@@ -65,8 +66,28 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
     isSystem: true,
   },
   {
-    key: "admin",
-    name: "Administrator",
+    key: "tenant_admin",
+    name: "Tenant Administrator",
+    description: "Quản trị tenant trong phạm vi được chỉ định",
+    permissions: [
+      "view_dashboard",
+      "view_cdr",
+      "view_recordings",
+      "view_channels",
+      "manage_gateways",
+      "manage_dialplan",
+      "manage_inbound",
+      "manage_outbound",
+      "manage_ivr",
+      "manage_settings",
+      "manage_recordings",
+      "manage_extensions",
+    ],
+    isSystem: true,
+  },
+  {
+    key: "super_admin",
+    name: "Super Administrator",
     description: "Toàn quyền quản trị hệ thống",
     permissions: [
       "view_dashboard",
@@ -81,6 +102,7 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
       "manage_ivr",
       "manage_settings",
       "manage_recordings",
+      "manage_extensions",
       "manage_portal_users",
       "manage_roles",
     ],

@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import { TenantEntity, RoutingConfigEntity, UserEntity } from './entities';
 import { randomUUID } from 'crypto';
 
@@ -37,6 +37,11 @@ interface UpdateExtensionDto {
   displayName?: string;
 }
 
+interface TenantAccessScope {
+  isSuperAdmin: boolean;
+  tenantIds: string[];
+}
+
 @Injectable()
 export class TenantManagementService {
   constructor(
@@ -45,7 +50,43 @@ export class TenantManagementService {
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
   ) {}
 
-  async listTenants(options?: { search?: string | null }): Promise<any[]> {
+  private ensureTenantAccess(scope: TenantAccessScope | undefined, tenantId: string): void {
+    if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+    if (!scope.tenantIds.includes(tenantId)) {
+      throw new ForbiddenException('Không có quyền thao tác trên tenant này');
+    }
+  }
+
+  private applyTenantFilter<T>(
+    query: SelectQueryBuilder<T>,
+    column: string,
+    scope: TenantAccessScope | undefined,
+  ): void {
+    if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+    if (!scope.tenantIds || scope.tenantIds.length === 0) {
+      query.andWhere('1 = 0');
+      return;
+    }
+    query.andWhere(`${column} IN (:...tenantIds)`, { tenantIds: scope.tenantIds });
+  }
+
+  private async assertExtensionAccess(
+    id: string,
+    scope: TenantAccessScope | undefined,
+  ): Promise<UserEntity> {
+    const extension = await this.userRepo.findOne({ where: { id } });
+    if (!extension) {
+      throw new BadRequestException('Extension không tồn tại');
+    }
+    this.ensureTenantAccess(scope, extension.tenantId);
+    return extension;
+  }
+
+  async listTenants(options?: { search?: string | null }, scope?: TenantAccessScope): Promise<any[]> {
     const query = this.tenantRepo
       .createQueryBuilder('tenant')
       .leftJoinAndSelect('tenant.routing', 'routing')
@@ -63,6 +104,8 @@ export class TenantManagementService {
       );
     }
 
+    this.applyTenantFilter(query, 'tenant.id', scope);
+
     const tenants = await query.getMany();
     return tenants.map((tenant) => this.sanitizeTenant(tenant));
   }
@@ -71,7 +114,7 @@ export class TenantManagementService {
     page: number;
     pageSize: number;
     search?: string | null;
-  }): Promise<{ items: any[]; total: number; page: number; pageSize: number }> {
+  }, scope?: TenantAccessScope): Promise<{ items: any[]; total: number; page: number; pageSize: number }> {
     const { page, pageSize, search } = params;
     const query = this.tenantRepo
       .createQueryBuilder('tenant')
@@ -91,6 +134,8 @@ export class TenantManagementService {
         }),
       );
     }
+
+    this.applyTenantFilter(query, 'tenant.id', scope);
 
     const [tenants, total] = await query.getManyAndCount();
     return {
@@ -136,11 +181,13 @@ export class TenantManagementService {
     return saved!;
   }
 
-  async updateTenant(id: string, dto: UpdateTenantDto): Promise<any> {
+  async updateTenant(id: string, dto: UpdateTenantDto, scope?: TenantAccessScope): Promise<any> {
     const tenant = await this.tenantRepo.findOne({ where: { id } });
     if (!tenant) {
       throw new BadRequestException('Tenant không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, id);
 
     if (dto.domain) {
       const domain = dto.domain.trim().toLowerCase();
@@ -183,48 +230,86 @@ export class TenantManagementService {
     await this.tenantRepo.delete({ id });
   }
 
-  async listTenantOptions(): Promise<Array<{ id: string; name: string; domain: string }>> {
-    const tenants = await this.tenantRepo.find({
-      select: ['id', 'name', 'domain'],
-      order: { name: 'ASC' },
-    });
+  async listTenantOptions(scope?: TenantAccessScope): Promise<Array<{ id: string; name: string; domain: string }>> {
+    let tenants: TenantEntity[];
+    if (!scope || scope.isSuperAdmin) {
+      tenants = await this.tenantRepo.find({
+        select: ['id', 'name', 'domain'],
+        order: { name: 'ASC' },
+      });
+    } else if (scope.tenantIds.length === 0) {
+      return [];
+    } else {
+      tenants = await this.tenantRepo.find({
+        where: { id: In(scope.tenantIds) },
+        select: ['id', 'name', 'domain'],
+        order: { name: 'ASC' },
+      });
+    }
     return tenants.map((tenant) => ({ id: tenant.id, name: tenant.name, domain: tenant.domain }));
   }
 
-  async getTenantMetrics(): Promise<{
+  async getTenantMetrics(scope?: TenantAccessScope): Promise<{
     tenantCount: number;
     routingConfiguredCount: number;
     extensionCount: number;
     topTenant: { id: string; name: string; domain: string; extensionCount: number } | null;
   }> {
+    let tenantIds: string[] | null = null;
+    if (!scope || scope.isSuperAdmin) {
+      tenantIds = null;
+    } else if (scope.tenantIds.length === 0) {
+      tenantIds = [];
+    } else {
+      tenantIds = scope.tenantIds;
+    }
+
+    if (Array.isArray(tenantIds) && tenantIds.length === 0) {
+      return {
+        tenantCount: 0,
+        routingConfiguredCount: 0,
+        extensionCount: 0,
+        topTenant: null,
+      };
+    }
+
+    const tenantWhere = tenantIds ? { id: In(tenantIds) } : {};
+
     const [tenantCount, routingConfiguredCount, extensionCount] = await Promise.all([
-      this.tenantRepo.count(),
-      this.routingRepo.count(),
-      this.userRepo.count(),
+      tenantIds === null ? this.tenantRepo.count() : this.tenantRepo.count({ where: tenantWhere }),
+      tenantIds === null
+        ? this.routingRepo.count()
+        : this.routingRepo.count({ where: { tenantId: In(tenantIds!) } }),
+      tenantIds === null
+        ? this.userRepo.count()
+        : this.userRepo.count({ where: { tenantId: In(tenantIds!) } }),
     ]);
 
-    const top = await this.userRepo
-      .createQueryBuilder('extension')
-      .select('extension.tenantId', 'tenantId')
-      .addSelect('COUNT(extension.id)', 'count')
-      .leftJoin('extension.tenant', 'tenant')
-      .addSelect('tenant.name', 'name')
-      .addSelect('tenant.domain', 'domain')
-      .groupBy('extension.tenantId')
-      .addGroupBy('tenant.name')
-      .addGroupBy('tenant.domain')
-      .orderBy('count', 'DESC')
-      .limit(1)
-      .getRawOne<{ tenantId?: string; count?: string; name?: string | null; domain?: string | null }>();
+    let topTenant: { id: string; name: string; domain: string; extensionCount: number } | null = null;
+    if (tenantCount > 0) {
+      const builder = this.tenantRepo
+        .createQueryBuilder('tenant')
+        .leftJoin('tenant.users', 'extension')
+        .addSelect('COUNT(extension.id)', 'extensionCount')
+        .groupBy('tenant.id')
+        .orderBy('extensionCount', 'DESC')
+        .addOrderBy('tenant.createdAt', 'DESC')
+        .limit(1);
 
-    const topTenant = top?.tenantId
-      ? {
-          id: top.tenantId,
-          name: top.name || top.tenantId,
-          domain: top.domain || '',
-          extensionCount: Number(top.count || 0),
-        }
-      : null;
+      if (tenantIds && tenantIds.length > 0) {
+        builder.where('tenant.id IN (:...tenantIds)', { tenantIds });
+      }
+
+      const result = await builder.getRawAndEntities();
+      if (result.entities.length > 0) {
+        topTenant = {
+          id: result.entities[0].id,
+          name: result.entities[0].name,
+          domain: result.entities[0].domain,
+          extensionCount: Number(result.raw[0].extensionCount || 0),
+        };
+      }
+    }
 
     return {
       tenantCount,
@@ -234,14 +319,20 @@ export class TenantManagementService {
     };
   }
 
-  async listExtensions(tenantId?: string, search?: string | null): Promise<any[]> {
+  async listExtensions(tenantId?: string, search?: string | null, scope?: TenantAccessScope): Promise<any[]> {
     const query = this.userRepo
       .createQueryBuilder('extension')
       .leftJoinAndSelect('extension.tenant', 'tenant')
       .orderBy('extension.createdAt', 'DESC');
 
     if (tenantId) {
+      this.ensureTenantAccess(scope, tenantId);
       query.andWhere('extension.tenantId = :tenantId', { tenantId });
+    } else if (scope && !scope.isSuperAdmin) {
+      if (scope.tenantIds.length === 0) {
+        return [];
+      }
+      query.andWhere('extension.tenantId IN (:...tenantIds)', { tenantIds: scope.tenantIds });
     }
 
     if (search) {
@@ -260,12 +351,15 @@ export class TenantManagementService {
     return extensions.map((extension) => this.sanitizeExtension(extension));
   }
 
-  async listExtensionsPaginated(params: {
-    tenantId?: string;
-    search?: string | null;
-    page: number;
-    pageSize: number;
-  }): Promise<{ items: any[]; total: number; page: number; pageSize: number }> {
+  async listExtensionsPaginated(
+    params: {
+      tenantId?: string;
+      search?: string | null;
+      page: number;
+      pageSize: number;
+    },
+    scope?: TenantAccessScope,
+  ): Promise<{ items: any[]; total: number; page: number; pageSize: number }> {
     const { tenantId, search, page, pageSize } = params;
     const query = this.userRepo
       .createQueryBuilder('extension')
@@ -275,7 +369,13 @@ export class TenantManagementService {
       .take(pageSize);
 
     if (tenantId) {
+      this.ensureTenantAccess(scope, tenantId);
       query.andWhere('extension.tenantId = :tenantId', { tenantId });
+    } else if (scope && !scope.isSuperAdmin) {
+      if (scope.tenantIds.length === 0) {
+        return { items: [], total: 0, page, pageSize };
+      }
+      query.andWhere('extension.tenantId IN (:...tenantIds)', { tenantIds: scope.tenantIds });
     }
 
     if (search) {
@@ -299,11 +399,13 @@ export class TenantManagementService {
     };
   }
 
-  async createExtension(dto: CreateExtensionDto): Promise<any> {
+  async createExtension(dto: CreateExtensionDto, scope?: TenantAccessScope): Promise<any> {
     const tenant = await this.tenantRepo.findOne({ where: { id: dto.tenantId } });
     if (!tenant) {
       throw new BadRequestException('Tenant không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, tenant.id);
 
     const existing = await this.userRepo.findOne({ where: { id: dto.id } });
     if (existing) {
@@ -323,11 +425,8 @@ export class TenantManagementService {
     return this.sanitizeExtension(extension);
   }
 
-  async updateExtension(id: string, dto: UpdateExtensionDto): Promise<any> {
-    const extension = await this.userRepo.findOne({ where: { id } });
-    if (!extension) {
-      throw new BadRequestException('Extension không tồn tại');
-    }
+  async updateExtension(id: string, dto: UpdateExtensionDto, scope?: TenantAccessScope): Promise<any> {
+    const extension = await this.assertExtensionAccess(id, scope);
 
     if (dto.password) {
       extension.password = dto.password.trim();
@@ -341,15 +440,13 @@ export class TenantManagementService {
     return this.sanitizeExtension(extension);
   }
 
-  async deleteExtension(id: string): Promise<void> {
+  async deleteExtension(id: string, scope?: TenantAccessScope): Promise<void> {
+    await this.assertExtensionAccess(id, scope);
     await this.userRepo.delete({ id });
   }
 
-  async getExtensionSecret(id: string): Promise<{ id: string; password: string }> {
-    const extension = await this.userRepo.findOne({ where: { id } });
-    if (!extension) {
-      throw new BadRequestException('Extension không tồn tại');
-    }
+  async getExtensionSecret(id: string, scope?: TenantAccessScope): Promise<{ id: string; password: string }> {
+    const extension = await this.assertExtensionAccess(id, scope);
 
     return {
       id: extension.id,

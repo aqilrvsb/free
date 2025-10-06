@@ -1,10 +1,10 @@
 services:
-  app:
-    environment:
-      DB_HOST: mysql
-    depends_on:
-      mysql:
-        condition: service_healthy
+  # app:
+  #   environment:
+  #     DB_HOST: mysql
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
 
   mysql:
     image: mysql:8.0

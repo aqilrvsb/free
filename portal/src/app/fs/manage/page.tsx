@@ -1,11 +1,6 @@
 import { apiFetch } from "@/lib/api";
-import type {
-  TenantSummary,
-  ExtensionSummary,
-  PaginatedResult,
-  TenantLookupItem,
-} from "@/lib/types";
-import { DomainExtensionManager } from "@/components/fs/domain-extension-manager";
+import type { TenantSummary, PaginatedResult } from "@/lib/types";
+import { DomainManager } from "@/components/fs/domain-manager";
 import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,12 +14,6 @@ export default async function ManagePage() {
     page: 1,
     pageSize: 6,
   };
-  const fallbackExtensionPage: PaginatedResult<ExtensionSummary> = {
-    items: [],
-    total: 0,
-    page: 1,
-    pageSize: 10,
-  };
   const fallbackMetrics = {
     tenantCount: 0,
     routingConfiguredCount: 0,
@@ -37,24 +26,12 @@ export default async function ManagePage() {
     } | null,
   };
 
-  const [tenants, extensions, tenantOptions, metrics] = await Promise.all([
+  const [tenants, metrics] = await Promise.all([
     apiFetch<PaginatedResult<TenantSummary>>("/tenants?page=1&pageSize=6", {
       cache: "no-store",
       fallbackValue: fallbackTenantPage,
       suppressError: true,
       onError: (error) => console.warn("[manage] Không thể tải danh sách tenant", error),
-    }),
-    apiFetch<PaginatedResult<ExtensionSummary>>("/extensions?page=1&pageSize=10", {
-      cache: "no-store",
-      fallbackValue: fallbackExtensionPage,
-      suppressError: true,
-      onError: (error) => console.warn("[manage] Không thể tải danh sách extension", error),
-    }),
-    apiFetch<TenantLookupItem[]>("/tenants/options", {
-      cache: "no-store",
-      fallbackValue: [],
-      suppressError: true,
-      onError: (error) => console.warn("[manage] Không thể tải tenant options", error),
     }),
     apiFetch<{
       tenantCount: number;
@@ -78,8 +55,8 @@ export default async function ManagePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Quản lý Domain & Extension"
-        description="Thêm mới, chỉnh sửa domain (tenant) và extension phục vụ FreeSWITCH."
+        title="Quản lý Domain"
+        description="Thêm mới, chỉnh sửa domain (tenant) phục vụ FreeSWITCH."
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="glass-surface border-none">
@@ -119,11 +96,7 @@ export default async function ManagePage() {
           </CardContent>
         </Card>
       </div>
-      <DomainExtensionManager
-        initialTenants={tenants}
-        initialExtensions={extensions}
-        tenantOptions={tenantOptions}
-      />
+      <DomainManager initialTenants={tenants} />
     </div>
   );
 }

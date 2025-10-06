@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PaginatedResult, PortalRoleSummary, PortalUserSummary } from "@/lib/types";
+import type { PaginatedResult, PortalRoleSummary, PortalUserSummary, TenantLookupItem } from "@/lib/types";
 import type { PermissionKey } from "@/lib/permissions";
 import {
   FALLBACK_ROLE_DEFS,
@@ -45,6 +45,7 @@ interface PortalUserFormState {
   isActive: boolean;
   password: string;
   permissions: PermissionKey[];
+  tenantIds: string[];
 }
 
 interface PasswordFormState {
@@ -59,6 +60,7 @@ const defaultFormState: PortalUserFormState = {
   isActive: true,
   password: "",
   permissions: [],
+  tenantIds: [],
 };
 
 const defaultPasswordForm: PasswordFormState = {
@@ -158,16 +160,28 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
     () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
-  const normalizedRoles = useMemo(() => {
+  const roleSource = useMemo(() => {
     return roles.length > 0 ? roles : FALLBACK_ROLE_DEFS;
   }, [roles]);
+  const currentUserMeta = useMemo(() => getPortalUserMeta(), []);
+  const isSuperAdminUser = useMemo(() => {
+    const key = (currentUserMeta?.roleKey || currentUserMeta?.role || '').toLowerCase();
+    return key === 'super_admin' || key === 'admin';
+  }, [currentUserMeta?.role, currentUserMeta?.roleKey]);
+  const availableRoles = useMemo(() => {
+    const filtered = roleSource.filter((role) => isSuperAdminUser || role.key !== 'super_admin');
+    if (filtered.length > 0) {
+      return filtered;
+    }
+    return roleSource.filter((role) => role.key !== 'super_admin');
+  }, [roleSource, isSuperAdminUser]);
   const roleMap = useMemo(() => {
     const map = new Map<string, PortalRoleSummary>();
-    normalizedRoles.forEach((role) => {
+    availableRoles.forEach((role) => {
       map.set(role.key, role);
     });
     return map;
-  }, [normalizedRoles]);
+  }, [availableRoles]);
   const defaultRoleKey = useMemo(() => {
     if (roleMap.has('viewer')) {
       return 'viewer';
@@ -197,7 +211,12 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
   const [passwordForm, setPasswordForm] = useState<PasswordFormState>(defaultPasswordForm);
   const [resetting, setResetting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const currentUserMeta = useMemo(() => getPortalUserMeta(), []);
+  const [tenantOptions, setTenantOptions] = useState<TenantLookupItem[]>([]);
+  const [tenantLoading, setTenantLoading] = useState(false);
+  const [tenantError, setTenantError] = useState<string | null>(null);
+  const tenantOptionMap = useMemo(() => {
+    return new Map(tenantOptions.map((item) => [item.id, item]));
+  }, [tenantOptions]);
 
   useEffect(() => {
     setData(initialUsers);
@@ -218,6 +237,44 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
     },
     [],
   );
+
+  useEffect(() => {
+    if (!apiBase) {
+      return;
+    }
+    let cancelled = false;
+    const loadTenantOptions = async () => {
+      setTenantLoading(true);
+      setTenantError(null);
+      try {
+        const response = await fetch(`${apiBase}/tenants/options`, {
+          method: "GET",
+          headers: buildHeaders(),
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(await extractErrorMessage(response));
+        }
+        const payload = (await response.json()) as TenantLookupItem[];
+        if (!cancelled) {
+          setTenantOptions(payload);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setTenantError((error as Error).message || "Không thể tải danh sách tenant");
+        }
+      } finally {
+        if (!cancelled) {
+          setTenantLoading(false);
+        }
+      }
+    };
+    loadTenantOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, buildHeaders]);
 
   const fetchUsers = useCallback(
     async (targetPage: number, searchValue: string = search) => {
@@ -267,6 +324,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         isActive: true,
         password: "",
         permissions: getDefaultPermissionsForRole(role, roleMap),
+        tenantIds: [],
       });
       setActiveUser(null);
       setDialogMode("create");
@@ -296,6 +354,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         existingPermissions.length > 0
           ? existingPermissions
           : getDefaultPermissionsForRole(roleKey, roleMap),
+      tenantIds: Array.isArray(user.tenantIds) ? [...user.tenantIds] : [],
     });
     setDialogMode("edit");
     setDialogOpen(true);
@@ -326,6 +385,19 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
     });
   }, []);
 
+  const handleTenantToggle = useCallback((tenantId: string) => {
+    setFormState((prev) => {
+      const exists = prev.tenantIds.includes(tenantId);
+      const nextTenantIds = exists
+        ? prev.tenantIds.filter((item) => item !== tenantId)
+        : [...prev.tenantIds, tenantId];
+      return {
+        ...prev,
+        tenantIds: nextTenantIds,
+      };
+    });
+  }, []);
+
   const handleRoleSelect = useCallback(
     (value: string) => {
       const role = value as PortalUserRole;
@@ -333,6 +405,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         ...prev,
         role,
         permissions: dialogMode === "create" ? getDefaultPermissionsForRole(role, roleMap) : prev.permissions,
+        tenantIds: prev.tenantIds,
       }));
     },
     [dialogMode, roleMap],
@@ -367,6 +440,26 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         return;
       }
       payload.password = formState.password.trim();
+    }
+
+    if (isSuperAdminUser) {
+      if (formState.role === "tenant_admin") {
+        if (formState.tenantIds.length === 0) {
+          setFeedback({ error: "Tenant admin cần được gán ít nhất một tenant", success: null });
+          return;
+        }
+        payload.tenantIds = formState.tenantIds;
+      } else if (formState.tenantIds.length > 0) {
+        payload.tenantIds = formState.tenantIds;
+      } else if (dialogMode === "edit") {
+        payload.tenantIds = null;
+      }
+    } else {
+      if (formState.tenantIds.length === 0) {
+        setFeedback({ error: "Bạn phải gán ít nhất một tenant", success: null });
+        return;
+      }
+      payload.tenantIds = formState.tenantIds;
     }
 
     setSaving(true);
@@ -575,12 +668,25 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
                         <TableCell className="space-y-1 align-middle">
                           <div className="text-sm font-semibold text-foreground">{user.email}</div>
                           <div className="text-xs text-muted-foreground">{user.displayName || "Không có tên hiển thị"}</div>
+                          {Array.isArray(user.tenantIds) && user.tenantIds.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {user.tenantIds.map((tenantId) => {
+                                const tenant = tenantOptionMap.get(tenantId);
+                                return (
+                                  <Badge key={tenantId} variant="outline" className="rounded-full text-[10px]">
+                                    {tenant?.name || tenantId}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          ) : null}
                         </TableCell>
                         <TableCell className="align-middle">
                           <Badge
                             variant={(() => {
                               const key = (user.roleKey || user.role || '').toLowerCase();
-                              if (key === 'admin') return 'default';
+                              if (key === 'super_admin' || key === 'admin') return 'default';
+                              if (key === 'tenant_admin') return 'default';
                               if (key === 'operator') return 'outline';
                               return 'secondary';
                             })()}
@@ -720,7 +826,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
                     <SelectValue placeholder="Chọn vai trò" />
                   </SelectTrigger>
                   <SelectContent>
-                    {normalizedRoles.map((role) => (
+                    {availableRoles.map((role) => (
                       <SelectItem key={role.key} value={role.key}>
                         <div className="flex flex-col">
                           <span>{role.name}</span>
@@ -751,6 +857,54 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
                 </Select>
               </div>
             </div>
+
+            {(!isSuperAdminUser || formState.role === "tenant_admin") ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Tenant được cấp quyền</Label>
+                  <span className="text-xs text-muted-foreground">
+                    Đã chọn {formState.tenantIds.length} tenant
+                  </span>
+                </div>
+                <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-border/60 bg-card/40 p-3">
+                  {tenantLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Đang tải danh sách tenant…
+                    </div>
+                  ) : tenantOptions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Chưa có tenant nào để gán.</p>
+                  ) : (
+                    tenantOptions.map((tenant) => {
+                      const checked = formState.tenantIds.includes(tenant.id);
+                      return (
+                        <label
+                          key={tenant.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-lg border bg-background/60 px-3 py-2 text-sm transition",
+                            checked ? "border-primary/60" : "border-border/60 hover:border-primary/40",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={checked}
+                            onChange={() => handleTenantToggle(tenant.id)}
+                          />
+                          <span className="flex flex-col leading-tight">
+                            <span className="font-medium text-foreground">{tenant.name}</span>
+                            <span className="text-xs text-muted-foreground">{tenant.domain}</span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                {tenantError ? <p className="text-xs text-destructive">{tenantError}</p> : null}
+                <p className="text-xs text-muted-foreground">
+                  Tài khoản chỉ có quyền trong những tenant được đánh dấu.
+                </p>
+              </div>
+            ) : null}
 
             {dialogMode === "create" ? (
               <div className="space-y-2">

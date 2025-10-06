@@ -26,6 +26,7 @@ import {
   SystemRecordingEntity,
   PortalUserEntity,
   PortalRoleEntity,
+  PortalUserTenantEntity,
 } from './entities';
 import { FsEventsService } from './fs-events.service';
 import { FsRegistrationsGateway } from './fs-registrations.gateway';
@@ -88,6 +89,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
           SystemRecordingEntity,
           PortalUserEntity,
           PortalRoleEntity,
+          PortalUserTenantEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -113,6 +115,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
       SystemRecordingEntity,
       PortalUserEntity,
       PortalRoleEntity,
+      PortalUserTenantEntity,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt', session: false }),
     JwtModule.registerAsync({

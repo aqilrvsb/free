@@ -19,7 +19,71 @@ interface UpdatePortalRoleDto {
 
 @Injectable()
 export class PortalRolesService implements OnModuleInit {
-  private readonly systemRoleKeys = ['admin', 'viewer', 'operator'];
+  private readonly systemRoleKeys = ['super_admin', 'tenant_admin', 'viewer', 'operator'];
+
+  private readonly allPermissions = [
+    'view_dashboard',
+    'view_cdr',
+    'view_recordings',
+    'view_channels',
+    'manage_gateways',
+    'manage_tenants',
+    'manage_dialplan',
+    'manage_inbound',
+    'manage_outbound',
+    'manage_ivr',
+    'manage_settings',
+    'manage_recordings',
+    'manage_extensions',
+    'manage_portal_users',
+    'manage_roles',
+  ];
+
+  private readonly defaultRoleMap: Record<string, Omit<CreatePortalRoleDto, 'key'>> = {
+    viewer: {
+      name: 'Viewer',
+      description: 'Chỉ xem dashboard, CDR, recordings',
+      permissions: ['view_dashboard', 'view_cdr', 'view_recordings', 'view_channels'],
+    },
+    operator: {
+      name: 'Operator',
+      description: 'Quản lý inbound/outbound, IVR và recordings',
+      permissions: [
+        'view_dashboard',
+        'view_cdr',
+        'view_recordings',
+        'view_channels',
+        'manage_inbound',
+        'manage_outbound',
+        'manage_ivr',
+        'manage_recordings',
+      ],
+    },
+    tenant_admin: {
+      name: 'Tenant Administrator',
+      description: 'Quản trị tenant và các cấu hình liên quan trong phạm vi được chỉ định',
+      permissions: [
+        'view_dashboard',
+        'view_cdr',
+        'view_recordings',
+        'view_channels',
+        'manage_gateways',
+        'manage_dialplan',
+        'manage_inbound',
+        'manage_outbound',
+        'manage_ivr',
+        'manage_settings',
+        'manage_recordings',
+        'manage_extensions',
+        'manage_portal_users',
+      ],
+    },
+    super_admin: {
+      name: 'Super Administrator',
+      description: 'Toàn quyền quản trị hệ thống và mọi tenant',
+      permissions: this.allPermissions,
+    },
+  };
 
   constructor(
     @InjectRepository(PortalRoleEntity)
@@ -119,57 +183,17 @@ export class PortalRolesService implements OnModuleInit {
   }
 
   async ensureDefaultRoles(): Promise<void> {
+    await this.migrateLegacyAdminRole();
+
     const existing = await this.roleRepo.find({ where: { key: In(this.systemRoleKeys) } });
     const existingKeys = new Set(existing.map((role) => role.key));
     const toCreate: Array<Omit<CreatePortalRoleDto, 'isSystem'>> = [];
 
-    if (!existingKeys.has('viewer')) {
-      toCreate.push({
-        key: 'viewer',
-        name: 'Viewer',
-        description: 'Chỉ xem dashboard, CDR, recordings',
-        permissions: ['view_dashboard', 'view_cdr', 'view_recordings', 'view_channels'],
-      });
-    }
-    if (!existingKeys.has('operator')) {
-      toCreate.push({
-        key: 'operator',
-        name: 'Operator',
-        description: 'Quản lý inbound/outbound, IVR và recordings',
-        permissions: [
-          'view_dashboard',
-          'view_cdr',
-          'view_recordings',
-          'view_channels',
-          'manage_inbound',
-          'manage_outbound',
-          'manage_ivr',
-          'manage_recordings',
-        ],
-      });
-    }
-    if (!existingKeys.has('admin')) {
-      toCreate.push({
-        key: 'admin',
-        name: 'Administrator',
-        description: 'Toàn quyền quản trị hệ thống',
-        permissions: [
-          'view_dashboard',
-          'view_cdr',
-          'view_recordings',
-          'view_channels',
-          'manage_gateways',
-          'manage_tenants',
-          'manage_dialplan',
-          'manage_inbound',
-          'manage_outbound',
-          'manage_ivr',
-          'manage_settings',
-          'manage_recordings',
-          'manage_portal_users',
-          'manage_roles',
-        ],
-      });
+    for (const key of this.systemRoleKeys) {
+      if (!existingKeys.has(key) && this.defaultRoleMap[key]) {
+        const roleDef = this.defaultRoleMap[key];
+        toCreate.push({ key, ...roleDef });
+      }
     }
 
     if (toCreate.length > 0) {
@@ -179,12 +203,14 @@ export class PortalRolesService implements OnModuleInit {
             key: role.key,
             name: role.name,
             description: role.description,
-            permissions: role.permissions,
+            permissions: this.normalizePermissions(role.permissions),
             isSystem: true,
           }),
         );
       }
     }
+
+    await this.syncSystemRoles();
   }
 
   private normalizePermissions(list: string[] | undefined): string[] {
@@ -198,5 +224,70 @@ export class PortalRolesService implements OnModuleInit {
       }
     });
     return Array.from(normalized.values());
+  }
+
+  private async migrateLegacyAdminRole(): Promise<void> {
+    const legacyAdmin = await this.roleRepo.findOne({ where: { key: 'admin' } });
+    if (!legacyAdmin) {
+      return;
+    }
+
+    await this.roleRepo.manager.transaction(async (manager) => {
+      const existingSuper = await manager.findOne(PortalRoleEntity, { where: { key: 'super_admin' } });
+
+      if (!existingSuper) {
+        await manager
+          .createQueryBuilder()
+          .update(PortalRoleEntity)
+          .set({
+            key: 'super_admin',
+            name: 'Super Administrator',
+            description: 'Toàn quyền quản trị hệ thống và mọi tenant',
+            permissions: this.normalizePermissions(this.allPermissions),
+            isSystem: true,
+          })
+          .where('key = :key', { key: 'admin' })
+          .execute();
+      } else {
+        await manager.delete(PortalRoleEntity, { key: 'admin' });
+      }
+
+      await manager
+        .createQueryBuilder()
+        .update(PortalUserEntity)
+        .set({ roleKey: 'super_admin' })
+        .where('role_key = :key', { key: 'admin' })
+        .execute();
+    });
+  }
+
+  private async syncSystemRoles(): Promise<void> {
+    for (const key of this.systemRoleKeys) {
+      const definition = this.defaultRoleMap[key];
+      if (!definition) {
+        continue;
+      }
+
+      const role = await this.roleRepo.findOne({ where: { key } });
+      if (!role) {
+        continue;
+      }
+
+      const desiredPermissions = this.normalizePermissions(definition.permissions);
+      const currentPermissions = this.normalizePermissions(role.permissions);
+      const desiredDescription = definition.description?.trim() || null;
+      const needsPermissionUpdate =
+        desiredPermissions.length !== currentPermissions.length ||
+        desiredPermissions.some((perm) => !currentPermissions.includes(perm));
+      const needsDescriptionUpdate = role.description !== desiredDescription;
+      const needsNameUpdate = role.name !== definition.name;
+
+      if (needsPermissionUpdate || needsDescriptionUpdate || needsNameUpdate) {
+        role.permissions = desiredPermissions;
+        role.description = desiredDescription;
+        role.name = definition.name;
+        await this.roleRepo.save(role);
+      }
+    }
   }
 }
