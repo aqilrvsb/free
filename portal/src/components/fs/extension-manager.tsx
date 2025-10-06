@@ -76,6 +76,8 @@ export function ExtensionManager({
   );
   const zoiperQrBase = useMemo(() => process.env.NEXT_PUBLIC_ZOIPER_QR_BASE_URL?.trim() || "", []);
 
+  const buildHeaders = useAuthHeaders();
+
   const fetchExtensionPage = useCallback(
     async (
       page: number,
@@ -104,6 +106,7 @@ export function ExtensionManager({
         const response = await fetch(`${apiBase}/extensions?${params.toString()}`, {
           method: "GET",
           signal: options.signal,
+          headers: buildHeaders(),
           cache: "no-store",
         });
         if (!response.ok) {
@@ -128,7 +131,7 @@ export function ExtensionManager({
         }
       }
     },
-    [EXTENSIONS_PER_PAGE, apiBase, extensionSearch, tenantFilter],
+    [EXTENSIONS_PER_PAGE, apiBase, extensionSearch, tenantFilter, buildHeaders],
   );
 
   const extensionSearchInitialized = useRef(false);
@@ -224,9 +227,7 @@ export function ExtensionManager({
         setLoading("extension-create");
         const response = await fetch(`${apiBase}/extensions`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: buildHeaders(true),
           body: JSON.stringify(payload),
         });
         if (!response.ok) {
@@ -241,9 +242,7 @@ export function ExtensionManager({
         setLoading(`extension-update-${editingExtension.id}`);
         const response = await fetch(`${apiBase}/extensions/${editingExtension.id}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: buildHeaders(true),
           body: JSON.stringify(payload),
         });
         if (!response.ok) {
@@ -271,6 +270,7 @@ export function ExtensionManager({
     try {
       const response = await fetch(`${apiBase}/extensions/${extension.id}`, {
         method: "DELETE",
+        headers: buildHeaders(),
       });
       if (!response.ok) {
         const raw = await response.text();
@@ -313,6 +313,7 @@ export function ExtensionManager({
       const response = await fetch(`${apiBase}/extensions/${extension.id}/password`, {
         method: "GET",
         cache: "no-store",
+        headers: buildHeaders(),
       });
       if (!response.ok) {
         throw new Error(await response.text());
@@ -772,4 +773,44 @@ function PaginationBar({ page, pageCount, total, onPrev, onNext, loading = false
       </div>
     </div>
   );
+}
+
+function getPortalToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const stored = window.localStorage?.getItem("portal_token");
+    if (stored) {
+      return stored;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const match = document.cookie
+      .split(";")
+      .map((chunk) => chunk.trim())
+      .find((part) => part.startsWith("portal_token="));
+    if (match) {
+      return decodeURIComponent(match.split("=")[1]);
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function useAuthHeaders() {
+  return useCallback((isJson: boolean = false): HeadersInit => {
+    const headers: Record<string, string> = {};
+    if (isJson) {
+      headers["Content-Type"] = "application/json";
+    }
+    const token = getPortalToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }, []);
 }

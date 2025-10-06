@@ -45,6 +45,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
     () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
     [],
   );
+  const buildHeaders = useAuthHeaders();
 
   const fetchTenantPage = useCallback(
     async (
@@ -70,6 +71,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
         const response = await fetch(`${apiBase}/tenants?${params.toString()}`, {
           method: "GET",
           signal: options.signal,
+          headers: buildHeaders(),
           cache: "no-store",
         });
         if (!response.ok) {
@@ -94,7 +96,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
         }
       }
     },
-    [TENANTS_PER_PAGE, apiBase, tenantSearch],
+    [TENANTS_PER_PAGE, apiBase, tenantSearch, buildHeaders],
   );
 
   const tenantSearchInitialized = useRef(false);
@@ -176,9 +178,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
         setLoading("tenant-create");
         const response = await fetch(`${apiBase}/tenants`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: buildHeaders(true),
           body: JSON.stringify(payload),
         });
         if (!response.ok) {
@@ -189,9 +189,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
         setLoading(`tenant-update-${editingTenant.id}`);
         const response = await fetch(`${apiBase}/tenants/${editingTenant.id}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: buildHeaders(true),
           body: JSON.stringify(payload),
         });
         if (!response.ok) {
@@ -218,6 +216,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
     try {
       const response = await fetch(`${apiBase}/tenants/${tenant.id}`, {
         method: "DELETE",
+        headers: buildHeaders(),
       });
       if (!response.ok) {
         const raw = await response.text();
@@ -426,6 +425,46 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
       </Dialog>
     </>
   );
+}
+
+function getPortalToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const stored = window.localStorage?.getItem("portal_token");
+    if (stored) {
+      return stored;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const match = document.cookie
+      .split(";")
+      .map((chunk) => chunk.trim())
+      .find((part) => part.startsWith("portal_token="));
+    if (match) {
+      return decodeURIComponent(match.split("=")[1]);
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function useAuthHeaders() {
+  return useCallback((isJson: boolean = false): HeadersInit => {
+    const headers: Record<string, string> = {};
+    if (isJson) {
+      headers["Content-Type"] = "application/json";
+    }
+    const token = getPortalToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }, []);
 }
 
 interface PaginationBarProps {
