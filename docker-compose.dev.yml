@@ -116,6 +116,7 @@ services:
       NFT_TABLE: ${NFT_TABLE:-filter}
       NFT_CHAIN: ${NFT_CHAIN:-input}
       LOG_LEVEL: ${SECURITY_AGENT_LOG_LEVEL:-debug}
+      F2B_PERSIST_DIR: ${F2B_PERSIST_DIR:-/data/security-agent/config}
       FS_ESL_HOST: ${FS_ESL_HOST:-127.0.0.1}
       FS_ESL_PORT: ${FS_ESL_PORT:-8021}
       FS_ESL_PASSWORD: ${FS_ESL_PASSWORD:-}

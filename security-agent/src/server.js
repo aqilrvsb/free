@@ -21,6 +21,7 @@ const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
 const IPV4_REGEX = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 const F2B_JAIL_CONFIG_PATH = process.env.F2B_JAIL_CONFIG_PATH || '/etc/fail2ban/jail.d/portal.local';
 const F2B_FILTER_DIR = process.env.F2B_FILTER_DIR || '/etc/fail2ban/filter.d';
+const F2B_PERSIST_DIR = process.env.F2B_PERSIST_DIR || '/data/security-agent/config';
 const ESL_ENABLED = (process.env.FS_ESL_ENABLED || 'true').toLowerCase() !== 'false';
 const ESL_HOST = process.env.FS_ESL_HOST || '127.0.0.1';
 const ESL_PORT = Number(process.env.FS_ESL_PORT || 8021);
@@ -64,6 +65,20 @@ async function saveState() {
   } catch (error) {
     console.error('[agent] Failed to persist state', error.message);
   }
+}
+
+async function writeAndMirror(targetPath, payload) {
+  await writeAndMirror(targetPath, payload);
+  if (!F2B_PERSIST_DIR) {
+    return;
+  }
+  const relative = path.relative('/etc/fail2ban', targetPath);
+  if (relative.startsWith('..')) {
+    return;
+  }
+  const mirrorPath = path.join(F2B_PERSIST_DIR, relative);
+  await fs.mkdir(path.dirname(mirrorPath), { recursive: true }).catch(() => {});
+  await fs.writeFile(mirrorPath, payload, 'utf8');
 }
 
 function runCommand(cmd, args = [], opts = {}) {
@@ -396,7 +411,7 @@ async function updateFail2banConfig(payload) {
   }
 
   const iniPayload = ini.stringify(iniData);
-  await fs.writeFile(F2B_JAIL_CONFIG_PATH, `${iniPayload.trim()}\n`, 'utf8');
+  await writeAndMirror(F2B_JAIL_CONFIG_PATH, `${iniPayload.trim()}\n`);
 
   if (Array.isArray(payload.jails)) {
     for (const jail of payload.jails) {
