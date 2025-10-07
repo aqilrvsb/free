@@ -68,11 +68,11 @@ async function saveState() {
 }
 
 async function writeAndMirror(targetPath, payload) {
-  await writeAndMirror(targetPath, payload);
+  await fs.writeFile(targetPath, payload, 'utf8');
   if (!F2B_PERSIST_DIR) {
     return;
   }
-  const relative = path.relative('/etc/fail2ban', targetPath);
+  const relative = path.relative('/etc/fail2ban', path.resolve(targetPath));
   if (relative.startsWith('..')) {
     return;
   }
@@ -206,7 +206,12 @@ async function loadFilterConfig(filterName) {
 
   for (const rawLine of lines) {
     const line = rawLine.replace(/\s+#.*$/, '').trimEnd();
-    if (!line.trim()) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (trimmed.startsWith('[')) {
+      currentKey = null;
       continue;
     }
     const equalIndex = line.indexOf('=');
@@ -228,7 +233,7 @@ async function loadFilterConfig(filterName) {
       }
       currentKey = null;
     } else if (currentKey) {
-      const continuation = line.trim();
+      const continuation = trimmed;
       if (continuation) {
         if (currentKey === 'failregex') {
           failregex.push(continuation);
