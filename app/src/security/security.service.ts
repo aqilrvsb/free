@@ -18,6 +18,8 @@ import {
   SecurityBanRecord,
   SecurityFirewallRule,
   SecurityOverviewResponse,
+  Fail2banConfigResponse,
+  Fail2banConfigUpdatePayload,
 } from './security.types';
 
 @Injectable()
@@ -207,6 +209,37 @@ export class SecurityService {
       return { success: true };
     } catch (error) {
       this.handleMutationError('Không thể xóa rule firewall', error);
+    }
+  }
+
+  async getFail2banConfig(): Promise<Fail2banConfigResponse> {
+    if (!this.agentBaseUrl) {
+      throw new ServiceUnavailableException('Security agent chưa được cấu hình');
+    }
+    try {
+      const config = await this.requestAgent<Fail2banConfigResponse>({
+        method: 'GET',
+        url: '/fail2ban/config',
+      });
+      return config;
+    } catch (error) {
+      this.handleMutationError('Không thể tải cấu hình Fail2Ban', error);
+    }
+  }
+
+  async updateFail2banConfig(payload: Fail2banConfigUpdatePayload): Promise<Fail2banConfigResponse> {
+    if (!this.agentBaseUrl) {
+      throw new ServiceUnavailableException('Security agent chưa được cấu hình');
+    }
+    try {
+      const updated = await this.requestAgent<Fail2banConfigResponse>({
+        method: 'PUT',
+        url: '/fail2ban/config',
+        data: payload,
+      });
+      return updated;
+    } catch (error) {
+      this.handleMutationError('Không thể cập nhật cấu hình Fail2Ban', error);
     }
   }
 

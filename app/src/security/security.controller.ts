@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { SecurityService } from './security.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -9,6 +9,7 @@ import {
   CreateBanPayload,
   CreateFirewallRulePayload,
   ListBansQuery,
+  Fail2banConfigUpdatePayload,
 } from './security.types';
 
 @ApiTags(SwaggerTags.Security)
@@ -51,6 +52,16 @@ export class SecurityController {
     @Query('jail') jail?: string,
   ) {
     return this.securityService.deleteBan(id, jail?.trim() || undefined);
+  }
+
+  @Get('fail2ban/config')
+  async getFail2banConfig() {
+    return this.securityService.getFail2banConfig();
+  }
+
+  @Put('fail2ban/config')
+  async updateFail2banConfig(@Body() body: Fail2banConfigUpdatePayload) {
+    return this.securityService.updateFail2banConfig(body);
   }
 
   @Get('firewall/rules')

@@ -5,6 +5,7 @@ const { execFile } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs/promises');
 const path = require('path');
+const ini = require('ini');
 const ESL = require('modesl');
 
 const app = express();
@@ -18,6 +19,8 @@ const FIREWALL_CHAIN = process.env.NFT_CHAIN || 'input';
 const FIREWALL_HOOK = process.env.NFT_CHAIN_HOOK || 'input';
 const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
 const IPV4_REGEX = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+const F2B_JAIL_CONFIG_PATH = process.env.F2B_JAIL_CONFIG_PATH || '/etc/fail2ban/jail.d/portal.local';
+const F2B_FILTER_DIR = process.env.F2B_FILTER_DIR || '/etc/fail2ban/filter.d';
 const ESL_ENABLED = (process.env.FS_ESL_ENABLED || 'true').toLowerCase() !== 'false';
 const ESL_HOST = process.env.FS_ESL_HOST || '127.0.0.1';
 const ESL_PORT = Number(process.env.FS_ESL_PORT || 8021);
@@ -164,6 +167,246 @@ async function remediateBlockedIp(ip) {
     flushConntrack(ip),
     flushFsRegistrations(ip),
   ]);
+}
+
+async function loadFilterConfig(filterName) {
+  if (!filterName) {
+    return null;
+  }
+  const targetPath = path.join(F2B_FILTER_DIR, `${filterName}.conf`);
+  const content = await fs.readFile(targetPath, 'utf8').catch(() => null);
+  if (!content) {
+    return {
+      name: filterName,
+      path: targetPath,
+      failregex: [],
+      ignoreregex: [],
+    };
+  }
+
+  const lines = content.split(/\r?\n/);
+  const failregex = [];
+  const ignoreregex = [];
+  let currentKey = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+#.*$/, '').trimEnd();
+    if (!line.trim()) {
+      continue;
+    }
+    const equalIndex = line.indexOf('=');
+    if (equalIndex !== -1) {
+      const key = line.slice(0, equalIndex).trim().toLowerCase();
+      const value = line.slice(equalIndex + 1).trim();
+      currentKey = key;
+      if (key === 'failregex') {
+        if (value) {
+          failregex.push(value);
+        }
+        continue;
+      }
+      if (key === 'ignoreregex') {
+        if (value) {
+          ignoreregex.push(value);
+        }
+        continue;
+      }
+      currentKey = null;
+    } else if (currentKey) {
+      const continuation = line.trim();
+      if (continuation) {
+        if (currentKey === 'failregex') {
+          failregex.push(continuation);
+        }
+        if (currentKey === 'ignoreregex') {
+          ignoreregex.push(continuation);
+        }
+      }
+    }
+  }
+
+  return {
+    name: filterName,
+    path: targetPath,
+    failregex,
+    ignoreregex,
+  };
+}
+
+async function writeFilterConfig(filter) {
+  if (!filter || !filter.name) {
+    return;
+  }
+  const targetPath = path.join(F2B_FILTER_DIR, `${filter.name}.conf`);
+  const failregex = Array.isArray(filter.failregex) ? filter.failregex.filter(Boolean) : [];
+  const ignoreregex = Array.isArray(filter.ignoreregex) ? filter.ignoreregex.filter(Boolean) : [];
+
+  const lines = ['[Definition]'];
+
+  if (failregex.length > 0) {
+    lines.push(`failregex = ${failregex[0]}`);
+    for (let i = 1; i < failregex.length; i += 1) {
+      lines.push(`            ${failregex[i]}`);
+    }
+  } else {
+    lines.push('failregex =');
+  }
+
+  lines.push('');
+
+  if (ignoreregex.length > 0) {
+    lines.push(`ignoreregex = ${ignoreregex[0]}`);
+    for (let i = 1; i < ignoreregex.length; i += 1) {
+      lines.push(`              ${ignoreregex[i]}`);
+    }
+  } else {
+    lines.push('ignoreregex =');
+  }
+
+  lines.push('');
+
+  const payload = `${lines.join('\n')}\n`;
+  await fs.writeFile(targetPath, payload, 'utf8');
+}
+
+function normalizeJailSection(name, settings) {
+  const rawSettings = { ...settings };
+  const filterName = rawSettings.filter || name;
+  const ignoreIp = splitList(rawSettings.ignoreip);
+
+  return {
+    name,
+    enabled: parseBoolean(rawSettings.enabled, true),
+    maxretry: parseNumber(rawSettings.maxretry),
+    findtime: parseNumber(rawSettings.findtime),
+    bantime: parseNumber(rawSettings.bantime),
+    ignoreIp,
+    logPath: rawSettings.logpath || null,
+    action: rawSettings.action || null,
+    backend: rawSettings.backend || null,
+    port: rawSettings.port || null,
+    protocol: rawSettings.protocol || null,
+    filter: {
+      name: filterName,
+    },
+    settings: rawSettings,
+  };
+}
+
+async function loadFail2banConfig() {
+  const jailContent = await fs.readFile(F2B_JAIL_CONFIG_PATH, 'utf8').catch(() => '');
+  const parsed = jailContent ? ini.parse(jailContent) : {};
+
+  const global = { ...(parsed.DEFAULT || {}) };
+
+  const jailEntries = Object.entries(parsed).filter(([section]) => section !== 'DEFAULT');
+  const jails = await Promise.all(
+    jailEntries.map(async ([name, settings]) => {
+      const jail = normalizeJailSection(name, settings || {});
+      if (jail.filter?.name) {
+        jail.filter = await loadFilterConfig(jail.filter.name);
+      }
+      return jail;
+    }),
+  );
+
+  return {
+    global,
+    jails,
+  };
+}
+
+async function updateFail2banConfig(payload) {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Payload không hợp lệ');
+  }
+
+  const iniData = {};
+
+  if (payload.global && typeof payload.global === 'object') {
+    const defaultSection = {};
+    Object.entries(payload.global).forEach(([key, value]) => {
+      const serialized = serializeValue(value);
+      if (serialized !== undefined) {
+        defaultSection[key] = serialized;
+      }
+    });
+    if (Object.keys(defaultSection).length > 0) {
+      iniData.DEFAULT = defaultSection;
+    }
+  }
+
+  if (Array.isArray(payload.jails)) {
+    for (const jail of payload.jails) {
+      if (!jail || typeof jail !== 'object' || !jail.name) {
+        continue;
+      }
+      const section = {};
+      const baseSettings = jail.settings && typeof jail.settings === 'object' ? { ...jail.settings } : {};
+
+      const enabledValue = serializeValue(
+        jail.enabled !== undefined ? (jail.enabled ? 'true' : 'false') : baseSettings.enabled,
+      );
+      if (enabledValue !== undefined) {
+        section.enabled = enabledValue;
+      }
+
+      const numericKeys = ['maxretry', 'findtime', 'bantime'];
+      numericKeys.forEach((key) => {
+        const value = jail[key] !== undefined ? jail[key] : baseSettings[key];
+        const serialized = serializeValue(value);
+        if (serialized !== undefined) {
+          section[key] = serialized;
+        }
+      });
+
+      const stringKeys = ['logpath', 'action', 'backend', 'port', 'protocol'];
+      stringKeys.forEach((key) => {
+        const value = jail[key] !== undefined ? jail[key] : baseSettings[key];
+        const serialized = serializeValue(value);
+        if (serialized !== undefined) {
+          section[key] = serialized;
+        }
+      });
+
+      if (jail.ignoreIp || baseSettings.ignoreip) {
+        const value = Array.isArray(jail.ignoreIp) ? jail.ignoreIp : splitList(baseSettings.ignoreip);
+        const serialized = serializeValue(value);
+        if (serialized !== undefined) {
+          section.ignoreip = serialized;
+        }
+      }
+
+      const filterName = jail.filter?.name || baseSettings.filter || jail.name;
+      if (filterName) {
+        section.filter = filterName;
+      }
+
+      Object.entries(baseSettings).forEach(([key, value]) => {
+        if (section[key] === undefined) {
+          const serialized = serializeValue(value);
+          if (serialized !== undefined) {
+            section[key] = serialized;
+          }
+        }
+      });
+
+      iniData[jail.name] = section;
+    }
+  }
+
+  const iniPayload = ini.stringify(iniData);
+  await fs.writeFile(F2B_JAIL_CONFIG_PATH, `${iniPayload.trim()}\n`, 'utf8');
+
+  if (Array.isArray(payload.jails)) {
+    for (const jail of payload.jails) {
+      if (jail && jail.filter && jail.filter.name) {
+        await writeFilterConfig(jail.filter);
+      }
+    }
+  }
+
+  await runCommand('fail2ban-client', ['reload']);
 }
 
 async function ensureFirewallRule(rule) {
@@ -481,6 +724,58 @@ function extractSingleIp(value) {
   return null;
 }
 
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
+function parseNumber(value, fallback = null) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function splitList(value) {
+  if (!value) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return String(value)
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function serializeValue(value) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.join(' ');
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : undefined;
+  }
+  const str = String(value).trim();
+  return str.length > 0 ? str : undefined;
+}
+
 async function ensureBanFirewallRule(ip, banKey) {
   if (!ip) {
     return;
@@ -647,6 +942,30 @@ app.get('/status', async (_req, res) => {
       firewall,
     },
   });
+});
+
+app.get('/fail2ban/config', async (_req, res) => {
+  try {
+    const config = await loadFail2banConfig();
+    res.json(config);
+  } catch (error) {
+    console.error('[agent] load fail2ban config failed', error.message);
+    res.status(500).json({ message: 'Không thể đọc cấu hình Fail2Ban', detail: error.message });
+  }
+});
+
+app.put('/fail2ban/config', async (req, res) => {
+  try {
+    await updateFail2banConfig(req.body);
+    const config = await loadFail2banConfig();
+    const bans = await listBans();
+    await syncBanFirewallRules(bans);
+    res.json(config);
+  } catch (error) {
+    console.error('[agent] update fail2ban config failed', error.message);
+    const status = /không hợp lệ/i.test(error.message) ? 400 : 500;
+    res.status(status).json({ message: 'Không thể cập nhật cấu hình Fail2Ban', detail: error.message });
+  }
 });
 
 app.get('/bans', async (_req, res) => {

@@ -138,6 +138,11 @@ Point `SECURITY_AGENT_URL` to the running agent (default when using Compose is `
 - `GET /firewall/rules` → active nftables rules handled by the agent
 - `POST /firewall/rules` / `DELETE /firewall/rules/:id`
 
+Advanced Fail2Ban configuration API:
+
+- `GET /fail2ban/config` → lấy cấu hình hiện tại (global + từng jail + filter)
+- `PUT /fail2ban/config` → cập nhật cấu hình, agent sẽ ghi file jail/filter và reload Fail2Ban
+
 The portal UI calls these endpoints directly via the Nest backend, so the agent stays fully isolated from the browser. When the agent is unreachable the UI falls back to read-only placeholders and displays the last known state.
 
 When `FS_ESL_*` variables are provided, the agent connects to FreeSWITCH's Event Socket to flush affected registrations immediately after a ban or new firewall rule. In addition, the agent wipes relevant conntrack entries so banned IPs cannot reuse existing SIP sessions.

@@ -77,3 +77,50 @@ export interface CreateFirewallRulePayload {
   table?: string;
   chain?: string;
 }
+
+export interface Fail2banFilterConfig {
+  name: string;
+  path?: string;
+  failregex: string[];
+  ignoreregex: string[];
+}
+
+export interface Fail2banJailConfig {
+  name: string;
+  enabled?: boolean;
+  maxretry?: number | null;
+  findtime?: number | null;
+  bantime?: number | null;
+  ignoreIp?: string[];
+  logPath?: string | null;
+  action?: string | null;
+  backend?: string | null;
+  port?: string | null;
+  protocol?: string | null;
+  settings?: Record<string, string>;
+  filter?: Fail2banFilterConfig | null;
+}
+
+export interface Fail2banConfigResponse {
+  global?: Record<string, string>;
+  jails: Fail2banJailConfig[];
+}
+
+export interface Fail2banConfigUpdatePayload {
+  global?: Record<string, string>;
+  jails?: Array<{
+    name: string;
+    enabled?: boolean;
+    maxretry?: number;
+    findtime?: number;
+    bantime?: number;
+    ignoreIp?: string[];
+    logPath?: string;
+    action?: string;
+    backend?: string;
+    port?: string;
+    protocol?: string;
+    settings?: Record<string, string>;
+    filter?: Fail2banFilterConfig;
+  }>;
+}

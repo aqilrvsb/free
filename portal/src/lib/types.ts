@@ -368,3 +368,31 @@ export interface SecurityFirewallRule {
   enabled?: boolean;
   createdAt?: string;
 }
+
+export interface Fail2banFilterConfig {
+  name: string;
+  path?: string;
+  failregex: string[];
+  ignoreregex: string[];
+}
+
+export interface Fail2banJailConfig {
+  name: string;
+  enabled?: boolean;
+  maxretry?: number | null;
+  findtime?: number | null;
+  bantime?: number | null;
+  ignoreIp?: string[];
+  logPath?: string | null;
+  action?: string | null;
+  backend?: string | null;
+  port?: string | null;
+  protocol?: string | null;
+  settings?: Record<string, string>;
+  filter?: Fail2banFilterConfig | null;
+}
+
+export interface Fail2banConfig {
+  global?: Record<string, string>;
+  jails: Fail2banJailConfig[];
+}
