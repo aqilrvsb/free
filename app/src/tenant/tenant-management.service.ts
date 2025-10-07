@@ -13,6 +13,7 @@ interface CreateTenantDto {
   pstnGateway?: string;
   enableE164?: boolean;
   codecString?: string;
+  extensionLimit?: number | null;
 }
 
 interface UpdateTenantDto {
@@ -23,6 +24,7 @@ interface UpdateTenantDto {
   pstnGateway?: string;
   enableE164?: boolean;
   codecString?: string;
+  extensionLimit?: number | null;
 }
 
 interface CreateExtensionDto {
@@ -72,6 +74,33 @@ export class TenantManagementService {
       return;
     }
     query.andWhere(`${column} IN (:...tenantIds)`, { tenantIds: scope.tenantIds });
+  }
+
+  private resolveExtensionLimit(input: unknown): number | null | undefined {
+    if (input === undefined) {
+      return undefined;
+    }
+    if (input === null) {
+      return null;
+    }
+    if (typeof input === 'number') {
+      if (!Number.isInteger(input) || input < 0) {
+        throw new BadRequestException('Giới hạn extension phải là số nguyên không âm');
+      }
+      return input;
+    }
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (trimmed === '' || trimmed.toLowerCase() === 'null') {
+        return null;
+      }
+      const parsed = Number(trimmed);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        throw new BadRequestException('Giới hạn extension phải là số nguyên không âm');
+      }
+      return parsed;
+    }
+    throw new BadRequestException('Giới hạn extension không hợp lệ');
   }
 
   private async assertExtensionAccess(
@@ -168,11 +197,16 @@ export class TenantManagementService {
       throw new BadRequestException('Mã tenant đã tồn tại');
     }
 
+    const extensionLimit = this.resolveExtensionLimit(dto.extensionLimit);
+
     const tenant = this.tenantRepo.create({
       id: tenantId,
       name,
       domain,
     });
+    if (extensionLimit !== undefined) {
+      tenant.extensionLimit = extensionLimit;
+    }
     await this.tenantRepo.save(tenant);
 
     await this.upsertRouting(tenantId, dto);
@@ -209,6 +243,11 @@ export class TenantManagementService {
       tenant.name = name;
     }
 
+    const extensionLimit = this.resolveExtensionLimit(dto.extensionLimit);
+    if (extensionLimit !== undefined) {
+      tenant.extensionLimit = extensionLimit;
+    }
+
     await this.tenantRepo.save(tenant);
     await this.upsertRouting(tenant.id, dto);
 
@@ -230,23 +269,29 @@ export class TenantManagementService {
     await this.tenantRepo.delete({ id });
   }
 
-  async listTenantOptions(scope?: TenantAccessScope): Promise<Array<{ id: string; name: string; domain: string }>> {
-    let tenants: TenantEntity[];
-    if (!scope || scope.isSuperAdmin) {
-      tenants = await this.tenantRepo.find({
-        select: ['id', 'name', 'domain'],
-        order: { name: 'ASC' },
-      });
-    } else if (scope.tenantIds.length === 0) {
+  async listTenantOptions(scope?: TenantAccessScope): Promise<
+    Array<{ id: string; name: string; domain: string; extensionLimit: number | null; extensionCount: number }>
+  > {
+    if (scope && !scope.isSuperAdmin && scope.tenantIds.length === 0) {
       return [];
-    } else {
-      tenants = await this.tenantRepo.find({
-        where: { id: In(scope.tenantIds) },
-        select: ['id', 'name', 'domain'],
-        order: { name: 'ASC' },
-      });
     }
-    return tenants.map((tenant) => ({ id: tenant.id, name: tenant.name, domain: tenant.domain }));
+
+    const query = this.tenantRepo
+      .createQueryBuilder('tenant')
+      .select(['tenant.id', 'tenant.name', 'tenant.domain', 'tenant.extensionLimit'])
+      .loadRelationCountAndMap('tenant.extensionCount', 'tenant.users')
+      .orderBy('tenant.name', 'ASC');
+
+    this.applyTenantFilter(query, 'tenant.id', scope);
+
+    const tenants = await query.getMany();
+    return tenants.map((tenant) => ({
+      id: tenant.id,
+      name: tenant.name,
+      domain: tenant.domain,
+      extensionLimit: tenant.extensionLimit ?? null,
+      extensionCount: Number((tenant as any).extensionCount ?? 0),
+    }));
   }
 
   async getTenantMetrics(scope?: TenantAccessScope): Promise<{
@@ -412,6 +457,16 @@ export class TenantManagementService {
       throw new BadRequestException('Extension đã tồn tại');
     }
 
+    const extensionLimit = tenant.extensionLimit;
+    if (extensionLimit !== null && extensionLimit !== undefined) {
+      const currentCount = await this.userRepo.count({ where: { tenantId: tenant.id } });
+      if (currentCount >= extensionLimit) {
+        throw new BadRequestException(
+          `Tenant đã đạt giới hạn ${extensionLimit} extension. Vui lòng tăng quota trước khi tạo thêm.`,
+        );
+      }
+    }
+
     const password = dto.password?.trim() || this.generatePassword();
 
     const extension = this.userRepo.create({
@@ -495,6 +550,7 @@ export class TenantManagementService {
       id: tenant.id,
       name: tenant.name,
       domain: tenant.domain,
+      extensionLimit: tenant.extensionLimit ?? null,
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
     };

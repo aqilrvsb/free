@@ -113,6 +113,7 @@ export interface TenantSummary {
   updatedAt?: string;
   routing?: RoutingConfig | null;
   extensionCount?: number;
+  extensionLimit?: number | null;
 }
 
 export interface ExtensionSummary {
@@ -129,6 +130,8 @@ export interface TenantLookupItem {
   id: string;
   name: string;
   domain: string;
+  extensionLimit?: number | null;
+  extensionCount?: number;
 }
 
 export interface CallEvent {

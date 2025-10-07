@@ -24,4 +24,11 @@ export class CreateTenantDto {
 
   @ApiPropertyOptional({ description: 'Danh sách codec ưu tiên', example: 'PCMU,PCMA,G722' })
   codecString?: string;
+
+  @ApiPropertyOptional({
+    description: 'Giới hạn số extension cho tenant (để trống nghĩa là không giới hạn)',
+    example: 50,
+    nullable: true,
+  })
+  extensionLimit?: number | null;
 }

@@ -2,6 +2,7 @@ export interface SeedTenant {
   id: string;
   name: string;
   domain: string;
+  extensionLimit?: number | null;
 }
 
 export interface SeedUser {

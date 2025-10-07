@@ -22,6 +22,7 @@ const defaultTenantForm = {
   id: "",
   name: "",
   domain: "",
+  extensionLimit: "",
   internalPrefix: "",
   voicemailPrefix: "",
   pstnGateway: "",
@@ -126,6 +127,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
       id: tenant.id,
       name: tenant.name,
       domain: tenant.domain,
+      extensionLimit: tenant.extensionLimit != null ? String(tenant.extensionLimit) : "",
       internalPrefix: tenant.routing?.internalPrefix || "",
       voicemailPrefix: tenant.routing?.voicemailPrefix || "",
       pstnGateway: tenant.routing?.pstnGateway || "",
@@ -152,6 +154,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
       id?: string;
       name?: string;
       domain?: string;
+      extensionLimit?: number | null;
       internalPrefix?: string;
       voicemailPrefix?: string;
       pstnGateway?: string;
@@ -168,6 +171,18 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
     if (tenantForm.voicemailPrefix.trim()) payload.voicemailPrefix = tenantForm.voicemailPrefix.trim();
     if (tenantForm.pstnGateway.trim()) payload.pstnGateway = tenantForm.pstnGateway.trim();
     if (tenantForm.codecString.trim()) payload.codecString = tenantForm.codecString.trim();
+
+    const limitInput = tenantForm.extensionLimit.trim();
+    if (limitInput === "") {
+      payload.extensionLimit = null;
+    } else {
+      const parsedLimit = Number(limitInput);
+      if (!Number.isInteger(parsedLimit) || parsedLimit < 0) {
+        alert("Giới hạn extension phải là số nguyên không âm");
+        return;
+      }
+      payload.extensionLimit = parsedLimit;
+    }
 
     try {
       if (tenantDialogMode === "create") {
@@ -288,7 +303,13 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
                     </div>
                     <Separator className="my-3" />
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <Badge variant="default">{tenant.extensionCount ?? 0} extension</Badge>
+                      <Badge variant="default">
+                        {tenant.extensionCount ?? 0}
+                        {tenant.extensionLimit != null ? ` / ${tenant.extensionLimit}` : ""} extension
+                      </Badge>
+                      <Badge variant="secondary">
+                        Giới hạn: {tenant.extensionLimit != null ? tenant.extensionLimit : 'Không giới hạn'}
+                      </Badge>
                       <Badge variant="secondary">Prefix nội bộ: {tenant.routing?.internalPrefix || '-'}</Badge>
                       <Badge variant="secondary">Voicemail: {tenant.routing?.voicemailPrefix || '-'}</Badge>
                       <Badge variant="secondary">Gateway: {tenant.routing?.pstnGateway || '-'}</Badge>
@@ -351,6 +372,17 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
                   onChange={(event) => handleTenantInput("domain", event.target.value)}
                   placeholder="tenant1.local"
                   required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tenant-extension-limit-dialog">Giới hạn extension</Label>
+                <Input
+                  id="tenant-extension-limit-dialog"
+                  type="number"
+                  min={0}
+                  value={tenantForm.extensionLimit}
+                  onChange={(event) => handleTenantInput("extensionLimit", event.target.value)}
+                  placeholder="Để trống nếu không giới hạn"
                 />
               </div>
               <div className="space-y-2">

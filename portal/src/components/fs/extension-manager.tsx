@@ -43,10 +43,12 @@ export function ExtensionManager({
   const [extensionDialogMode, setExtensionDialogMode] = useState<ExtensionDialogMode>("create");
   const [extensionForm, setExtensionForm] = useState(defaultExtensionForm);
   const [editingExtension, setEditingExtension] = useState<ExtensionSummary | null>(null);
-  const tenantOptions = useMemo(
-    () => [...initialTenantOptions].sort((a, b) => a.name.localeCompare(b.name, "vi", { sensitivity: "base" })),
-    [initialTenantOptions],
+  const [tenantChoices, setTenantChoices] = useState<TenantLookupItem[]>(() =>
+    sortTenantOptions(initialTenantOptions),
   );
+  useEffect(() => {
+    setTenantChoices(sortTenantOptions(initialTenantOptions));
+  }, [initialTenantOptions]);
   const [tenantFilter, setTenantFilter] = useState<string>("all");
   const [extensionSearch, setExtensionSearch] = useState<string>("");
   const [extensionPage, setExtensionPage] = useState(initialExtensions.page || 1);
@@ -134,6 +136,26 @@ export function ExtensionManager({
     [EXTENSIONS_PER_PAGE, apiBase, extensionSearch, tenantFilter, buildHeaders],
   );
 
+  const refreshTenantOptions = useCallback(async () => {
+    if (!apiBase) {
+      return;
+    }
+    try {
+      const response = await fetch(`${apiBase}/tenants/options`, {
+        method: "GET",
+        headers: buildHeaders(),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as TenantLookupItem[];
+      setTenantChoices(sortTenantOptions(payload));
+    } catch (error) {
+      console.error("Failed to refresh tenant options", error);
+    }
+  }, [apiBase, buildHeaders]);
+
   const extensionSearchInitialized = useRef(false);
   const tenantFilterInitialized = useRef(false);
   const previousTenantFilter = useRef(tenantFilter);
@@ -167,9 +189,33 @@ export function ExtensionManager({
     if (!canManageExtensions) {
       return;
     }
+    if (tenantChoices.length === 0) {
+      alert("Không có tenant nào để tạo extension.");
+      return;
+    }
+    const availableTenants = tenantChoices.filter((tenant) => tenantHasCapacity(tenant));
+    if (availableTenants.length === 0) {
+      alert("Tất cả tenant đã đạt giới hạn extension. Vui lòng tăng quota trước khi tạo thêm.");
+      return;
+    }
+    let preferredTenantId = "";
+    if (tenantFilter !== "all") {
+      const filtered = tenantChoices.find(
+        (tenant) => tenant.id === tenantFilter && tenantHasCapacity(tenant),
+      );
+      if (filtered) {
+        preferredTenantId = filtered.id;
+      }
+    }
+    if (!preferredTenantId) {
+      preferredTenantId = availableTenants[0].id;
+    }
     setExtensionDialogMode("create");
     setEditingExtension(null);
-    setExtensionForm(defaultExtensionForm);
+    setExtensionForm({
+      ...defaultExtensionForm,
+      tenantId: preferredTenantId,
+    });
     setExtensionDialogOpen(true);
   };
 
@@ -197,6 +243,20 @@ export function ExtensionManager({
     setExtensionForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const selectedTenant = useMemo(() => {
+    if (!extensionForm.tenantId) {
+      return null;
+    }
+    return tenantChoices.find((tenant) => tenant.id === extensionForm.tenantId) || null;
+  }, [extensionForm.tenantId, tenantChoices]);
+
+  const selectedTenantUsage = selectedTenant?.extensionCount ?? 0;
+  const selectedTenantLimit = selectedTenant?.extensionLimit ?? null;
+  const tenantLimitReached =
+    extensionDialogMode === "create" &&
+    selectedTenantLimit != null &&
+    selectedTenantUsage >= selectedTenantLimit;
+
   const submitExtension = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!apiBase || !canManageExtensions) return;
@@ -218,6 +278,17 @@ export function ExtensionManager({
     if (extensionForm.password.trim()) payload.password = extensionForm.password.trim();
     if (extensionForm.displayName.trim()) payload.displayName = extensionForm.displayName.trim();
 
+    if (extensionDialogMode === "create" && payload.tenantId) {
+      const tenantInfo = tenantChoices.find((tenant) => tenant.id === payload.tenantId);
+      if (tenantInfo && tenantInfo.extensionLimit != null) {
+        const currentCount = tenantInfo.extensionCount ?? 0;
+        if (currentCount >= tenantInfo.extensionLimit) {
+          alert("Tenant đã đạt giới hạn extension. Vui lòng tăng quota trước khi tạo thêm.");
+          return;
+        }
+      }
+    }
+
     try {
       if (extensionDialogMode === "create") {
         if (!payload.id || !payload.tenantId) {
@@ -234,6 +305,7 @@ export function ExtensionManager({
           throw new Error(await response.text());
         }
         await response.json();
+        await refreshTenantOptions();
         const shouldResetPage = tenantFilter === "all" || tenantFilter === payload.tenantId;
         await fetchExtensionPage(shouldResetPage ? 1 : extensionPage, tenantFilter, extensionSearch, {
           silent: true,
@@ -255,7 +327,11 @@ export function ExtensionManager({
       closeExtensionDialog();
     } catch (error) {
       console.error("Extension operation failed", error);
-      alert("Thao tác với extension thất bại. Vui lòng kiểm tra log.");
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Thao tác với extension thất bại. Vui lòng kiểm tra log.";
+      alert(message);
     } finally {
       setLoading(null);
     }
@@ -277,6 +353,7 @@ export function ExtensionManager({
         throw new Error(raw || "Không thể xóa extension.");
       }
       await fetchExtensionPage(extensionPage, tenantFilter, extensionSearch, { silent: true });
+      await refreshTenantOptions();
     } catch (error) {
       console.error("Failed to delete extension", error);
       const message = error instanceof Error && error.message ? error.message : "Không thể xóa extension.";
@@ -285,8 +362,6 @@ export function ExtensionManager({
       setLoading(null);
     }
   };
-
-  const tenantChoices = tenantOptions;
 
   const openQrDialog = async (extension: ExtensionSummary) => {
     if (!apiBase) return;
@@ -584,10 +659,16 @@ export function ExtensionManager({
                     <option value="">-- Chọn tenant --</option>
                     {tenantChoices.map((tenant) => (
                       <option key={tenant.id} value={tenant.id}>
-                        {tenant.name} ({tenant.domain})
+                        {tenant.name} ({tenant.domain}) - {formatTenantUsage(tenant)}
                       </option>
                     ))}
                   </select>
+                  {selectedTenant ? (
+                    <p className={tenantLimitReached ? "text-xs text-red-500" : "text-xs text-muted-foreground"}>
+                      Đã sử dụng: {selectedTenantUsage}
+                      {selectedTenantLimit != null ? ` / ${selectedTenantLimit}` : " (không giới hạn)"}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="extension-password-dialog">
@@ -617,7 +698,12 @@ export function ExtensionManager({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={loading === "extension-create" || loading?.startsWith("extension-update-")}
+                  disabled={
+                    loading === "extension-create" ||
+                    loading?.startsWith("extension-update-") ||
+                    tenantLimitReached
+                  }
+                  title={tenantLimitReached ? "Tenant đã đạt giới hạn extension" : undefined}
                 >
                   {extensionDialogMode === "create" ? "Tạo extension" : "Lưu thay đổi"}
                 </Button>
@@ -773,6 +859,26 @@ function PaginationBar({ page, pageCount, total, onPrev, onNext, loading = false
       </div>
     </div>
   );
+}
+
+function sortTenantOptions(items: TenantLookupItem[]): TenantLookupItem[] {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name, "vi", { sensitivity: "base" }));
+}
+
+function tenantHasCapacity(tenant: TenantLookupItem): boolean {
+  if (tenant.extensionLimit == null) {
+    return true;
+  }
+  const currentCount = tenant.extensionCount ?? 0;
+  return currentCount < tenant.extensionLimit;
+}
+
+function formatTenantUsage(tenant: TenantLookupItem): string {
+  const currentCount = tenant.extensionCount ?? 0;
+  if (tenant.extensionLimit != null) {
+    return `${currentCount}/${tenant.extensionLimit}`;
+  }
+  return `${currentCount}/không giới hạn`;
 }
 
 function getPortalToken(): string | null {

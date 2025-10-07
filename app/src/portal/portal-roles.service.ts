@@ -52,12 +52,10 @@ export class PortalRolesService implements OnModuleInit {
       permissions: [
         'view_dashboard',
         'view_cdr',
-        'view_recordings',
         'view_channels',
         'manage_inbound',
         'manage_outbound',
         'manage_ivr',
-        'manage_recordings',
       ],
     },
     tenant_admin: {
@@ -66,15 +64,12 @@ export class PortalRolesService implements OnModuleInit {
       permissions: [
         'view_dashboard',
         'view_cdr',
-        'view_recordings',
         'view_channels',
         'manage_gateways',
         'manage_dialplan',
         'manage_inbound',
         'manage_outbound',
         'manage_ivr',
-        'manage_settings',
-        'manage_recordings',
         'manage_extensions',
         'manage_portal_users',
       ],

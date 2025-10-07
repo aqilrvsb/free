@@ -15,6 +15,9 @@ export class TenantEntity {
   @Column({ type: 'varchar', length: 255 })
   domain!: string;
 
+  @Column({ name: 'extension_limit', type: 'int', nullable: true })
+  extensionLimit?: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
