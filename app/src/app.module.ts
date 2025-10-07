@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CdrController } from './telephony/cdr.controller';
@@ -60,6 +61,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { RolesGuard } from './auth/roles.guard';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor';
+import { SecurityController } from './security/security.controller';
+import { SecurityService } from './security/security.service';
 
 @Module({
   imports: [
@@ -127,6 +130,10 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
         },
       }),
     }),
+    HttpModule.register({
+      timeout: 3000,
+      maxRedirects: 3,
+    }),
   ],
   controllers: [
     FsXmlController,
@@ -144,6 +151,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
     PortalUsersController,
     PortalRolesController,
     AuthController,
+    SecurityController,
   ],
   providers: [
     FsService,
@@ -168,6 +176,7 @@ import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor'
     JwtStrategy,
     JwtAuthGuard,
     RolesGuard,
+    SecurityService,
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpLoggingInterceptor,

@@ -45,11 +45,13 @@ export const ADMIN_PATH_PREFIXES = [
   "/fs/ivr",
   "/fs/settings",
   "/fs/system-recordings",
+  "/security",
 ];
 
 export const SUPER_ADMIN_ONLY_PATHS = [
   "/admin/roles",
   "/fs/manage",
+  "/security",
 ];
 
 export function requiresAdminAccess(pathname: string): boolean {

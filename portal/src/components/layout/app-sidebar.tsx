@@ -34,6 +34,7 @@ import {
   Workflow,
   ShieldCheck,
   PhoneCall,
+  ShieldAlert,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -53,7 +54,8 @@ type PermissionKey =
   | "manage_settings"
   | "manage_recordings"
   | "manage_portal_users"
-  | "manage_roles";
+  | "manage_roles"
+  | "manage_security";
 
 interface NavItem {
   title: string
@@ -209,6 +211,14 @@ const NAV_SECTIONS: Array<{
           icon: Settings,
           roles: ["super_admin", "tenant_admin"],
           permission: "manage_settings",
+        },
+        {
+          title: "Security",
+          description: "Fail2Ban & firewall",
+          href: "/security",
+          icon: ShieldAlert,
+          roles: ["super_admin"],
+          permission: "manage_security",
         },
         {
           title: "System Recordings",

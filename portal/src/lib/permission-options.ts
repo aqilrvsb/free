@@ -24,6 +24,7 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { key: "manage_settings", label: "Cấu hình hệ thống", description: "Thay đổi cấu hình FreeSWITCH", group: "Quản trị" },
   { key: "manage_recordings", label: "Quản lý ghi âm", description: "Xử lý ghi âm hệ thống", group: "Quản trị" },
   { key: "manage_extensions", label: "Quản lý extension", description: "Thêm/sửa/xoá máy nhánh SIP", group: "Quản trị" },
+  { key: "manage_security", label: "Quản lý bảo mật", description: "Quản lý Fail2Ban & firewall", group: "Quản trị" },
 ];
 
 export const PERMISSION_KEYS = new Set<PermissionKey>(PERMISSION_OPTIONS.map((option) => option.key));
@@ -105,6 +106,7 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
       "manage_extensions",
       "manage_portal_users",
       "manage_roles",
+      "manage_security",
     ],
     isSystem: true,
   },

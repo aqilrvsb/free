@@ -1,0 +1,18 @@
+[DEFAULT]
+bantime  = 3600
+findtime = 600
+maxretry = 8
+backend  = auto
+action   = nftables-allports
+
+[sshd]
+enabled = false
+
+[freeswitch-sip]
+enabled  = true
+filter   = freeswitch-sip
+logpath  = /var/log/freeswitch/freeswitch.log
+maxretry = 8
+findtime = 300
+bantime  = 86400
+ignoreip = 127.0.0.1/8 ::1

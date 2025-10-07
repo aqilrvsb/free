@@ -2,11 +2,13 @@
 app/node_modules/
 app/dist/
 app/package-lock.json
+security-agent/node_modules/
 
 # FreeSWITCH runtime data
 data/log/
 data/lib/
 data/recordings/
+data/security-agent/
 
 # Environment & secrets
 .env
@@ -21,4 +23,3 @@ data/recordings/
 
 # Logs
 *.log
-

@@ -6,6 +6,7 @@ export const SwaggerTags = {
   Routing: 'Routing',
   Telephony: 'Telephony',
   Tenant: 'Tenant Management',
+  Security: 'Security',
 } as const;
 
 export type SwaggerTag = (typeof SwaggerTags)[keyof typeof SwaggerTags];

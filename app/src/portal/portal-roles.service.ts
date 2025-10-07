@@ -37,6 +37,7 @@ export class PortalRolesService implements OnModuleInit {
     'manage_extensions',
     'manage_portal_users',
     'manage_roles',
+    'manage_security',
   ];
 
   private readonly defaultRoleMap: Record<string, Omit<CreatePortalRoleDto, 'key'>> = {

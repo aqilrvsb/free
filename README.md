@@ -107,3 +107,37 @@ docker compose -f docker-compose.yml -f docker-compose.local-db.yml up --build
 - **FreeSWITCH management**: set `FS_ESL_HOST`, `FS_ESL_PORT`, and `FS_ESL_PASSWORD` so the Nest app can reach the FreeSWITCH Event Socket; recordings directory is mapped via `RECORDINGS_DIR`.
 - **API security**: lock down `/fs/xml` and `/fs/cdr` (network ACL, reverse proxy auth, or mTLS) before exposing publicly.
 - **Mac dev**: Docker Desktop may not support host networking; adjust `docker-compose.yml` to expose the needed UDP/TCP ports if you're not on Linux.
+
+## Security agent (Fail2Ban + nftables)
+
+The backend now exposes `/security/*` endpoints and the portal ships with a **Security Operations** page (super-admin only) to monitor Fail2Ban and nftables rules.
+
+Configure the integration through the NestJS environment variables:
+
+```
+SECURITY_AGENT_URL=http://127.0.0.1:9000
+SECURITY_AGENT_TOKEN=some-shared-secret
+SECURITY_AGENT_TIMEOUT_MS=3000
+F2B_DEFAULT_JAIL=freeswitch-sip
+SECURITY_AGENT_LOG_LEVEL=info
+FS_ESL_HOST=127.0.0.1
+FS_ESL_PORT=8021
+FS_ESL_PASSWORD=ClueCon
+FS_ESL_PROFILES=internal
+FS_ESL_TIMEOUT_MS=2000
+FS_ESL_ENABLED=true
+```
+
+> Docker Compose users: the `security-agent` service is bundled in this repo. Running `docker compose up` will start it with Fail2Ban + nftables inside the container and expose the HTTP API on `http://host.docker.internal:9000` for the Nest app. State (manual firewall rules) persists under `./data/security-agent`.
+
+Point `SECURITY_AGENT_URL` to the running agent (default when using Compose is `http://host.docker.internal:9000`). The agent exposes the following HTTP API:
+
+- `GET /status` → `{ agent: { connected, lastCheckedAt }, summary: { fail2ban, firewall } }`
+- `GET /bans` → array of current Fail2Ban bans
+- `POST /bans` / `DELETE /bans/:id`
+- `GET /firewall/rules` → active nftables rules handled by the agent
+- `POST /firewall/rules` / `DELETE /firewall/rules/:id`
+
+The portal UI calls these endpoints directly via the Nest backend, so the agent stays fully isolated from the browser. When the agent is unreachable the UI falls back to read-only placeholders and displays the last known state.
+
+When `FS_ESL_*` variables are provided, the agent connects to FreeSWITCH's Event Socket to flush affected registrations immediately after a ban or new firewall rule. In addition, the agent wipes relevant conntrack entries so banned IPs cannot reuse existing SIP sessions.

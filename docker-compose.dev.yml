@@ -8,11 +8,13 @@ services:
     working_dir: /app
     extra_hosts:
       - "host.docker.internal:172.17.0.1"
+    depends_on:
+      - security-agent
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       APP_PORT: ${APP_PORT:-3000}
       TZ: ${TIMEZONE:-Asia/Ho_Chi_Minh}
-      DB_HOST: ${DB_HOST:?Set DB_HOST to an external MySQL host or supply docker-compose.local-db.yml}
+      DB_HOST: ${DB_HOST:-host.docker.internal}
       DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-fsapp}
       DB_PASSWORD: ${DB_PASSWORD:-fsapp}
@@ -26,6 +28,9 @@ services:
       RECORDINGS_DIR: ${RECORDINGS_DIR:-/recordings}
       FS_GATEWAY_DIR: ${FS_GATEWAY_DIR:-/shared/gateways}
       FS_CONFIG_DIR: /fs-conf
+      SECURITY_AGENT_URL: ${SECURITY_AGENT_URL:-http://host.docker.internal:9000}
+      SECURITY_AGENT_TOKEN: ${SECURITY_AGENT_TOKEN:-}
+      SECURITY_AGENT_TIMEOUT_MS: ${SECURITY_AGENT_TIMEOUT_MS:-3000}
     ports:
       - "3000:3000"
     volumes:
@@ -99,6 +104,31 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
+
+  security-agent:
+    build:
+      context: .
+      dockerfile: docker/security-agent.Dockerfile
+    environment:
+      AGENT_TOKEN: ${SECURITY_AGENT_TOKEN:-}
+      F2B_DEFAULT_JAIL: ${F2B_DEFAULT_JAIL:-freeswitch-sip}
+      NFT_FAMILY: ${NFT_FAMILY:-inet}
+      NFT_TABLE: ${NFT_TABLE:-filter}
+      NFT_CHAIN: ${NFT_CHAIN:-input}
+      LOG_LEVEL: ${SECURITY_AGENT_LOG_LEVEL:-debug}
+      FS_ESL_HOST: ${FS_ESL_HOST:-127.0.0.1}
+      FS_ESL_PORT: ${FS_ESL_PORT:-8021}
+      FS_ESL_PASSWORD: ${FS_ESL_PASSWORD:-}
+      FS_ESL_PROFILES: ${FS_ESL_PROFILES:-internal}
+      FS_ESL_TIMEOUT_MS: ${FS_ESL_TIMEOUT_MS:-2000}
+      FS_ESL_ENABLED: ${FS_ESL_ENABLED:-true}
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./data/log:/var/log/freeswitch
+      - ./data/security-agent:/data
+    restart: unless-stopped
 
 volumes:
   app-node-modules: {}
