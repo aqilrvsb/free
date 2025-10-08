@@ -34,6 +34,11 @@ type RouteFormState = {
   stripDigits: string;
   prepend: string;
   enabled: boolean;
+  billingEnabled: boolean;
+  billingRatePerMinute: string;
+  billingIncrementSeconds: string;
+  billingSetupFee: string;
+  billingCid: string;
 };
 
 const defaultForm: RouteFormState = {
@@ -46,6 +51,11 @@ const defaultForm: RouteFormState = {
   stripDigits: "0",
   prepend: "",
   enabled: true,
+  billingEnabled: false,
+  billingRatePerMinute: "0",
+  billingIncrementSeconds: "60",
+  billingSetupFee: "0",
+  billingCid: "",
 };
 
 const outboundRouteTemplates: Array<{
@@ -68,6 +78,12 @@ const outboundRouteTemplates: Array<{
       stripDigits: current.stripDigits.trim() ? current.stripDigits : "0",
       prepend: current.prepend.trim(),
       priority: current.priority.trim() ? current.priority : "10",
+      billingEnabled: true,
+      billingRatePerMinute: current.billingRatePerMinute.trim() && current.billingRatePerMinute !== "0"
+        ? current.billingRatePerMinute
+        : "150",
+      billingIncrementSeconds: current.billingIncrementSeconds.trim() || "60",
+      billingSetupFee: current.billingSetupFee.trim() || "0",
     }),
   },
   {
@@ -84,6 +100,12 @@ const outboundRouteTemplates: Array<{
       stripDigits: current.stripDigits.trim() ? current.stripDigits : "0",
       prepend: current.prepend.trim(),
       priority: current.priority.trim() ? current.priority : "20",
+      billingEnabled: true,
+      billingRatePerMinute: current.billingRatePerMinute.trim() && current.billingRatePerMinute !== "0"
+        ? current.billingRatePerMinute
+        : "500",
+      billingIncrementSeconds: current.billingIncrementSeconds.trim() || "60",
+      billingSetupFee: current.billingSetupFee.trim() || "0",
     }),
   },
 ];
@@ -132,6 +154,16 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
       stripDigits: route.stripDigits !== undefined ? String(route.stripDigits) : "0",
       prepend: route.prepend || "",
       enabled: route.enabled,
+      billingEnabled: route.billingEnabled ?? false,
+      billingRatePerMinute:
+        route.billingRatePerMinute !== undefined ? String(route.billingRatePerMinute) : defaultForm.billingRatePerMinute,
+      billingIncrementSeconds:
+        route.billingIncrementSeconds !== undefined
+          ? String(route.billingIncrementSeconds)
+          : defaultForm.billingIncrementSeconds,
+      billingSetupFee:
+        route.billingSetupFee !== undefined ? String(route.billingSetupFee) : defaultForm.billingSetupFee,
+      billingCid: route.billingCid || "",
     });
     setDialogOpen(true);
   };
@@ -167,6 +199,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
       gatewayId: form.gatewayId.trim() || undefined,
       prepend: form.prepend.trim() || undefined,
       enabled: Boolean(form.enabled),
+      billingEnabled: Boolean(form.billingEnabled),
     };
 
     if (form.priority.trim()) {
@@ -174,6 +207,18 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
     }
     if (form.stripDigits.trim()) {
       payload.stripDigits = Number(form.stripDigits.trim());
+    }
+    if (form.billingRatePerMinute.trim()) {
+      payload.billingRatePerMinute = Number(form.billingRatePerMinute.trim());
+    }
+    if (form.billingIncrementSeconds.trim()) {
+      payload.billingIncrementSeconds = Number(form.billingIncrementSeconds.trim());
+    }
+    if (form.billingSetupFee.trim()) {
+      payload.billingSetupFee = Number(form.billingSetupFee.trim());
+    }
+    if (form.billingCid.trim()) {
+      payload.billingCid = form.billingCid.trim();
     }
 
     return payload;
@@ -278,7 +323,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
               </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="grid gap-2 md:grid-cols-2">
+              <div className="grid gap-2 md:grid-cols-3">
                 <div>
                   <span className="text-muted-foreground">Regex khớp</span>
                   <p className="font-medium">{route.matchPrefix || '(mọi số)'}</p>
@@ -298,6 +343,28 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
                 <div>
                   <span className="text-muted-foreground">Trạng thái</span>
                   <p className="font-medium">{route.enabled ? 'Đang bật' : 'Tạm tắt'}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Billing</span>
+                  <p className="font-medium">
+                    {route.billingEnabled
+                      ? `Bật (${(route.billingRatePerMinute ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/phút)`
+                      : 'Tắt'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Bước tính cước</span>
+                  <p className="font-medium">{route.billingIncrementSeconds ?? 60} giây</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Setup fee</span>
+                  <p className="font-medium">
+                    {(route.billingSetupFee ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Billing CID</span>
+                  <p className="font-medium">{route.billingCid || '-'}</p>
                 </div>
               </div>
 
@@ -461,6 +528,68 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
                   placeholder="Route quốc tế qua Telco A"
                 />
               </div>
+            </div>
+
+            <div className="space-y-3 rounded-md border border-border/70 bg-muted/5 p-3">
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  id="route-billing-enabled"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={form.billingEnabled}
+                  onChange={(event) => handleInput("billingEnabled", event.target.checked)}
+                />
+                <Label htmlFor="route-billing-enabled" className="cursor-pointer">
+                  Bật billing cho route này
+                </Label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="route-billing-rate">Đơn giá/phút</Label>
+                  <Input
+                    id="route-billing-rate"
+                    value={form.billingRatePerMinute}
+                    onChange={(event) => handleInput("billingRatePerMinute", event.target.value)}
+                    inputMode="decimal"
+                    placeholder="Ví dụ: 150"
+                    disabled={!form.billingEnabled}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="route-billing-increment">Bước tính cước (giây)</Label>
+                  <Input
+                    id="route-billing-increment"
+                    value={form.billingIncrementSeconds}
+                    onChange={(event) => handleInput("billingIncrementSeconds", event.target.value)}
+                    inputMode="numeric"
+                    disabled={!form.billingEnabled}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="route-billing-setup">Phí thiết lập</Label>
+                  <Input
+                    id="route-billing-setup"
+                    value={form.billingSetupFee}
+                    onChange={(event) => handleInput("billingSetupFee", event.target.value)}
+                    inputMode="decimal"
+                    placeholder="0"
+                    disabled={!form.billingEnabled}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="route-billing-cid">Billing CID / Mã khách hàng</Label>
+                  <Input
+                    id="route-billing-cid"
+                    value={form.billingCid}
+                    onChange={(event) => handleInput("billingCid", event.target.value)}
+                    placeholder="Ví dụ: ACC-1001"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Khi bật billing, hệ thống sẽ tính cước dựa trên `billsec` thực tế với bước tính cước đã cấu hình, cộng thêm setup fee nếu có.
+              </p>
             </div>
 
             <div className="flex items-center gap-2 text-sm">

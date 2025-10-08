@@ -17,6 +17,9 @@ import {
   DialplanRuleEntity,
   GatewayEntity,
   OutboundRuleEntity,
+  BillingConfigEntity,
+  BillingTopupEntity,
+  BillingChargeEntity,
   RoutingConfigEntity,
   SettingEntity,
   TenantEntity,
@@ -63,6 +66,8 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { HttpLoggingInterceptor } from './interceptors/http-logging.interceptor';
 import { SecurityController } from './security/security.controller';
 import { SecurityService } from './security/security.service';
+import { BillingController } from './billing/billing.controller';
+import { BillingService } from './billing/billing.service';
 
 @Module({
   imports: [
@@ -83,6 +88,9 @@ import { SecurityService } from './security/security.service';
           CdrEntity,
           GatewayEntity,
           OutboundRuleEntity,
+          BillingConfigEntity,
+          BillingTopupEntity,
+          BillingChargeEntity,
           SettingEntity,
           DialplanRuleEntity,
           DialplanActionEntity,
@@ -109,6 +117,9 @@ import { SecurityService } from './security/security.service';
       CdrEntity,
       GatewayEntity,
       OutboundRuleEntity,
+      BillingConfigEntity,
+      BillingTopupEntity,
+      BillingChargeEntity,
       SettingEntity,
       DialplanRuleEntity,
       DialplanActionEntity,
@@ -152,6 +163,7 @@ import { SecurityService } from './security/security.service';
     PortalRolesController,
     AuthController,
     SecurityController,
+    BillingController,
   ],
   providers: [
     FsService,
@@ -177,6 +189,7 @@ import { SecurityService } from './security/security.service';
     JwtAuthGuard,
     RolesGuard,
     SecurityService,
+    BillingService,
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpLoggingInterceptor,

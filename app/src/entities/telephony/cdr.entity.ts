@@ -43,6 +43,21 @@ export class CdrEntity {
   @Column({ name: 'end_time', type: 'datetime', nullable: true })
   endTime?: Date | null;
 
+  @Column({ name: 'billing_cost', type: 'decimal', precision: 14, scale: 6, default: '0.000000' })
+  billingCost!: string;
+
+  @Column({ name: 'billing_currency', type: 'varchar', length: 8, nullable: true })
+  billingCurrency?: string | null;
+
+  @Column({ name: 'billing_route_id', type: 'varchar', length: 64, nullable: true })
+  billingRouteId?: string | null;
+
+  @Column({ name: 'billing_cid', type: 'varchar', length: 120, nullable: true })
+  billingCid?: string | null;
+
+  @Column({ name: 'billing_rate_applied', type: 'decimal', precision: 12, scale: 4, default: '0.0000' })
+  billingRateApplied!: string;
+
   @Column({ name: 'raw_payload', type: 'longtext' })
   rawPayload!: string;
 

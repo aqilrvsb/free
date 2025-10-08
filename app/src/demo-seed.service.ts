@@ -2,9 +2,16 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PortalRoleEntity, PortalUserEntity, RoutingConfigEntity, TenantEntity, UserEntity } from './entities';
+import {
+  BillingConfigEntity,
+  PortalRoleEntity,
+  PortalUserEntity,
+  RoutingConfigEntity,
+  TenantEntity,
+  UserEntity,
+} from './entities';
 import { hash } from 'bcryptjs';
-import { SeedRouting, SeedTenants, SeedUsers } from './data/seed-data';
+import { SeedBillingConfigs, SeedRouting, SeedTenants, SeedUsers } from './data/seed-data';
 import { PortalRolesService } from './portal/portal-roles.service';
 
 @Injectable()
@@ -16,6 +23,7 @@ export class DemoSeedService implements OnApplicationBootstrap {
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
+    @InjectRepository(BillingConfigEntity) private readonly billingRepo: Repository<BillingConfigEntity>,
     @InjectRepository(PortalUserEntity) private readonly portalUserRepo: Repository<PortalUserEntity>,
     @InjectRepository(PortalRoleEntity) private readonly portalRoleRepo: Repository<PortalRoleEntity>,
     private readonly portalRolesService: PortalRolesService,
@@ -38,6 +46,7 @@ export class DemoSeedService implements OnApplicationBootstrap {
     await this.seedTenants();
     await this.seedUsers();
     await this.seedRouting();
+    await this.seedBilling();
     this.logger.log('Demo data seeding completed');
   }
 
@@ -85,6 +94,22 @@ export class DemoSeedService implements OnApplicationBootstrap {
   private async seedRouting(): Promise<void> {
     for (const routing of SeedRouting) {
       await this.routingRepo.save({ ...routing });
+    }
+  }
+
+  private async seedBilling(): Promise<void> {
+    for (const billing of SeedBillingConfigs) {
+      await this.billingRepo.save({
+        tenantId: billing.tenantId,
+        currency: billing.currency,
+        defaultRatePerMinute: billing.defaultRatePerMinute.toFixed(4),
+        defaultIncrementSeconds: billing.defaultIncrementSeconds,
+        defaultSetupFee: billing.defaultSetupFee.toFixed(4),
+        taxPercent: billing.taxPercent.toFixed(2),
+        billingEmail: billing.billingEmail ?? null,
+        prepaidEnabled: billing.prepaidEnabled ?? false,
+        balanceAmount: (billing.balanceAmount ?? 0).toFixed(4),
+      });
     }
   }
 }

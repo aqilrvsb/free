@@ -227,9 +227,14 @@ export class GatewayManagementService {
     addParam('password', gateway.password);
     addParam('realm', gateway.realm);
     addParam('proxy', gateway.proxy);
-    addParam('register', gateway.register ? 'true' : 'false');
+    const shouldRegister = gateway.register !== undefined ? gateway.register : true;
+    addParam('register', shouldRegister ? 'true' : 'false');
     addParam('enabled', gateway.enabled ? 'true' : 'false');
     addParam('sip-transport', gateway.transport);
+    const callerIdInFrom = gateway.callerIdInFrom !== undefined && gateway.callerIdInFrom !== null
+      ? gateway.callerIdInFrom
+      : !shouldRegister;
+    addParam('caller-id-in-from', callerIdInFrom ? 'true' : 'false');
 
     if (gateway.expireSeconds !== undefined && gateway.expireSeconds !== null) {
       addParam('expire-seconds', String(gateway.expireSeconds));

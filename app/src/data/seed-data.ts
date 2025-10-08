@@ -21,6 +21,18 @@ export interface SeedRoutingConfig {
   codecString?: string;
 }
 
+export interface SeedBillingConfig {
+  tenantId: string;
+  currency: string;
+  defaultRatePerMinute: number;
+  defaultIncrementSeconds: number;
+  defaultSetupFee: number;
+  taxPercent: number;
+  billingEmail?: string | null;
+  prepaidEnabled?: boolean;
+  balanceAmount?: number;
+}
+
 export const SeedTenants: SeedTenant[] = [
   { id: 'tenant1', name: 'Tenant One', domain: 'tenant1.local' },
   { id: 'tenant2', name: 'Tenant Two', domain: 'tenant2.local' },
@@ -48,5 +60,30 @@ export const SeedRouting: SeedRoutingConfig[] = [
     pstnGateway: 'pstn',
     enableE164: true,
     codecString: 'PCMU,PCMA,G722,OPUS',
+  },
+];
+
+export const SeedBillingConfigs: SeedBillingConfig[] = [
+  {
+    tenantId: 'tenant1',
+    currency: 'VND',
+    defaultRatePerMinute: 150,
+    defaultIncrementSeconds: 60,
+    defaultSetupFee: 0,
+    taxPercent: 10,
+    billingEmail: 'billing+tenant1@example.com',
+    prepaidEnabled: true,
+    balanceAmount: 0,
+  },
+  {
+    tenantId: 'tenant2',
+    currency: 'VND',
+    defaultRatePerMinute: 120,
+    defaultIncrementSeconds: 60,
+    defaultSetupFee: 0,
+    taxPercent: 5,
+    billingEmail: 'billing+tenant2@example.com',
+    prepaidEnabled: false,
+    balanceAmount: 0,
   },
 ];

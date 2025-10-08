@@ -41,6 +41,7 @@ export const ADMIN_PATH_PREFIXES = [
   "/fs/gateways",
   "/fs/dialplan",
   "/fs/outbound",
+  "/fs/billing",
   "/fs/inbound",
   "/fs/ivr",
   "/fs/settings",

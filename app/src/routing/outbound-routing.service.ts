@@ -13,6 +13,11 @@ export interface CreateOutboundRouteDto {
   stripDigits?: number;
   prepend?: string;
   enabled?: boolean;
+  billingEnabled?: boolean;
+  billingRatePerMinute?: number | string;
+  billingIncrementSeconds?: number;
+  billingSetupFee?: number | string;
+  billingCid?: string;
 }
 
 export type UpdateOutboundRouteDto = Partial<CreateOutboundRouteDto>;
@@ -65,6 +70,11 @@ export class OutboundRoutingService {
       stripDigits: this.normalizeNumber(dto.stripDigits),
       prepend: dto.prepend?.trim() || '',
       enabled: dto.enabled !== undefined ? Boolean(dto.enabled) : true,
+      billingEnabled: dto.billingEnabled !== undefined ? Boolean(dto.billingEnabled) : false,
+      billingRatePerMinute: this.normalizeDecimal(dto.billingRatePerMinute, 4),
+      billingIncrementSeconds: this.normalizeNumber(dto.billingIncrementSeconds, 1, 1),
+      billingSetupFee: this.normalizeDecimal(dto.billingSetupFee, 4),
+      billingCid: dto.billingCid?.trim() || null,
     });
 
     await this.ruleRepo.save(rule);
@@ -123,6 +133,21 @@ export class OutboundRoutingService {
     if (dto.enabled !== undefined) {
       rule.enabled = Boolean(dto.enabled);
     }
+    if (dto.billingEnabled !== undefined) {
+      rule.billingEnabled = Boolean(dto.billingEnabled);
+    }
+    if (dto.billingRatePerMinute !== undefined) {
+      rule.billingRatePerMinute = this.normalizeDecimal(dto.billingRatePerMinute, 4);
+    }
+    if (dto.billingIncrementSeconds !== undefined) {
+      rule.billingIncrementSeconds = this.normalizeNumber(dto.billingIncrementSeconds, 1, 1);
+    }
+    if (dto.billingSetupFee !== undefined) {
+      rule.billingSetupFee = this.normalizeDecimal(dto.billingSetupFee, 4);
+    }
+    if (dto.billingCid !== undefined) {
+      rule.billingCid = dto.billingCid?.trim() || null;
+    }
 
     await this.ruleRepo.save(rule);
     const updated = await this.ruleRepo.findOne({ where: { id: rule.id }, relations: ['tenant', 'gateway'] });
@@ -163,17 +188,36 @@ export class OutboundRoutingService {
       stripDigits: rule.stripDigits,
       prepend: rule.prepend,
       enabled: rule.enabled,
+      billingEnabled: rule.billingEnabled,
+      billingRatePerMinute: Number(rule.billingRatePerMinute ?? 0),
+      billingIncrementSeconds: rule.billingIncrementSeconds,
+      billingSetupFee: Number(rule.billingSetupFee ?? 0),
+      billingCid: rule.billingCid ?? undefined,
       createdAt: rule.createdAt,
       updatedAt: rule.updatedAt,
     };
   }
 
-  private normalizeNumber(value?: number): number {
+  private normalizeNumber(value?: number | string, min: number = 0, fallback: number = 0): number {
     if (value === undefined || value === null || Number.isNaN(Number(value))) {
-      return 0;
+      return fallback;
     }
     const num = Number(value);
-    return num < 0 ? 0 : Math.floor(num);
+    if (num < min) {
+      return min;
+    }
+    return Math.floor(num);
+  }
+
+  private normalizeDecimal(value: number | string | undefined, scale: number): string {
+    if (value === undefined || value === null || value === '') {
+      return (0).toFixed(scale);
+    }
+    const num = Number(value);
+    if (Number.isNaN(num)) {
+      return (0).toFixed(scale);
+    }
+    return num.toFixed(scale);
   }
 
   private assertValidRegex(pattern: string): void {

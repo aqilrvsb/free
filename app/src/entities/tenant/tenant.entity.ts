@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, OneToMany, OneToOne, PrimaryColumn, U
 import { PortalUserTenantEntity } from '../portal/portal-user-tenant.entity';
 import { RoutingConfigEntity } from './routing-config.entity';
 import { UserEntity } from './user.entity';
+import { BillingConfigEntity } from './billing-config.entity';
 
 @Entity({ name: 'tenants' })
 @Unique(['domain'])
@@ -29,6 +30,9 @@ export class TenantEntity {
 
   @OneToOne(() => RoutingConfigEntity, (routing) => routing.tenant)
   routing?: RoutingConfigEntity;
+
+  @OneToOne(() => BillingConfigEntity, (billing) => billing.tenant)
+  billingConfig?: BillingConfigEntity;
 
   @OneToMany(() => PortalUserTenantEntity, (link) => link.tenant)
   portalUserMemberships?: PortalUserTenantEntity[];

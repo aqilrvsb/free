@@ -36,6 +36,11 @@ const FIELDS: Array<{ key: keyof CdrRecord; label: string }> = [
   { key: "toNumber", label: "Đến" },
   { key: "durationSeconds", label: "Thời lượng (s)" },
   { key: "billSeconds", label: "Billsec (s)" },
+  { key: "billingCost", label: "Cước đã tính" },
+  { key: "billingCurrency", label: "Tiền tệ" },
+  { key: "billingRateApplied", label: "Đơn giá áp dụng (/phút)" },
+  { key: "billingCid", label: "Billing CID" },
+  { key: "billingRouteId", label: "Outbound Rule" },
   { key: "hangupCause", label: "Nguyên nhân" },
   { key: "finalStatusLabel", label: "Trạng thái cuối" },
   { key: "startTime", label: "Bắt đầu" },
@@ -98,6 +103,12 @@ export default async function CdrDetailPage({ params }: CdrDetailPageProps) {
                   rendered = (
                     <Badge variant={resolveStatusVariant(record.finalStatus)}>{record.finalStatusLabel}</Badge>
                   );
+                } else if (key === "billingCost") {
+                  rendered = formatCurrencyValue(record.billingCost, record.billingCurrency);
+                } else if (key === "billingRateApplied") {
+                  rendered = record.billingRateApplied
+                    ? `${Number(record.billingRateApplied).toLocaleString("vi-VN", { maximumFractionDigits: 2 })}/phút`
+                    : "-";
                 } else {
                   rendered = formatValue(value, timezone);
                 }
@@ -145,4 +156,21 @@ function formatValue(value: unknown, timezone: string): ReactNode {
     return value;
   }
   return String(value);
+}
+
+function formatCurrencyValue(cost?: string, currency?: string | null): ReactNode {
+  const numeric = Number(cost ?? 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return currency ? `0 ${currency}` : "0";
+  }
+  const cur = currency || "VND";
+  try {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: cur,
+      maximumFractionDigits: 2,
+    }).format(numeric);
+  } catch {
+    return `${numeric.toFixed(2)} ${cur}`;
+  }
 }

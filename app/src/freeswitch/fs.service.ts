@@ -10,6 +10,7 @@ import {
   OutboundRuleEntity,
   InboundRouteEntity,
   IvrMenuEntity,
+  BillingConfigEntity,
 } from '../entities';
 import { DialplanConfigService } from '../routing/dialplan-config.service';
 
@@ -43,6 +44,7 @@ export class FsService {
     @InjectRepository(OutboundRuleEntity) private readonly outboundRepo: Repository<OutboundRuleEntity>,
     @InjectRepository(InboundRouteEntity) private readonly inboundRepo: Repository<InboundRouteEntity>,
     @InjectRepository(IvrMenuEntity) private readonly ivrMenuRepo: Repository<IvrMenuEntity>,
+    @InjectRepository(BillingConfigEntity) private readonly billingRepo: Repository<BillingConfigEntity>,
     private readonly dialplanConfig: DialplanConfigService,
   ) {}
 
@@ -72,7 +74,10 @@ export class FsService {
       }
     }
 
-    const routing = await this.routingRepo.findOne({ where: { tenantId } });
+    const [routing, billingConfig] = await Promise.all([
+      this.routingRepo.findOne({ where: { tenantId } }),
+      this.billingRepo.findOne({ where: { tenantId } }),
+    ]);
     const routeCfg = routing || {
       internalPrefix: '9',
       voicemailPrefix: '*9',
@@ -146,6 +151,7 @@ export class FsService {
     const hasLocalUser = (ext: string) => localUserSet.has(ext);
 
     let extBridge: string | null = null;
+    let appliedOutboundRule: OutboundRuleEntity | null = null;
 
     if (!extBridge && /^\d{2,6}$/.test(dest) && hasLocalUser(dest)) {
       extBridge = `user/${dest}@${fallbackDomain}`;
@@ -199,6 +205,7 @@ export class FsService {
         const gwName = matched.gateway?.name || pstnGateway || null;
         if (gwName && dialNumber) {
           extBridge = `sofia/gateway/${gwName}/${dialNumber}`;
+          appliedOutboundRule = matched;
         }
       }
     }
@@ -210,11 +217,56 @@ export class FsService {
       extBridge = `sofia/gateway/${pstnGateway}/${normalizedDigits}`;
     }
 
+    const prepaidEnabled = Boolean(billingConfig?.prepaidEnabled);
+    const balanceAmount = Number(billingConfig?.balanceAmount ?? 0);
+
     if (!extBridge) {
       actions.push({ app: 'answer' });
       actions.push({ app: 'playback', data: 'ivr/ivr-invalid_extension.wav' });
       actions.push({ app: 'hangup', data: 'NO_ROUTE_DESTINATION' });
     } else {
+      const isGatewayBridge = extBridge.startsWith('sofia/gateway/');
+      if (isGatewayBridge && prepaidEnabled && balanceAmount <= 0) {
+        const insufficientActions: Array<{ app: string; data?: string }> = [
+          ...baseActions,
+          { app: 'answer' },
+          { app: 'playback', data: 'ivr/ivr-not_enough_credit.wav' },
+          { app: 'hangup', data: 'NO_CREDIT' },
+        ];
+        return this.buildDialplanXml({
+          context,
+          extensionName: `no_credit_${dest || 'unknown'}`,
+          destination: dest,
+          actions: insufficientActions,
+        });
+      }
+
+      if (appliedOutboundRule) {
+        actions.push(...this.buildBillingActions(appliedOutboundRule));
+      }
+      if (prepaidEnabled) {
+        actions.push({ app: 'export', data: `billing_prepaid_enabled=true` });
+        actions.push({ app: 'export', data: `billing_balance_start=${balanceAmount.toFixed(4)}` });
+      }
+      if (isGatewayBridge) {
+        const callerNumberExpr = appliedOutboundRule?.gateway?.callerIdNumber?.trim() || '${effective_caller_id_number}';
+        const callerNameExpr = appliedOutboundRule?.gateway?.callerIdName?.trim() || '${effective_caller_id_name}';
+
+        actions.push({ app: 'set', data: `origination_caller_id_number=${callerNumberExpr}` });
+        actions.push({ app: 'set', data: `origination_caller_id_name=${callerNameExpr}` });
+        actions.push({ app: 'set', data: `effective_caller_id_number=${callerNumberExpr}` });
+        actions.push({ app: 'set', data: `effective_caller_id_name=${callerNameExpr}` });
+        actions.push({ app: 'set', data: `sip_from_user=${callerNumberExpr}` });
+        actions.push({ app: 'set', data: `sip_from_display=${callerNameExpr}` });
+        actions.push({ app: 'set', data: `sip_contact_user=${callerNumberExpr}` });
+        actions.push({ app: 'set', data: `sip_from_uri=${callerNumberExpr}` });
+
+        const gatewayHost = appliedOutboundRule?.gateway?.proxy?.trim() || appliedOutboundRule?.gateway?.realm?.trim();
+        if (gatewayHost) {
+          actions.push({ app: 'set', data: `sip_from_host=${gatewayHost}` });
+          actions.push({ app: 'set', data: `sip_contact_host=${gatewayHost}` });
+        }
+      }
       actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString));
       actions.push({ app: 'bridge', data: extBridge });
     }
@@ -535,6 +587,34 @@ export class FsService {
       { app: 'export', data: `nolocal:absolute_codec_string=${codecString}` },
       { app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` },
     ];
+  }
+
+  private buildBillingActions(rule: OutboundRuleEntity): Array<{ app: string; data?: string }> {
+    const actions: Array<{ app: string; data?: string }> = [];
+    const exportVar = (name: string, value: string | number | boolean | null | undefined) => {
+      if (value === undefined || value === null || value === '') {
+        return;
+      }
+      actions.push({ app: 'export', data: `${name}=${value}` });
+    };
+
+    exportVar('billing_route_id', rule.id);
+    exportVar('billing_enabled', rule.billingEnabled ? 'true' : 'false');
+
+    if (rule.billingCid) {
+      exportVar('billing_cid', rule.billingCid);
+    }
+
+    if (rule.billingEnabled) {
+      const rate = Number(rule.billingRatePerMinute ?? 0) || 0;
+      const setupFee = Number(rule.billingSetupFee ?? 0) || 0;
+      const increment = rule.billingIncrementSeconds ?? 60;
+      exportVar('billing_rate_per_min', rate.toFixed(4));
+      exportVar('billing_increment_seconds', increment > 0 ? increment : 60);
+      exportVar('billing_setup_fee', setupFee.toFixed(4));
+    }
+
+    return actions;
   }
 
   private pickCodecString(value?: string | null): string {

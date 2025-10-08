@@ -18,6 +18,11 @@ export interface CdrRecord {
   recordingUrl?: string | null;
   finalStatus: string;
   finalStatusLabel: string;
+  billingCost?: string;
+  billingCurrency?: string | null;
+  billingRateApplied?: string;
+  billingCid?: string | null;
+  billingRouteId?: string | null;
 }
 
 export interface PaginatedCdrResponse {
@@ -77,6 +82,76 @@ export interface RecordingMetadata {
   size: number;
   modifiedAt: string;
   path: string;
+}
+
+export interface BillingConfig {
+  tenantId: string;
+  currency: string;
+  defaultRatePerMinute: number;
+  defaultIncrementSeconds: number;
+  defaultSetupFee: number;
+  taxPercent: number;
+  billingEmail?: string | null;
+  prepaidEnabled: boolean;
+  balanceAmount: number;
+  updatedAt?: string;
+}
+
+export interface BillingSummaryResponse {
+  totals: {
+    totalCost: number;
+    totalCalls: number;
+    totalBillSeconds: number;
+    totalBillMinutes: number;
+    averageCostPerCall: number;
+    averageCostPerMinute: number;
+    currency: string;
+  };
+  topRoutes: Array<{
+    routeId?: string;
+    routeName: string;
+    totalCost: number;
+    totalCalls: number;
+  }>;
+  byDay: Array<{
+    day: string;
+    totalCost: number;
+    totalCalls: number;
+  }>;
+  cidBreakdown: Array<{
+    cid?: string;
+    totalCost: number;
+    totalCalls: number;
+  }>;
+  balance?: number;
+  prepaidEnabled?: boolean;
+  chargesTotal?: number;
+  charges?: Array<{
+    id: string;
+    tenantId: string;
+    amount: number;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+}
+
+export interface BillingTopupRecord {
+  id: string;
+  tenantId: string;
+  amount: number;
+  balanceAfter: number;
+  note?: string;
+  createdAt: string;
+}
+
+export interface BillingChargeRecord {
+  id: string;
+  tenantId: string;
+  amount: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FsPortConfig {
@@ -182,6 +257,11 @@ export interface OutboundRouteSummary {
   stripDigits?: number;
   prepend?: string;
   enabled: boolean;
+  billingEnabled?: boolean;
+  billingRatePerMinute?: number;
+  billingIncrementSeconds?: number;
+  billingSetupFee?: number;
+  billingCid?: string;
   createdAt?: string;
   updatedAt?: string;
 }

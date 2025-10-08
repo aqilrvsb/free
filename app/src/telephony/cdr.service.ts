@@ -4,8 +4,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { Repository } from 'typeorm';
-import { CdrEntity } from '../entities';
+import { CdrEntity, OutboundRuleEntity, BillingConfigEntity } from '../entities';
 import { RecordingsService } from './recordings.service';
+import { BillingService } from '../billing/billing.service';
 
 interface ParsedEpochInput {
   primary?: string | number | null;
@@ -61,8 +62,10 @@ export class CdrService {
 
   constructor(
     @InjectRepository(CdrEntity) private readonly cdrRepo: Repository<CdrEntity>,
+    @InjectRepository(OutboundRuleEntity) private readonly outboundRepo: Repository<OutboundRuleEntity>,
     private readonly configService: ConfigService,
     private readonly recordingsService: RecordingsService,
+    private readonly billingService: BillingService,
   ) {
     this.recordingsDir = this.normalizeDirectory(configService.get<string>('RECORDINGS_DIR', '/recordings'));
   }
@@ -74,9 +77,9 @@ export class CdrService {
       return;
     }
 
-    const entity = this.mapPayload(parsed.cdr, parsed.raw);
+    const entity = await this.mapPayload(parsed.cdr, parsed.raw);
     this.logger.log(
-      `[ingest] call_uuid=${entity.callUuid ?? 'unknown'} duration=${entity.durationSeconds} bill=${entity.billSeconds}`,
+      `[ingest] call_uuid=${entity.callUuid ?? 'unknown'} duration=${entity.durationSeconds} bill=${entity.billSeconds} cost=${entity.billingCost ?? '0'}`,
     );
     await this.cdrRepo.save(entity);
 
@@ -169,7 +172,7 @@ export class CdrService {
     return this.withRecordingInfo(entity, fallback);
   }
 
-  private mapPayload(payload: any, rawPayload: string): Partial<CdrEntity> {
+  private async mapPayload(payload: any, rawPayload: string): Promise<Partial<CdrEntity>> {
     const variables = payload?.variables ?? {};
     const callflow = this.pickFirst(payload?.callflow);
     const callerProfile = this.pickFirst(callflow?.caller_profile);
@@ -215,6 +218,26 @@ export class CdrService {
       this.toNumber(variables.billsec ?? payload?.billsec) ?? this.diffSeconds(answerTime, endTime) ?? 0;
     const hangupCause = variables.hangup_cause || payload?.hangup_cause || null;
 
+    const billingRouteId = this.coalesceString(
+      variables.billing_route_id,
+      variables.billing_route,
+      variables.outbound_route_id,
+    );
+    const billingCid = this.coalesceString(variables.billing_cid, variables.billing_customer_id, variables.cid);
+
+    const billing = await this.computeBillingContext({
+      tenantId: tenantId ?? undefined,
+      routeId: billingRouteId ?? undefined,
+      billSeconds,
+      variables,
+      fallbackCaller: fromNumber ?? undefined,
+      presetCid: billingCid ?? undefined,
+    });
+
+    if (tenantId && billing.prepaidEnabled && billing.chargeAmount > 0) {
+      await this.billingService.applyCharge(tenantId, billing.chargeAmount);
+    }
+
     return {
       callUuid,
       leg,
@@ -228,6 +251,11 @@ export class CdrService {
       startTime: startTime ?? null,
       answerTime: answerTime ?? null,
       endTime: endTime ?? null,
+      billingRouteId: billing.routeId ?? null,
+      billingCid: billing.cid ?? null,
+      billingCurrency: billing.currency,
+      billingCost: billing.cost,
+      billingRateApplied: billing.rateApplied,
       rawPayload,
     };
   }
@@ -356,6 +384,119 @@ export class CdrService {
       }
     }
     return null;
+  }
+
+  private async computeBillingContext(args: {
+    tenantId?: string;
+    routeId?: string;
+    billSeconds: number;
+    variables: Record<string, any>;
+    fallbackCaller?: string;
+    presetCid?: string;
+  }): Promise<{
+    cost: string;
+    currency: string | null;
+    cid: string | null;
+    rateApplied: string;
+    routeId?: string;
+    prepaidEnabled: boolean;
+    chargeAmount: number;
+  }> {
+    const { tenantId, routeId, billSeconds, variables, fallbackCaller, presetCid } = args;
+
+    const effectiveSeconds = Number.isFinite(billSeconds) && billSeconds > 0 ? billSeconds : 0;
+    const baseCid = presetCid ?? fallbackCaller ?? null;
+
+    if (!tenantId) {
+      return {
+        cost: (0).toFixed(6),
+        currency: null,
+        cid: baseCid,
+        rateApplied: (0).toFixed(4),
+        routeId,
+        prepaidEnabled: false,
+        chargeAmount: 0,
+      };
+    }
+
+    const route = routeId ? await this.outboundRepo.findOne({ where: { id: routeId } }) : null;
+    let config: BillingConfigEntity | null = null;
+    try {
+      config = await this.billingService.getConfig(tenantId);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        config = {
+          tenantId,
+          currency: 'VND',
+          defaultRatePerMinute: '0.0000',
+          defaultIncrementSeconds: 60,
+          defaultSetupFee: '0.0000',
+          taxPercent: '0.00',
+          billingEmail: null,
+          prepaidEnabled: false,
+          balanceAmount: '0.0000',
+          updatedAt: new Date(),
+        } as BillingConfigEntity;
+      } else {
+        throw error;
+      }
+    }
+
+    const currency = config?.currency ?? 'VND';
+    const taxPercent = this.toNumber(config?.taxPercent) ?? 0;
+
+    const variableRate = this.toNumber(variables.billing_rate_per_min ?? variables.billing_rate);
+    const variableSetupFee = this.toNumber(variables.billing_setup_fee);
+    const variableIncrement = this.toNumber(variables.billing_increment_seconds);
+
+    const billingEnabled = route?.billingEnabled ?? false;
+    const routeRate = this.toNumber(route?.billingRatePerMinute);
+    const routeSetupFee = this.toNumber(route?.billingSetupFee);
+    const routeIncrement = route?.billingIncrementSeconds;
+
+    const configRate = this.toNumber(config?.defaultRatePerMinute);
+    const configSetupFee = this.toNumber(config?.defaultSetupFee);
+    const configIncrement = config?.defaultIncrementSeconds;
+
+    const ratePerMinute = billingEnabled
+      ? routeRate ?? variableRate ?? 0
+      : variableRate ?? configRate ?? 0;
+    const setupFee = billingEnabled
+      ? routeSetupFee ?? variableSetupFee ?? 0
+      : variableSetupFee ?? configSetupFee ?? 0;
+    const incrementSeconds = billingEnabled
+      ? routeIncrement ?? variableIncrement ?? configIncrement ?? 60
+      : variableIncrement ?? configIncrement ?? 60;
+
+    const cid = presetCid ?? route?.billingCid ?? baseCid;
+
+    if ((ratePerMinute ?? 0) <= 0 && (setupFee ?? 0) <= 0) {
+      return {
+        cost: (0).toFixed(6),
+        currency,
+        cid,
+        rateApplied: (0).toFixed(4),
+        routeId: route?.id ?? routeId,
+        prepaidEnabled: Boolean(config?.prepaidEnabled),
+        chargeAmount: 0,
+      };
+    }
+
+    const increment = incrementSeconds && incrementSeconds > 0 ? incrementSeconds : 60;
+    const perUnitCharge = (ratePerMinute * increment) / 60;
+    const units = increment > 0 ? Math.ceil(effectiveSeconds / increment) : Math.ceil(effectiveSeconds / 60);
+    const subtotal = units * perUnitCharge + (setupFee ?? 0);
+    const total = taxPercent > 0 ? subtotal * (1 + taxPercent / 100) : subtotal;
+
+    return {
+      cost: total.toFixed(6),
+      currency,
+      cid,
+      rateApplied: (ratePerMinute ?? 0).toFixed(4),
+      routeId: route?.id ?? routeId,
+      prepaidEnabled: Boolean(config?.prepaidEnabled),
+      chargeAmount: total,
+    };
   }
 
   private extractDomain(value?: string | null): string | null {

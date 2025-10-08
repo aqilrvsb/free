@@ -1,6 +1,9 @@
 export * from './tenant/tenant.entity';
 export * from './tenant/user.entity';
 export * from './tenant/routing-config.entity';
+export * from './tenant/billing-config.entity';
+export * from './billing/billing-topup.entity';
+export * from './billing/billing-charge.entity';
 
 export * from './portal/portal-user.entity';
 export * from './portal/portal-role.entity';

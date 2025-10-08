@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<include>
+  <gateway name="Senbac_842888869856">
+    <param name="proxy" value="171.244.138.17:55000"/>
+    <param name="register" value="false"/>
+    <param name="enabled" value="true"/>
+    <param name="sip-transport" value="udp"/>
+    <param name="caller-id-in-from" value="true"/>
+    <param name="expire-seconds" value="3600"/>
+    <param name="retry-seconds" value="30"/>
+    <variables>
+      <variable name="effective_caller_id_number" value="842888869856"/>
+    </variables>
+  </gateway>
+</include>

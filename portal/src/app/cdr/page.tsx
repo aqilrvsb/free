@@ -39,6 +39,23 @@ function getSearchParamValue(value: string | string[] | undefined): string | und
   return value;
 }
 
+function formatCost(cost?: string, currency?: string | null) {
+  const numeric = Number(cost ?? 0);
+  const cur = currency || "VND";
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return `0 ${cur}`;
+  }
+  try {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: cur,
+      maximumFractionDigits: 2,
+    }).format(numeric);
+  } catch {
+    return `${numeric.toFixed(2)} ${cur}`;
+  }
+}
+
 export default async function CdrPage({ searchParams }: CdrPageProps) {
   const resolvedSearchParams = (await (searchParams ?? Promise.resolve({}))) as Record<string, string | string[]>;
   const pageParam = getSearchParamValue(resolvedSearchParams.page) ?? "1";
@@ -106,6 +123,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   <TableHead>Từ</TableHead>
                   <TableHead>Đến</TableHead>
                   <TableHead>Thời lượng</TableHead>
+                  <TableHead>Chi phí</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Bắt đầu</TableHead>
                   <TableHead>Trả lời</TableHead>
@@ -139,6 +157,16 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                       {item.billSeconds ? (
                         <span className="text-xs text-muted-foreground"> (bill {item.billSeconds}s)</span>
                       ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span>{formatCost(item.billingCost, item.billingCurrency)}</span>
+                        {item.billingRateApplied ? (
+                          <span className="text-xs text-muted-foreground">
+                            {Number(item.billingRateApplied).toLocaleString("vi-VN", { maximumFractionDigits: 2 })}/phút
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={resolveStatusVariant(item.finalStatus)}>{item.finalStatusLabel}</Badge>

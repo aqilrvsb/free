@@ -35,6 +35,7 @@ import {
   ShieldCheck,
   PhoneCall,
   ShieldAlert,
+  DollarSign,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -55,7 +56,8 @@ type PermissionKey =
   | "manage_recordings"
   | "manage_portal_users"
   | "manage_roles"
-  | "manage_security";
+  | "manage_security"
+  | "manage_billing";
 
 interface NavItem {
   title: string
@@ -187,6 +189,14 @@ const NAV_SECTIONS: Array<{
           icon: PhoneOutgoing,
           roles: ["super_admin", "tenant_admin"],
           permission: "manage_outbound",
+        },
+        {
+          title: "Billing",
+          description: "Cước gọi và cấu hình billing",
+          href: "/fs/billing",
+          icon: DollarSign,
+          roles: ["super_admin", "tenant_admin"],
+          permission: "manage_billing",
         },
         {
           title: "Inbound Routing",

@@ -52,6 +52,21 @@ export class OutboundRuleEntity {
   @Column({ default: true })
   enabled!: boolean;
 
+  @Column({ name: 'billing_enabled', default: false })
+  billingEnabled!: boolean;
+
+  @Column({ name: 'billing_rate_per_min', type: 'decimal', precision: 12, scale: 4, default: '0.0000' })
+  billingRatePerMinute!: string;
+
+  @Column({ name: 'billing_increment_seconds', type: 'int', default: 60 })
+  billingIncrementSeconds!: number;
+
+  @Column({ name: 'billing_setup_fee', type: 'decimal', precision: 12, scale: 4, default: '0.0000' })
+  billingSetupFee!: string;
+
+  @Column({ name: 'billing_cid', type: 'varchar', length: 120, nullable: true })
+  billingCid?: string | null;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt!: Date;
 

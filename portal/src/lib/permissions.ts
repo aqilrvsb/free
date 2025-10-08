@@ -16,7 +16,8 @@ export type PermissionKey =
   | "manage_extensions"
   | "manage_portal_users"
   | "manage_roles"
-  | "manage_security";
+  | "manage_security"
+  | "manage_billing";
 
 type PermissionSet = Record<PermissionKey, boolean>;
 
@@ -37,6 +38,7 @@ const BASE_PERMISSIONS: PermissionSet = {
   manage_portal_users: false,
   manage_roles: false,
   manage_security: false,
+  manage_billing: false,
 };
 
 const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
@@ -60,6 +62,7 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
     manage_extensions: true,
     manage_portal_users: true,
     manage_security: false,
+    manage_billing: true,
   },
   super_admin: {
     ...Object.keys(BASE_PERMISSIONS).reduce((acc, key) => {

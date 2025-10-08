@@ -27,4 +27,19 @@ export class CreateOutboundRouteDto {
 
   @ApiPropertyOptional({ description: 'Có bật route hay không', default: true })
   enabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Bật billing cho route này', default: false })
+  billingEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Đơn giá mỗi phút', example: 150.0 })
+  billingRatePerMinute?: number;
+
+  @ApiPropertyOptional({ description: 'Bước tính cước theo giây', example: 60 })
+  billingIncrementSeconds?: number;
+
+  @ApiPropertyOptional({ description: 'Phí thiết lập (nếu có)', example: 0 })
+  billingSetupFee?: number;
+
+  @ApiPropertyOptional({ description: 'CID hoặc mã khách hàng cho billing', nullable: true })
+  billingCid?: string;
 }
