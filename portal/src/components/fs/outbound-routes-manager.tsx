@@ -24,7 +24,19 @@ interface OutboundRoutesManagerProps {
 
 type DialogMode = "create" | "edit";
 
-const defaultForm = {
+type RouteFormState = {
+  tenantId: string;
+  name: string;
+  description: string;
+  matchPrefix: string;
+  gatewayId: string;
+  priority: string;
+  stripDigits: string;
+  prepend: string;
+  enabled: boolean;
+};
+
+const defaultForm: RouteFormState = {
   tenantId: "",
   name: "",
   description: "",
@@ -36,6 +48,46 @@ const defaultForm = {
   enabled: true,
 };
 
+const outboundRouteTemplates: Array<{
+  id: string;
+  label: string;
+  description: string;
+  apply: (current: RouteFormState) => RouteFormState;
+}> = [
+  {
+    id: "vn-mobile-10",
+    label: "Di động VN 10 số (0X...)",
+    description: "Khớp số di động 10 chữ số bắt đầu bằng 0, chữ số tiếp theo từ 1-9 (ví dụ 0912345678).",
+    apply: (current) => ({
+      ...current,
+      name: current.name.trim() ? current.name : "Gọi di động nội địa",
+      description: current.description.trim()
+        ? current.description
+        : "Định tuyến các số di động 10 chữ số nội địa (0X...).",
+      matchPrefix: "^0[1-9]\\d{8}$",
+      stripDigits: current.stripDigits.trim() ? current.stripDigits : "0",
+      prepend: current.prepend.trim(),
+      priority: current.priority.trim() ? current.priority : "10",
+    }),
+  },
+  {
+    id: "vn-international",
+    label: "Quốc tế qua 00",
+    description: "Khớp số bắt đầu bằng 00 và tối thiểu 8 chữ số (ví dụ 008412345678).",
+    apply: (current) => ({
+      ...current,
+      name: current.name.trim() ? current.name : "Gọi quốc tế 00",
+      description: current.description.trim()
+        ? current.description
+        : "Định tuyến cuộc gọi quốc tế bắt đầu bằng 00.",
+      matchPrefix: "^00\\d{6,}$",
+      stripDigits: current.stripDigits.trim() ? current.stripDigits : "0",
+      prepend: current.prepend.trim(),
+      priority: current.priority.trim() ? current.priority : "20",
+    }),
+  },
+];
+
 export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: OutboundRoutesManagerProps) {
   const [routes, setRoutes] = useState<OutboundRouteSummary[]>(initialRoutes);
   const [selectedTenant, setSelectedTenant] = useState<string>("all");
@@ -44,6 +96,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
   const [form, setForm] = useState({ ...defaultForm });
   const [editing, setEditing] = useState<OutboundRouteSummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
 
   const apiBase = useMemo(
     () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
@@ -61,12 +114,14 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
     setDialogMode("create");
     setForm({ ...defaultForm, tenantId: selectedTenant !== "all" ? selectedTenant : "" });
     setEditing(null);
+    setSelectedTemplate("");
     setDialogOpen(true);
   };
 
   const openEdit = (route: OutboundRouteSummary) => {
     setDialogMode("edit");
     setEditing(route);
+    setSelectedTemplate("");
     setForm({
       tenantId: route.tenantId,
       name: route.name,
@@ -84,10 +139,23 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
   const closeDialog = () => {
     setDialogOpen(false);
     setEditing(null);
+    setSelectedTemplate("");
   };
 
   const handleInput = (field: keyof typeof form, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleTemplateChange = (value: string) => {
+    setSelectedTemplate(value);
+    if (!value) {
+      return;
+    }
+    const template = outboundRouteTemplates.find((item) => item.id === value);
+    if (!template) {
+      return;
+    }
+    setForm((prev) => template.apply(prev));
   };
 
   const buildPayload = () => {
@@ -144,6 +212,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
       setDialogOpen(false);
       setEditing(null);
       setForm({ ...defaultForm, tenantId: selectedTenant !== "all" ? selectedTenant : "" });
+      setSelectedTemplate("");
     } catch (error) {
       console.error("Failed to save outbound route", error);
       alert("Không thể lưu outbound route. Vui lòng kiểm tra log.");
@@ -211,7 +280,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
             <CardContent className="space-y-3 text-sm">
               <div className="grid gap-2 md:grid-cols-2">
                 <div>
-                  <span className="text-muted-foreground">Prefix khớp</span>
+                  <span className="text-muted-foreground">Regex khớp</span>
                   <p className="font-medium">{route.matchPrefix || '(mọi số)'}</p>
                 </div>
                 <div>
@@ -267,9 +336,37 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
             <DialogHeader>
               <DialogTitle>{dialogMode === "create" ? "Thêm outbound rule" : `Chỉnh sửa ${editing?.name}`}</DialogTitle>
               <DialogDescription>
-                Định tuyến cuộc gọi ra Telco theo prefix và gateway tương ứng.
+                Định tuyến cuộc gọi ra Telco theo regex và gateway tương ứng.
               </DialogDescription>
             </DialogHeader>
+
+            {dialogMode === "create" && outboundRouteTemplates.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-border/70 bg-muted/10 p-3">
+                <Label htmlFor="route-template" className="text-sm font-medium">
+                  Mẫu nhanh
+                </Label>
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  <select
+                    id="route-template"
+                    value={selectedTemplate}
+                    onChange={(event) => handleTemplateChange(event.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm md:w-72"
+                  >
+                    <option value="">-- Chọn mẫu --</option>
+                    {outboundRouteTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {selectedTemplate
+                    ? outboundRouteTemplates.find((item) => item.id === selectedTemplate)?.description
+                    : "Chọn mẫu để điền nhanh regex và mô tả cho outbound rule."}
+                </p>
+              </div>
+            ) : null}
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -300,13 +397,16 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="route-prefix">Prefix khớp</Label>
+                <Label htmlFor="route-prefix">Regex khớp</Label>
                 <Input
                   id="route-prefix"
                   value={form.matchPrefix}
                   onChange={(event) => handleInput("matchPrefix", event.target.value)}
-                  placeholder="00"
+                  placeholder="^00"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Để trống để khớp mọi số; sử dụng biểu thức regex chuẩn của JavaScript.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="route-gateway">Gateway</Label>

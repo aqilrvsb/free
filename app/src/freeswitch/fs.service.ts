@@ -179,11 +179,7 @@ export class FsService {
     }
 
     if (!extBridge && outboundRules.length > 0) {
-      const matched = outboundRules.find((rule) => {
-        const prefix = rule.matchPrefix || '';
-        if (!prefix) return true;
-        return dest.startsWith(prefix);
-      });
+      const matched = outboundRules.find((rule) => this.matchesOutboundRule(rule, dest));
 
       if (matched) {
         let dialNumber = dest;
@@ -548,6 +544,21 @@ export class FsService {
     }
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : fallback;
+  }
+
+  private matchesOutboundRule(rule: OutboundRuleEntity, destination: string): boolean {
+    const pattern = rule.matchPrefix?.trim();
+    if (!pattern) {
+      return true;
+    }
+    try {
+      const regex = new RegExp(pattern);
+      return regex.test(destination);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[dialplan] Outbound rule có regex không hợp lệ', pattern, error);
+      return false;
+    }
   }
 
   private async findUserForDestination(destination: string): Promise<UserEntity | null> {

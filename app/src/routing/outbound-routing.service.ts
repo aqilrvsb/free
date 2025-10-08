@@ -49,12 +49,17 @@ export class OutboundRoutingService {
       }
     }
 
+    const matchPattern = dto.matchPrefix?.trim() || '';
+    if (matchPattern) {
+      this.assertValidRegex(matchPattern);
+    }
+
     const priority = await this.resolvePriority(dto.priority, dto.tenantId);
     const rule = this.ruleRepo.create({
       tenantId: tenant.id,
       name: dto.name.trim(),
       description: dto.description?.trim() || null,
-      matchPrefix: dto.matchPrefix?.trim() || '',
+      matchPrefix: matchPattern,
       gatewayId: gateway?.id ?? null,
       priority,
       stripDigits: this.normalizeNumber(dto.stripDigits),
@@ -100,7 +105,11 @@ export class OutboundRoutingService {
       rule.description = dto.description.trim() ? dto.description.trim() : null;
     }
     if (dto.matchPrefix !== undefined) {
-      rule.matchPrefix = dto.matchPrefix.trim();
+      const trimmed = dto.matchPrefix.trim();
+      if (trimmed) {
+        this.assertValidRegex(trimmed);
+      }
+      rule.matchPrefix = trimmed;
     }
     if (dto.priority !== undefined) {
       rule.priority = await this.resolvePriority(dto.priority, rule.tenantId);
@@ -165,5 +174,14 @@ export class OutboundRoutingService {
     }
     const num = Number(value);
     return num < 0 ? 0 : Math.floor(num);
+  }
+
+  private assertValidRegex(pattern: string): void {
+    try {
+      // eslint-disable-next-line no-new
+      new RegExp(pattern);
+    } catch (error) {
+      throw new BadRequestException(`Biểu thức regex không hợp lệ: ${(error as Error).message}`);
+    }
   }
 }

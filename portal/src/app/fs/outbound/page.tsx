@@ -31,7 +31,7 @@ export default async function OutboundRoutesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Outbound Routing"
-        description="Định tuyến các cuộc gọi ra Telco dựa trên prefix và gateway."
+        description="Định tuyến các cuộc gọi ra Telco dựa trên regex và gateway."
       />
       <OutboundRoutesManager tenants={tenants} gateways={gateways} initialRoutes={routes} />
     </div>
