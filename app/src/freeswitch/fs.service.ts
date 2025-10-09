@@ -275,6 +275,7 @@ export class FsService {
         const callerNumberExpr = appliedOutboundRule?.gateway?.callerIdNumber?.trim() || '${effective_caller_id_number}';
         const callerNameExpr = appliedOutboundRule?.gateway?.callerIdName?.trim() || '${effective_caller_id_name}';
 
+        actions.push({ app: 'export', data: 'internal_caller_extension=${caller_id_number}' });
         actions.push({ app: 'set', data: `origination_caller_id_number=${callerNumberExpr}` });
         actions.push({ app: 'set', data: `origination_caller_id_name=${callerNameExpr}` });
         actions.push({ app: 'set', data: `effective_caller_id_number=${callerNumberExpr}` });

@@ -210,12 +210,13 @@ export class CdrService {
       null;
 
     const fromNumber = this.pickBestNumber([
-      variables.sip_from_user,
-      this.extractUser(variables.sip_from_uri),
+      variables.internal_caller_extension,
       callerProfile?.caller_id_number,
-      callerProfile?.ani,
       callerProfile?.username,
       variables.caller_id_number,
+      variables.sip_from_user,
+      this.extractUser(variables.sip_from_uri),
+      callerProfile?.ani,
       variables.ani,
       variables.caller_id_name,
     ]);
