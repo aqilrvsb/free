@@ -540,11 +540,11 @@ export class FsService {
       .up();
 
     mainCondition
-      .ele('action', { application: 'execute_extension', data: `ivr-menu-${menu.id} XML ${context}` })
+      .ele('action', { application: 'execute_extension', data: `ivr_menu_${menu.id} XML ${context}` })
       .up();
 
     const menuExtension = contextNode.ele('extension', { name: `ivr_menu_${menu.id}` });
-    const menuCondition = menuExtension.ele('condition', { field: 'destination_number', expression: `^ivr-menu-${menu.id}$` });
+    const menuCondition = menuExtension.ele('condition', { field: 'destination_number', expression: `^ivr_menu_${menu.id}$` });
 
     const sortedOptions = [...(menu.options || [])].sort((a, b) => {
       if (a.position !== b.position) {
