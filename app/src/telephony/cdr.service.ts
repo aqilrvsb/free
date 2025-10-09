@@ -184,6 +184,7 @@ export class CdrService {
     const variables = payload?.variables ?? {};
     const callflow = this.pickFirst(payload?.callflow);
     const callerProfile = this.pickFirst(callflow?.caller_profile);
+    const originatorExtension = this.extractLikelyExtensionFromCallflow(payload?.callflow);
     const callUuid = payload?.call_uuid || variables.uuid || variables.bridge_uuid || callerProfile?.uuid || randomUUID();
 
     const leg = this.resolveLeg(variables, payload);
@@ -211,9 +212,16 @@ export class CdrService {
 
     const fromNumber = this.pickBestNumber([
       variables.internal_caller_extension,
+      originatorExtension,
       variables.originator_caller_id_number,
+      variables.origination_caller_id_number,
+      variables.originatee_caller_id_number,
+      variables.user_name,
       variables.sip_auth_username,
       variables.sip_auth_user,
+      callerProfile?.originator_caller_id_number,
+      callerProfile?.origination_caller_id_number,
+      callerProfile?.originatee_caller_id_number,
       callerProfile?.caller_id_number,
       callerProfile?.username,
       variables.caller_id_number,
@@ -568,6 +576,56 @@ export class CdrService {
       return 'outbound';
     }
 
+    return null;
+  }
+
+  private extractLikelyExtensionFromCallflow(callflow: any): string | null {
+    if (!callflow) {
+      return null;
+    }
+    const flows = Array.isArray(callflow) ? callflow : [callflow];
+    const candidates: string[] = [];
+    const pushCandidate = (value: unknown) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      const str = String(value).trim();
+      if (!str) {
+        return;
+      }
+      if (!candidates.includes(str)) {
+        candidates.push(str);
+      }
+    };
+
+    for (const flow of flows) {
+      if (!flow || typeof flow !== 'object') {
+        continue;
+      }
+      const profiles = [
+        this.pickFirst((flow as any)?.caller_profile),
+        this.pickFirst((flow as any)?.originator_caller_profile),
+        this.pickFirst((flow as any)?.originatee_caller_profile),
+      ];
+      for (const profile of profiles) {
+        if (!profile || typeof profile !== 'object') {
+          continue;
+        }
+        pushCandidate((profile as any)?.originator_caller_id_number);
+        pushCandidate((profile as any)?.origination_caller_id_number);
+        pushCandidate((profile as any)?.originatee_caller_id_number);
+        pushCandidate((profile as any)?.caller_id_number);
+        pushCandidate((profile as any)?.username);
+        pushCandidate((profile as any)?.dialed_user);
+        pushCandidate((profile as any)?.destination_number);
+      }
+    }
+
+    for (const candidate of candidates) {
+      if (this.isLikelyExtension(candidate)) {
+        return candidate;
+      }
+    }
     return null;
   }
 
