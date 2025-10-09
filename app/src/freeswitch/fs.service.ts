@@ -226,19 +226,27 @@ export class FsService {
       actions.push({ app: 'hangup', data: 'NO_ROUTE_DESTINATION' });
     } else {
       const isGatewayBridge = extBridge.startsWith('sofia/gateway/');
-      if (isGatewayBridge && prepaidEnabled && balanceAmount <= 0) {
-        const insufficientActions: Array<{ app: string; data?: string }> = [
-          ...baseActions,
-          { app: 'answer' },
-          { app: 'playback', data: 'ivr/ivr-not_enough_credit.wav' },
-          { app: 'hangup', data: 'NO_CREDIT' },
-        ];
-        return this.buildDialplanXml({
-          context,
-          extensionName: `no_credit_${dest || 'unknown'}`,
-          destination: dest,
-          actions: insufficientActions,
+      let prepaidAllowance: ReturnType<typeof this.calculatePrepaidAllowance> | null = null;
+      if (isGatewayBridge && prepaidEnabled) {
+        prepaidAllowance = this.calculatePrepaidAllowance({
+          balance: balanceAmount,
+          route: appliedOutboundRule,
+          billingConfig,
         });
+        if (prepaidAllowance?.type === 'insufficient') {
+          const insufficientActions: Array<{ app: string; data?: string }> = [
+            ...baseActions,
+            { app: 'answer' },
+            { app: 'playback', data: 'ivr/ivr-not_enough_credit.wav' },
+            { app: 'hangup', data: 'NO_CREDIT' },
+          ];
+          return this.buildDialplanXml({
+            context,
+            extensionName: `no_credit_${dest || 'unknown'}`,
+            destination: dest,
+            actions: insufficientActions,
+          });
+        }
       }
 
       if (appliedOutboundRule) {
@@ -265,6 +273,15 @@ export class FsService {
         if (gatewayHost) {
           actions.push({ app: 'set', data: `sip_from_host=${gatewayHost}` });
           actions.push({ app: 'set', data: `sip_contact_host=${gatewayHost}` });
+        }
+
+        if (prepaidAllowance?.type === 'limited') {
+          const hangupSeconds = Math.max(1, prepaidAllowance.allowedSeconds - 1);
+          actions.push({ app: 'set', data: `execute_on_answer=sched_hangup +${hangupSeconds} ALLOTTED_TIMEOUT` });
+          actions.push({
+            app: 'export',
+            data: `prepaid_limit_seconds=${prepaidAllowance.allowedSeconds}`,
+          });
         }
       }
       actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString));
@@ -571,6 +588,65 @@ export class FsService {
     }
 
     return doc.end({ prettyPrint: true });
+  }
+
+  private calculatePrepaidAllowance(args: {
+    balance: number;
+    route?: OutboundRuleEntity | null;
+    billingConfig?: BillingConfigEntity | null;
+  }): { type: 'insufficient' } | { type: 'unlimited' } | { type: 'limited'; allowedSeconds: number } {
+    const balance = Math.max(0, this.toNumber(args.balance));
+    const route = args.route ?? null;
+    const config = args.billingConfig ?? null;
+
+    const billingEnabled = Boolean(route?.billingEnabled);
+    const ratePerMinute = billingEnabled
+      ? this.toNumber(route?.billingRatePerMinute)
+      : this.toNumber(config?.defaultRatePerMinute);
+    const setupFee = billingEnabled
+      ? this.toNumber(route?.billingSetupFee)
+      : this.toNumber(config?.defaultSetupFee);
+    const increment = Math.max(
+      1,
+      billingEnabled
+        ? Number(route?.billingIncrementSeconds ?? 60) || 60
+        : Number(config?.defaultIncrementSeconds ?? 60) || 60,
+    );
+
+    if (balance <= 0) {
+      return { type: 'insufficient' };
+    }
+
+    const normalizedSetupFee = Math.max(0, setupFee);
+    const normalizedRate = Math.max(0, ratePerMinute);
+    const perUnitCharge = normalizedRate > 0 ? (normalizedRate * increment) / 60 : 0;
+
+    if (perUnitCharge <= 0) {
+      if (normalizedSetupFee > 0 && balance < normalizedSetupFee) {
+        return { type: 'insufficient' };
+      }
+      return { type: 'unlimited' };
+    }
+
+    const spendable = balance - normalizedSetupFee;
+    if (spendable < perUnitCharge) {
+      return { type: 'insufficient' };
+    }
+
+    const units = Math.max(1, Math.floor(spendable / perUnitCharge));
+    const allowedSeconds = units * increment;
+    if (!Number.isFinite(allowedSeconds) || allowedSeconds <= 0) {
+      return { type: 'insufficient' };
+    }
+    return { type: 'limited', allowedSeconds };
+  }
+
+  private toNumber(value: unknown): number {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return 0;
+    }
+    return num;
   }
 
   private safeFilename(value: string): string {
