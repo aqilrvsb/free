@@ -255,8 +255,10 @@ export class CdrService {
       presetCid: billingCid ?? undefined,
     });
 
-    if (tenantBillingId && billing.prepaidEnabled && billing.chargeAmount > 0) {
-      await this.billingService.applyCharge(tenantBillingId, billing.chargeAmount);
+    const resolvedTenantId = billing.tenantId ?? tenantBillingId ?? tenantId ?? null;
+
+    if (billing.tenantId && billing.prepaidEnabled && billing.chargeAmount > 0) {
+      await this.billingService.applyCharge(billing.tenantId, billing.chargeAmount);
     }
 
     const direction = this.resolveCallDirection({
@@ -271,7 +273,7 @@ export class CdrService {
       callUuid,
       leg,
       direction,
-      tenantId,
+      tenantId: resolvedTenantId,
       fromNumber,
       toNumber,
       durationSeconds,
@@ -609,13 +611,17 @@ export class CdrService {
     routeId?: string;
     prepaidEnabled: boolean;
     chargeAmount: number;
+    tenantId: string | null;
   }> {
     const { tenantId, routeId, billSeconds, variables, fallbackCaller, presetCid } = args;
 
     const effectiveSeconds = Number.isFinite(billSeconds) && billSeconds > 0 ? billSeconds : 0;
     const baseCid = presetCid ?? fallbackCaller ?? null;
 
-    if (!tenantId) {
+    const route = routeId ? await this.outboundRepo.findOne({ where: { id: routeId } }) : null;
+    const resolvedTenantId = tenantId ?? route?.tenantId ?? undefined;
+
+    if (!resolvedTenantId) {
       return {
         cost: (0).toFixed(6),
         currency: null,
@@ -624,17 +630,17 @@ export class CdrService {
         routeId,
         prepaidEnabled: false,
         chargeAmount: 0,
+        tenantId: null,
       };
     }
 
-    const route = routeId ? await this.outboundRepo.findOne({ where: { id: routeId } }) : null;
     let config: BillingConfigEntity | null = null;
     try {
-      config = await this.billingService.getConfig(tenantId);
+      config = await this.billingService.getConfig(resolvedTenantId);
     } catch (error) {
       if (error instanceof NotFoundException) {
         config = {
-          tenantId,
+          tenantId: resolvedTenantId,
           currency: 'VND',
           defaultRatePerMinute: '0.0000',
           defaultIncrementSeconds: 60,
@@ -687,6 +693,7 @@ export class CdrService {
         routeId: route?.id ?? routeId,
         prepaidEnabled: Boolean(config?.prepaidEnabled),
         chargeAmount: 0,
+        tenantId: resolvedTenantId,
       };
     }
 
@@ -704,6 +711,7 @@ export class CdrService {
       routeId: route?.id ?? routeId,
       prepaidEnabled: Boolean(config?.prepaidEnabled),
       chargeAmount: total,
+      tenantId: resolvedTenantId,
     };
   }
 
