@@ -210,7 +210,7 @@ export class CdrService {
       ) ??
       null;
 
-    const fromNumber = this.pickBestNumber([
+    let fromNumber = this.pickBestNumber([
       variables.internal_caller_extension,
       originatorExtension,
       variables.originator_caller_id_number,
@@ -231,6 +231,9 @@ export class CdrService {
       variables.ani,
       variables.caller_id_name,
     ]);
+    if (!this.isLikelyExtension(fromNumber) && this.isLikelyExtension(originatorExtension)) {
+      fromNumber = originatorExtension ?? fromNumber;
+    }
 
     const toNumber = this.pickBestNumber([
       variables.sip_to_user,
