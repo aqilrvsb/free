@@ -11,7 +11,7 @@ data/recordings/
 data/security-agent/
 
 # Environment & secrets
-# .env
+.env
 
 # Docker artifacts
 *.tar
