@@ -299,7 +299,7 @@ export class FsService {
           });
         }
       }
-      actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString, executeOnAnswer));
+      actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString, executeOnAnswer, true));
       if (executeOnAnswer.length > 0) {
         actions.push({ app: 'set', data: `execute_on_answer=${executeOnAnswer[0]}` });
         for (let index = 1; index < executeOnAnswer.length; index += 1) {
@@ -853,11 +853,12 @@ export class FsService {
   private buildRecordingActions(
     target: string,
     codecString: string,
-    executeOnAnswer: string[],
+    executeOnAnswer: string[] | null,
+    deferRecordUntilAnswer = false,
   ): Array<{ app: string; data?: string }> {
     const filenameSuffix = this.safeFilename(target || 'dest');
     const recordingFile = '$${recordings_dir}/${uuid}-' + filenameSuffix + '.wav';
-    if (executeOnAnswer) {
+    if (deferRecordUntilAnswer && executeOnAnswer) {
       executeOnAnswer.push(`record_session ${recordingFile}`);
     }
     const actions: Array<{ app: string; data?: string }> = [
@@ -868,6 +869,9 @@ export class FsService {
       { app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` },
       { app: 'export', data: 'recording_follow_transfer=true' },
     ];
+    if (!(deferRecordUntilAnswer && executeOnAnswer)) {
+      actions.push({ app: 'record_session', data: recordingFile });
+    }
     return actions;
   }
 
