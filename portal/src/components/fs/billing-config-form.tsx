@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { BillingConfig } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,16 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
   const [prepaidEnabled, setPrepaidEnabled] = useState(config.prepaidEnabled);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setCurrency(config.currency);
+    setDefaultRate(String(config.defaultRatePerMinute ?? 0));
+    setIncrement(String(config.defaultIncrementSeconds ?? 60));
+    setSetupFee(String(config.defaultSetupFee ?? 0));
+    setTaxPercent(String(config.taxPercent ?? 0));
+    setBillingEmail(config.billingEmail ?? "");
+    setPrepaidEnabled(config.prepaidEnabled);
+  }, [config.currency, config.defaultRatePerMinute, config.defaultIncrementSeconds, config.defaultSetupFee, config.taxPercent, config.billingEmail, config.prepaidEnabled]);
 
   const displayedBalance = balance ?? config.balanceAmount ?? 0;
 

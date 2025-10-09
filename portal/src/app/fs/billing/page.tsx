@@ -9,7 +9,6 @@ import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BillingFilters } from "@/components/fs/billing-filters";
 import { BillingTenantPanel } from "@/components/fs/billing-tenant-panel";
-import { BillingTopupHistory } from "@/components/fs/billing-topup-history";
 
 export const dynamic = "force-dynamic";
 
@@ -194,8 +193,8 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             currency={currency}
             initialBalance={currentBalance}
             initialCharges={charges}
+            initialTopups={topups}
           />
-          <BillingTopupHistory records={topups} currency={currency} />
         </div>
       ) : null}
 

@@ -11,6 +11,7 @@ import {
 } from '../entities';
 import { UpdateBillingConfigDto } from './dto/update-billing-config.dto';
 import { BillingSummaryQueryDto } from './dto/billing-summary-query.dto';
+import { UpdateTopupDto } from './dto/update-topup.dto';
 
 @Injectable()
 export class BillingService {
@@ -82,6 +83,10 @@ export class BillingService {
 
   async getSummary(query: BillingSummaryQueryDto) {
     const timeBetween = this.resolveDateRange(query.from, query.to);
+    const tenantScope = await this.resolveTenantScope(query.tenantId);
+    const tenantFilterClause =
+      tenantScope.identifiers.length > 0 ? 'cdr.tenantId IN (:...tenantKeys)' : '1=1';
+    const tenantFilterParams = tenantScope.identifiers.length > 0 ? { tenantKeys: tenantScope.identifiers } : {};
 
     const [totals, topRoutes, byDay, cidBreakdown, chargesSummary, chargesList] = await Promise.all([
       this.cdrRepo.createQueryBuilder('cdr')
@@ -90,7 +95,7 @@ export class BillingService {
         .addSelect('SUM(cdr.bill_seconds)', 'totalBillSeconds')
         .where('cdr.leg = :leg', { leg: 'B' })
         .andWhere('cdr.billing_cost > 0')
-        .andWhere(query.tenantId ? 'cdr.tenantId = :tenantId' : '1=1', { tenantId: query.tenantId })
+        .andWhere(tenantFilterClause, tenantFilterParams)
         .andWhere(timeBetween ? 'cdr.startTime BETWEEN :from AND :to' : '1=1', timeBetween ?? {})
         .getRawOne<{ totalCost: string | null; totalCalls: string | null; totalBillSeconds: string | null }>(),
       this.cdrRepo.createQueryBuilder('cdr')
@@ -99,7 +104,7 @@ export class BillingService {
         .addSelect('COUNT(*)', 'totalCalls')
         .where('cdr.leg = :leg', { leg: 'B' })
         .andWhere('cdr.billingRouteId IS NOT NULL')
-        .andWhere(query.tenantId ? 'cdr.tenantId = :tenantId' : '1=1', { tenantId: query.tenantId })
+        .andWhere(tenantFilterClause, tenantFilterParams)
         .andWhere(timeBetween ? 'cdr.startTime BETWEEN :from AND :to' : '1=1', timeBetween ?? {})
         .groupBy('cdr.billingRouteId')
         .orderBy('SUM(cdr.billing_cost)', 'DESC')
@@ -111,7 +116,7 @@ export class BillingService {
         .addSelect('COUNT(*)', 'totalCalls')
         .where('cdr.leg = :leg', { leg: 'B' })
         .andWhere('cdr.billing_cost > 0')
-        .andWhere(query.tenantId ? 'cdr.tenantId = :tenantId' : '1=1', { tenantId: query.tenantId })
+        .andWhere(tenantFilterClause, tenantFilterParams)
         .andWhere(timeBetween ? 'cdr.startTime BETWEEN :from AND :to' : '1=1', timeBetween ?? {})
         .groupBy('DATE(cdr.start_time)')
         .orderBy('day', 'ASC')
@@ -122,19 +127,21 @@ export class BillingService {
         .addSelect('COUNT(*)', 'totalCalls')
         .where('cdr.leg = :leg', { leg: 'B' })
         .andWhere('cdr.billingCid IS NOT NULL')
-        .andWhere(query.tenantId ? 'cdr.tenantId = :tenantId' : '1=1', { tenantId: query.tenantId })
+        .andWhere(tenantFilterClause, tenantFilterParams)
         .andWhere(timeBetween ? 'cdr.startTime BETWEEN :from AND :to' : '1=1', timeBetween ?? {})
         .groupBy('cdr.billingCid')
         .orderBy('SUM(cdr.billing_cost)', 'DESC')
         .limit(5)
         .getRawMany<{ cid: string; totalCost: string; totalCalls: string }>(),
-      this.chargeRepo.createQueryBuilder('charge')
-        .select('SUM(charge.amount)', 'totalCharges')
-        .where('charge.tenantId = :tenantId', { tenantId: query.tenantId ?? '' })
-        .andWhere(timeBetween ? 'charge.createdAt BETWEEN :from AND :to' : '1=1', timeBetween ?? {})
-        .getRawOne<{ totalCharges: string | null }>(),
-      query.tenantId
-        ? this.listCharges(query.tenantId, 50)
+      tenantScope.tenant
+        ? this.chargeRepo.createQueryBuilder('charge')
+            .select('SUM(charge.amount)', 'totalCharges')
+            .where('charge.tenantId = :tenantId', { tenantId: tenantScope.tenant.id })
+            .andWhere(timeBetween ? 'charge.createdAt BETWEEN :from AND :to' : '1=1', timeBetween ?? {})
+            .getRawOne<{ totalCharges: string | null }>()
+        : Promise.resolve<{ totalCharges: string | null }>({ totalCharges: null }),
+      tenantScope.tenant
+        ? this.listCharges(tenantScope.tenant.id, 50)
         : Promise.resolve([] as BillingChargeEntity[]),
     ]);
 
@@ -157,8 +164,8 @@ export class BillingService {
     const combinedCost = totalsData.totalCost + additionalCharges;
 
     let config: BillingConfigEntity | null = null;
-    if (query.tenantId) {
-      config = await this.getConfig(query.tenantId);
+    if (tenantScope.tenant) {
+      config = await this.getConfig(tenantScope.tenant.id);
     }
 
     const resultCurrency = config?.currency ?? 'VND';
@@ -235,6 +242,75 @@ export class BillingService {
       order: { createdAt: 'DESC' },
       take: 50,
     });
+  }
+
+  async updateLatestTopup(
+    tenantId: string,
+    params: UpdateTopupDto,
+  ): Promise<{ topup: BillingTopupEntity; balanceAmount: number }> {
+    const hasAmountUpdate = params.amount !== undefined;
+    const hasNoteUpdate = params.note !== undefined;
+    if (!hasAmountUpdate && !hasNoteUpdate) {
+      throw new BadRequestException('Cần cung cấp số tiền hoặc ghi chú để cập nhật giao dịch nạp quỹ.');
+    }
+
+    const config = await this.getConfig(tenantId);
+    const currentBalance = Number(config.balanceAmount ?? 0);
+    if (currentBalance <= 0) {
+      throw new BadRequestException('Không thể điều chỉnh khi số dư đã về 0.');
+    }
+
+    const latest = await this.findLatestTopup(tenantId);
+    if (!latest) {
+      throw new NotFoundException('Chưa có giao dịch nạp quỹ để điều chỉnh.');
+    }
+
+    let diff = 0;
+    let updatedConfig = config;
+    if (hasAmountUpdate) {
+      const numericAmount = Number(params.amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        throw new BadRequestException('Số tiền nạp phải lớn hơn 0.');
+      }
+      const currentAmount = Number(latest.amount ?? 0);
+      diff = numericAmount - currentAmount;
+      if (diff !== 0) {
+        updatedConfig = await this.adjustBalance(tenantId, diff);
+      }
+      latest.amount = numericAmount.toFixed(4);
+      const previousBalanceAfter = Number(latest.balanceAfter ?? 0);
+      const nextBalanceAfter = previousBalanceAfter + diff;
+      latest.balanceAfter = (nextBalanceAfter < 0 ? 0 : nextBalanceAfter).toFixed(4);
+    }
+
+    if (hasNoteUpdate) {
+      const trimmedNote = params.note === null || params.note === undefined ? null : params.note.trim();
+      latest.note = trimmedNote && trimmedNote.length > 0 ? trimmedNote : null;
+    }
+
+    const saved = await this.topupRepo.save(latest);
+    return {
+      topup: saved,
+      balanceAmount: Number((diff !== 0 ? updatedConfig.balanceAmount : config.balanceAmount) ?? 0),
+    };
+  }
+
+  async deleteLatestTopup(tenantId: string): Promise<number> {
+    const config = await this.getConfig(tenantId);
+    const currentBalance = Number(config.balanceAmount ?? 0);
+    if (currentBalance <= 0) {
+      throw new BadRequestException('Không thể xoá giao dịch vì số dư đã về 0.');
+    }
+
+    const latest = await this.findLatestTopup(tenantId);
+    if (!latest) {
+      throw new NotFoundException('Chưa có giao dịch nạp quỹ để xoá.');
+    }
+
+    const amount = Number(latest.amount ?? 0);
+    const updatedConfig = await this.adjustBalance(tenantId, -amount);
+    await this.topupRepo.delete({ id: latest.id });
+    return Number(updatedConfig.balanceAmount ?? 0);
   }
 
   async addCharge(params: {
@@ -338,5 +414,36 @@ export class BillingService {
     const start = from ? new Date(from) : new Date(0);
     const end = to ? new Date(to) : new Date();
     return { from: start, to: end };
+  }
+
+  private async resolveTenantScope(
+    tenantId?: string,
+  ): Promise<{ tenant: TenantEntity | null; identifiers: string[] }> {
+    if (!tenantId) {
+      return { tenant: null, identifiers: [] };
+    }
+    const trimmed = tenantId.trim();
+    if (!trimmed) {
+      return { tenant: null, identifiers: [] };
+    }
+    const tenant = await this.tenantRepo.findOne({
+      where: [{ id: trimmed }, { domain: trimmed }],
+    });
+    if (!tenant) {
+      return { tenant: null, identifiers: [tenantId] };
+    }
+    const identifiers = new Set<string>();
+    identifiers.add(tenant.id);
+    if (tenant.domain) {
+      identifiers.add(tenant.domain);
+    }
+    return { tenant, identifiers: Array.from(identifiers) };
+  }
+
+  private async findLatestTopup(tenantId: string): Promise<BillingTopupEntity | null> {
+    return this.topupRepo.findOne({
+      where: { tenantId },
+      order: { createdAt: 'DESC' },
+    });
   }
 }

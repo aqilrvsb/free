@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ interface BillingChargesManagerProps {
   initialCharges: BillingChargeRecord[];
   disabled?: boolean;
   onBalanceChange?: (balance: number) => void;
+  onChangeCharges?: (charges: BillingChargeRecord[]) => void;
 }
 
 const formatCurrency = (value: number, currency: string) => {
@@ -36,6 +37,7 @@ export function BillingChargesManager({
   initialCharges,
   disabled = false,
   onBalanceChange,
+  onChangeCharges,
 }: BillingChargesManagerProps) {
   const apiBase = resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
   const [charges, setCharges] = useState<BillingChargeRecord[]>(initialCharges);
@@ -46,6 +48,10 @@ export function BillingChargesManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingAmount, setEditingAmount] = useState("0");
   const [editingDescription, setEditingDescription] = useState("");
+
+  useEffect(() => {
+    setCharges(initialCharges);
+  }, [initialCharges]);
 
   const sortedCharges = useMemo(() => charges.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [charges]);
 
@@ -76,7 +82,11 @@ export function BillingChargesManager({
       const { balanceAmount, ...created } = (await response.json()) as BillingChargeRecord & {
         balanceAmount?: number;
       };
-      setCharges((prev) => [created, ...prev]);
+      setCharges((prev) => {
+        const next = [created, ...prev];
+        onChangeCharges?.(next);
+        return next;
+      });
       if (typeof balanceAmount === "number") {
         onBalanceChange?.(balanceAmount);
       }
@@ -125,7 +135,11 @@ export function BillingChargesManager({
       const { balanceAmount, ...updated } = (await response.json()) as BillingChargeRecord & {
         balanceAmount?: number;
       };
-      setCharges((prev) => prev.map((charge) => (charge.id === updated.id ? updated : charge)));
+      setCharges((prev) => {
+        const next = prev.map((charge) => (charge.id === updated.id ? updated : charge));
+        onChangeCharges?.(next);
+        return next;
+      });
       if (typeof balanceAmount === "number") {
         onBalanceChange?.(balanceAmount);
       }
@@ -155,7 +169,11 @@ export function BillingChargesManager({
         throw new Error(await response.text());
       }
       const payload = (await response.json()) as { success: boolean; balanceAmount?: number };
-      setCharges((prev) => prev.filter((charge) => charge.id !== id));
+      setCharges((prev) => {
+        const next = prev.filter((charge) => charge.id !== id);
+        onChangeCharges?.(next);
+        return next;
+      });
       if (typeof payload.balanceAmount === "number") {
         onBalanceChange?.(payload.balanceAmount);
       }

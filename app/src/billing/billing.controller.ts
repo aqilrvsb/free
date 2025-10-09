@@ -9,6 +9,7 @@ import { TopupBillingDto } from './dto/topup-billing.dto';
 import { CreateBillingChargeDto } from './dto/create-billing-charge.dto';
 import { UpdateBillingChargeDto } from './dto/update-billing-charge.dto';
 import { ListBillingChargesQueryDto } from './dto/list-billing-charges-query.dto';
+import { UpdateTopupDto } from './dto/update-topup.dto';
 
 @ApiTags('Billing')
 @Controller('billing')
@@ -77,6 +78,26 @@ export class BillingController {
       note: item.note ?? undefined,
       createdAt: item.createdAt,
     }));
+  }
+
+  @Put('topup/:tenantId')
+  async updateLatestTopup(@Param('tenantId') tenantId: string, @Body() body: UpdateTopupDto) {
+    const result = await this.billingService.updateLatestTopup(tenantId, body);
+    return {
+      id: result.topup.id,
+      tenantId: result.topup.tenantId,
+      amount: Number(result.topup.amount ?? 0),
+      balanceAfter: Number(result.topup.balanceAfter ?? 0),
+      note: result.topup.note ?? undefined,
+      createdAt: result.topup.createdAt,
+      balanceAmount: result.balanceAmount,
+    };
+  }
+
+  @Delete('topup/:tenantId')
+  async deleteLatestTopup(@Param('tenantId') tenantId: string) {
+    const balance = await this.billingService.deleteLatestTopup(tenantId);
+    return { success: true, balanceAmount: balance };
   }
 
   @Get('charges')

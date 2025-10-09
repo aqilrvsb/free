@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
 import { Repository } from 'typeorm';
-import { CdrEntity, OutboundRuleEntity, BillingConfigEntity } from '../entities';
+import { CdrEntity, OutboundRuleEntity, BillingConfigEntity, TenantEntity } from '../entities';
 import { RecordingsService } from './recordings.service';
 import { BillingService } from '../billing/billing.service';
 
@@ -63,12 +63,15 @@ export class CdrService {
   constructor(
     @InjectRepository(CdrEntity) private readonly cdrRepo: Repository<CdrEntity>,
     @InjectRepository(OutboundRuleEntity) private readonly outboundRepo: Repository<OutboundRuleEntity>,
+    @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     private readonly configService: ConfigService,
     private readonly recordingsService: RecordingsService,
     private readonly billingService: BillingService,
   ) {
     this.recordingsDir = this.normalizeDirectory(configService.get<string>('RECORDINGS_DIR', '/recordings'));
   }
+
+  private readonly tenantLookupCache = new Map<string, { id: string; domain: string }>();
 
   async ingestCdr(payload: any): Promise<void> {
     const parsed = this.normalizePayload(payload);
@@ -97,7 +100,12 @@ export class CdrService {
     qb.andWhere('cdr.leg = :leg', { leg: 'B' });
 
     if (query.tenantId) {
-      qb.andWhere('cdr.tenantId = :tenantId', { tenantId: query.tenantId });
+      const tenantKeys = await this.resolveTenantFilterKeys(query.tenantId);
+      if (tenantKeys.length > 1) {
+        qb.andWhere('cdr.tenantId IN (:...tenantIds)', { tenantIds: tenantKeys });
+      } else {
+        qb.andWhere('cdr.tenantId = :tenantId', { tenantId: tenantKeys[0] });
+      }
     }
     if (query.direction) {
       qb.andWhere('cdr.direction = :direction', { direction: query.direction });
@@ -180,13 +188,27 @@ export class CdrService {
 
     const leg = this.resolveLeg(variables, payload);
     const direction = variables.call_direction || payload?.call_direction || variables.direction || null;
-    const tenantId = this.coalesceString(
+    const presenceDomain = this.extractDomain(variables.presence_id);
+    const sipToDomain = this.extractDomain(variables.sip_to_uri);
+    const tenantCandidates = [
       variables.sip_auth_realm,
       variables.domain_name,
       variables.dialed_domain,
-      this.extractDomain(variables.presence_id),
-      this.extractDomain(variables.sip_to_uri),
-    );
+      presenceDomain,
+      sipToDomain,
+    ];
+    const resolvedTenant = await this.resolveTenantFromCandidates(tenantCandidates);
+    const tenantBillingId = resolvedTenant?.id ?? undefined;
+    const tenantId =
+      resolvedTenant?.id ??
+      this.coalesceString(
+        variables.sip_auth_realm,
+        variables.domain_name,
+        variables.dialed_domain,
+        presenceDomain,
+        sipToDomain,
+      ) ??
+      null;
 
     const fromNumber = this.coalesceString(
       variables.caller_id_number,
@@ -226,7 +248,7 @@ export class CdrService {
     const billingCid = this.coalesceString(variables.billing_cid, variables.billing_customer_id, variables.cid);
 
     const billing = await this.computeBillingContext({
-      tenantId: tenantId ?? undefined,
+      tenantId: tenantBillingId,
       routeId: billingRouteId ?? undefined,
       billSeconds,
       variables,
@@ -234,8 +256,8 @@ export class CdrService {
       presetCid: billingCid ?? undefined,
     });
 
-    if (tenantId && billing.prepaidEnabled && billing.chargeAmount > 0) {
-      await this.billingService.applyCharge(tenantId, billing.chargeAmount);
+    if (tenantBillingId && billing.prepaidEnabled && billing.chargeAmount > 0) {
+      await this.billingService.applyCharge(tenantBillingId, billing.chargeAmount);
     }
 
     return {
@@ -384,6 +406,72 @@ export class CdrService {
       }
     }
     return null;
+  }
+
+  private canonicalTenantKey(value: string): string {
+    return value.toLowerCase();
+  }
+
+  private cacheTenantLookup(tenant: TenantEntity): { id: string; domain: string } {
+    const payload = { id: tenant.id, domain: tenant.domain };
+    this.tenantLookupCache.set(this.canonicalTenantKey(tenant.id), payload);
+    if (tenant.domain) {
+      this.tenantLookupCache.set(this.canonicalTenantKey(tenant.domain), payload);
+    }
+    return payload;
+  }
+
+  private async lookupTenant(candidate: string): Promise<{ id: string; domain: string } | null> {
+    const key = this.canonicalTenantKey(candidate);
+    const cached = this.tenantLookupCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const tenant = await this.tenantRepo.findOne({
+      where: [{ id: candidate }, { domain: candidate }],
+    });
+    if (!tenant) {
+      return null;
+    }
+    const resolved = this.cacheTenantLookup(tenant);
+    this.tenantLookupCache.set(key, resolved);
+    return resolved;
+  }
+
+  private async resolveTenantFromCandidates(
+    candidates: Array<string | null | undefined>,
+  ): Promise<{ id: string; domain: string } | null> {
+    for (const raw of candidates) {
+      if (!raw) {
+        continue;
+      }
+      const candidate = String(raw).trim();
+      if (!candidate) {
+        continue;
+      }
+      const resolved = await this.lookupTenant(candidate);
+      if (resolved) {
+        return resolved;
+      }
+    }
+    return null;
+  }
+
+  private async resolveTenantFilterKeys(tenantId: string): Promise<string[]> {
+    const trimmed = tenantId?.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const resolved = await this.lookupTenant(trimmed);
+    if (!resolved) {
+      return [tenantId];
+    }
+    const keys = new Set<string>();
+    keys.add(resolved.id);
+    if (resolved.domain) {
+      keys.add(resolved.domain);
+    }
+    return Array.from(keys);
   }
 
   private async computeBillingContext(args: {

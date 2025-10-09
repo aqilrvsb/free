@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import type { BillingChargeRecord, BillingConfig } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { BillingChargeRecord, BillingConfig, BillingTopupRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BillingConfigForm } from "@/components/fs/billing-config-form";
 import { BillingTopupForm } from "@/components/fs/billing-topup-form";
 import { BillingChargesManager } from "@/components/fs/billing-charges-manager";
+import { BillingTopupHistory } from "@/components/fs/billing-topup-history";
+import { resolveClientBaseUrl } from "@/lib/browser";
 
 interface BillingTenantPanelProps {
   tenantId: string;
@@ -13,12 +15,62 @@ interface BillingTenantPanelProps {
   currency: string;
   initialBalance: number;
   initialCharges: BillingChargeRecord[];
+  initialTopups: BillingTopupRecord[];
 }
 
-export function BillingTenantPanel({ tenantId, config, currency, initialBalance, initialCharges }: BillingTenantPanelProps) {
+export function BillingTenantPanel({
+  tenantId,
+  config,
+  currency,
+  initialBalance,
+  initialCharges,
+  initialTopups,
+}: BillingTenantPanelProps) {
   const [balance, setBalance] = useState(initialBalance);
   const [currentCurrency, setCurrentCurrency] = useState(currency || config.currency);
   const [prepaidEnabled, setPrepaidEnabled] = useState(config.prepaidEnabled);
+  const [charges, setCharges] = useState(initialCharges);
+  const [topups, setTopups] = useState(initialTopups);
+
+  const apiBase = useMemo(() => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+
+  useEffect(() => {
+    setBalance(initialBalance);
+  }, [initialBalance]);
+
+  useEffect(() => {
+    setCurrentCurrency(currency || config.currency);
+  }, [currency, config.currency]);
+
+  useEffect(() => {
+    setPrepaidEnabled(config.prepaidEnabled);
+  }, [config.prepaidEnabled]);
+
+  useEffect(() => {
+    setCharges(initialCharges);
+  }, [initialCharges]);
+
+  useEffect(() => {
+    setTopups(initialTopups);
+  }, [initialTopups]);
+
+  const refreshTopups = useCallback(async () => {
+    if (!apiBase) {
+      return;
+    }
+    try {
+      const response = await fetch(`${apiBase}/billing/topups?tenantId=${tenantId}`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const records = (await response.json()) as BillingTopupRecord[];
+      setTopups(records);
+    } catch (error) {
+      console.error("[BillingTenantPanel] Không thể tải lại lịch sử nạp quỹ", error);
+    }
+  }, [apiBase, tenantId]);
 
   const formatCurrency = (value: number) => {
     try {
@@ -79,18 +131,35 @@ export function BillingTenantPanel({ tenantId, config, currency, initialBalance,
             <BillingTopupForm
               tenantId={tenantId}
               currency={currentCurrency || config.currency}
-              onSuccess={(newBalance) => setBalance(newBalance)}
+              onSuccess={(newBalance) => {
+                setBalance(newBalance);
+                refreshTopups().catch((error) =>
+                  console.error("[BillingTenantPanel] Không thể cập nhật danh sách nạp quỹ", error),
+                );
+              }}
               disabled={!prepaidEnabled}
             />
           </CardContent>
         </Card>
 
+        <BillingTopupHistory
+          tenantId={tenantId}
+          currency={currentCurrency || config.currency}
+          records={topups}
+          currentBalance={balance}
+          disabled={!prepaidEnabled}
+          apiBase={apiBase}
+          onBalanceChange={(newBalance) => setBalance(newBalance)}
+          onRefresh={refreshTopups}
+        />
+
         <BillingChargesManager
           tenantId={tenantId}
           currency={currentCurrency || config.currency}
-          initialCharges={initialCharges}
+          initialCharges={charges}
           disabled={!prepaidEnabled}
           onBalanceChange={(newBalance) => setBalance(newBalance)}
+          onChangeCharges={setCharges}
         />
       </div>
     </div>
