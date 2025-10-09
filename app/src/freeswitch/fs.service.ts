@@ -455,7 +455,7 @@ export class FsService {
           ],
         });
       }
-      return this.buildIvrDialplan({ route, menu, destination, context, baseActions, fallbackDomain });
+      return this.buildIvrDialplan({ route, menu, destination, context, baseActions, fallbackDomain, codecString });
     }
 
     const actions: Array<{ app: string; data?: string }> = [...baseActions];
@@ -508,8 +508,9 @@ export class FsService {
     context: string;
     baseActions: Array<{ app: string; data?: string }>;
     fallbackDomain: string;
+    codecString: string;
   }): string {
-    const { route, menu, destination, context, baseActions, fallbackDomain } = params;
+    const { route, menu, destination, context, baseActions, fallbackDomain, codecString } = params;
     const doc = create({ version: '1.0' });
     const documentNode = doc.ele('document', { type: 'freeswitch/xml' });
     const sectionNode = documentNode.ele('section', { name: 'dialplan' });
@@ -523,6 +524,25 @@ export class FsService {
         mainCondition.ele('action', { application: action.app, data: action.data }).up();
       } else {
         mainCondition.ele('action', { application: action.app }).up();
+      }
+    }
+
+    const executeOnAnswer: string[] = [];
+    const recordingTarget = destination || route.destinationValue || route.id;
+    const recordingActions = this.buildRecordingActions(recordingTarget, codecString, executeOnAnswer);
+    for (const action of recordingActions) {
+      if (action.data) {
+        mainCondition.ele('action', { application: action.app, data: action.data }).up();
+      } else {
+        mainCondition.ele('action', { application: action.app }).up();
+      }
+    }
+    if (executeOnAnswer.length > 0) {
+      mainCondition.ele('action', { application: 'set', data: `execute_on_answer=${executeOnAnswer[0]}` }).up();
+      for (let index = 1; index < executeOnAnswer.length; index += 1) {
+        mainCondition
+          .ele('action', { application: 'set', data: `execute_on_answer_${index + 1}=${executeOnAnswer[index]}` })
+          .up();
       }
     }
 
