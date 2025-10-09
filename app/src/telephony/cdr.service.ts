@@ -211,6 +211,9 @@ export class CdrService {
 
     const fromNumber = this.pickBestNumber([
       variables.internal_caller_extension,
+      variables.originator_caller_id_number,
+      variables.sip_auth_username,
+      variables.sip_auth_user,
       callerProfile?.caller_id_number,
       callerProfile?.username,
       variables.caller_id_number,
