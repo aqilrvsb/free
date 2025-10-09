@@ -258,7 +258,13 @@ export class CdrService {
     const resolvedTenantId = billing.tenantId ?? tenantBillingId ?? tenantId ?? null;
 
     if (billing.tenantId && billing.prepaidEnabled && billing.chargeAmount > 0) {
-      await this.billingService.applyCharge(billing.tenantId, billing.chargeAmount);
+      try {
+        await this.billingService.applyCharge(billing.tenantId, billing.chargeAmount);
+      } catch (error) {
+        this.logger.warn(
+          `[billing] Không thể trừ quỹ cho tenant ${billing.tenantId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
 
     const direction = this.resolveCallDirection({
