@@ -690,8 +690,10 @@ export class FsService {
     executeOnAnswer.push(`record_session ${recordingFile}`);
     return [
       { app: 'set', data: `recording_file=${recordingFile}` },
+      { app: 'export', data: `recording_file=${recordingFile}` },
       { app: 'export', data: `nolocal:absolute_codec_string=${codecString}` },
       { app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` },
+      { app: 'export', data: 'recording_follow_transfer=true' },
     ];
   }
 
