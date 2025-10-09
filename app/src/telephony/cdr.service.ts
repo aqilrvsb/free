@@ -187,7 +187,6 @@ export class CdrService {
     const callUuid = payload?.call_uuid || variables.uuid || variables.bridge_uuid || callerProfile?.uuid || randomUUID();
 
     const leg = this.resolveLeg(variables, payload);
-    const direction = variables.call_direction || payload?.call_direction || variables.direction || null;
     const presenceDomain = this.extractDomain(variables.presence_id);
     const sipToDomain = this.extractDomain(variables.sip_to_uri);
     const tenantCandidates = [
@@ -259,6 +258,14 @@ export class CdrService {
     if (tenantBillingId && billing.prepaidEnabled && billing.chargeAmount > 0) {
       await this.billingService.applyCharge(tenantBillingId, billing.chargeAmount);
     }
+
+    const direction = this.resolveCallDirection({
+      variables,
+      payloadDirection: payload?.call_direction,
+      callflow: payload?.callflow,
+      fromNumber,
+      toNumber,
+    });
 
     return {
       callUuid,
@@ -362,9 +369,10 @@ export class CdrService {
   }
 
   private sanitizeXml(xml: string): string {
-    return xml
-      .replace(/<sip:[^>]+>/g, (match) => match.slice(1, -1))
-      .replace(/<\/sip:[^>]+>/g, '');
+    if (!xml) {
+      return xml;
+    }
+    return xml.replace(/<(\/?)sip:/gi, '<$1sip_');
   }
 
   private resolveLeg(variables: Record<string, string>, payload: any): string | null {
@@ -406,6 +414,118 @@ export class CdrService {
       }
     }
     return null;
+  }
+
+  private resolveCallDirection(args: {
+    variables: Record<string, any>;
+    payloadDirection?: string | null;
+    callflow?: any;
+    fromNumber?: string | null;
+    toNumber?: string | null;
+  }): 'inbound' | 'outbound' | 'internal' | null {
+    const { variables, payloadDirection, callflow, fromNumber, toNumber } = args;
+    const normalize = (value: unknown): 'inbound' | 'outbound' | 'internal' | null => {
+      if (typeof value !== 'string') {
+        return null;
+      }
+      const trimmed = value.trim().toLowerCase();
+      if (!trimmed) {
+        return null;
+      }
+      if (trimmed.startsWith('in')) {
+        return 'inbound';
+      }
+      if (trimmed.startsWith('out')) {
+        return 'outbound';
+      }
+      if (trimmed.startsWith('internal')) {
+        return 'internal';
+      }
+      return null;
+    };
+
+    const candidateValues: Array<unknown> = [
+      variables?.originating_leg_direction,
+      variables?.call_lead_direction,
+      variables?.call_direction,
+      payloadDirection,
+      variables?.direction,
+    ];
+
+    const callflowDirection = this.extractCallflowDirection(callflow);
+    if (callflowDirection) {
+      candidateValues.unshift(callflowDirection);
+    }
+
+    for (const candidate of candidateValues) {
+      const normalized = normalize(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const gatewayName = this.coalesceString(
+      variables?.sip_gateway_name,
+      variables?.orig_destination,
+      variables?.orig_gateway,
+      variables?.gw_continue_on_redirect,
+    );
+    if (gatewayName) {
+      return 'outbound';
+    }
+
+    const likelyFromExtension = this.isLikelyExtension(fromNumber);
+    const likelyToExtension = this.isLikelyExtension(toNumber);
+
+    if (likelyFromExtension && !likelyToExtension) {
+      return 'outbound';
+    }
+    if (!likelyFromExtension && likelyToExtension) {
+      return 'inbound';
+    }
+    if (likelyFromExtension && likelyToExtension) {
+      return 'internal';
+    }
+
+    return null;
+  }
+
+  private extractCallflowDirection(callflow: any): string | null {
+    if (!callflow) {
+      return null;
+    }
+    const items = Array.isArray(callflow) ? callflow : [callflow];
+    for (const item of items) {
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
+
+      const candidates = [
+        (item as any)?.call_direction,
+        (item as any)?.direction,
+        (item as any)?.profile?.direction,
+        (item as any)?.caller_profile?.direction,
+        (item as any)?.caller_profile?.call_direction,
+      ];
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          return candidate;
+        }
+      }
+    }
+    return null;
+  }
+
+  private isLikelyExtension(value: string | null | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+    const digits = value.replace(/\D+/g, '');
+    if (!digits) {
+      return false;
+    }
+    const length = digits.length;
+    return length >= 2 && length <= 6;
   }
 
   private canonicalTenantKey(value: string): string {
