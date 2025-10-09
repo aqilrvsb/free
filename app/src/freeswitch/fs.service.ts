@@ -466,6 +466,7 @@ export class FsService {
         break;
       }
       case 'sip_uri': {
+        actions.push(...this.buildRecordingActions(route.destinationValue, codecString, executeOnAnswer));
         actions.push({ app: 'bridge', data: route.destinationValue });
         break;
       }
