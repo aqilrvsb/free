@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { create } from 'xmlbuilder2';
 import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -37,6 +37,7 @@ interface ResolvedTenant {
 
 @Injectable()
 export class FsService {
+  private readonly logger = new Logger(FsService.name);
   constructor(
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
@@ -526,8 +527,8 @@ export class FsService {
     mainCondition.ele('action', { application: 'answer' }).up();
     mainCondition.ele('action', { application: 'sleep', data: '250' }).up();
 
-    const prompt = menu.greetingAudioUrl || 'ivr/ivr-welcome_to_freeswitch.wav';
-    const invalidPrompt = menu.invalidAudioUrl || 'ivr/ivr-invalid_entry.wav';
+    const prompt = this.resolveAudioPrompt(menu.greetingAudioUrl, 'ivr/ivr-welcome_to_freeswitch.wav');
+    const invalidPrompt = this.resolveAudioPrompt(menu.invalidAudioUrl, 'ivr/ivr-invalid_entry.wav');
     const digitVar = `ivr_menu_${menu.id}_digit`;
     const timeoutMs = Math.max(1, menu.timeoutSeconds || 5) * 1000;
     const maxRetries = Math.max(1, menu.maxRetries || 3);
@@ -591,6 +592,35 @@ export class FsService {
       .up();
 
     return doc.end({ prettyPrint: true });
+  }
+
+  private resolveAudioPrompt(source: string | null | undefined, fallback: string): string {
+    const value = (source || '').trim();
+    if (!value) {
+      return fallback;
+    }
+
+    const lower = value.toLowerCase();
+    const hasProtocol = lower.includes('://');
+    const supportedExts = ['.wav', '.ulaw', '.alaw', '.g722', '.mp3', '.ogg'];
+
+    if (hasProtocol) {
+      return value;
+    }
+
+    if (supportedExts.some((ext) => lower.endsWith(ext))) {
+      if (lower.endsWith('.mp3')) {
+        this.logger.warn(
+          `IVR prompt ${value} uses MP3 which may not be playable without mod_shout; falling back to ${fallback}.`,
+        );
+        return fallback;
+      }
+
+      return value;
+    }
+
+    this.logger.warn(`IVR prompt ${value} has unsupported extension; falling back to ${fallback}.`);
+    return fallback;
   }
 
   private buildDialplanXml(params: {
