@@ -37,11 +37,23 @@ export class IvrMenuEntity {
   @Column({ name: 'invalid_audio_url', nullable: true })
   invalidAudioUrl?: string | null;
 
+  @Column({ name: 'invalid_action_type', type: 'varchar', length: 32, nullable: true })
+  invalidActionType?: IvrMenuOptionEntity['actionType'] | null;
+
+  @Column({ name: 'invalid_action_value', nullable: true, type: 'varchar', length: 255 })
+  invalidActionValue?: string | null;
+
   @Column({ name: 'timeout_seconds', type: 'int', default: 5 })
   timeoutSeconds!: number;
 
   @Column({ name: 'max_retries', type: 'int', default: 3 })
   maxRetries!: number;
+
+  @Column({ name: 'timeout_action_type', type: 'varchar', length: 32, nullable: true })
+  timeoutActionType?: IvrMenuOptionEntity['actionType'] | null;
+
+  @Column({ name: 'timeout_action_value', nullable: true, type: 'varchar', length: 255 })
+  timeoutActionValue?: string | null;
 
   @OneToMany(() => IvrMenuOptionEntity, (option) => option.menu, { cascade: true })
   options!: IvrMenuOptionEntity[];

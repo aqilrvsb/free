@@ -33,11 +33,31 @@ export class CreateIvrMenuDto {
   @ApiPropertyOptional({ description: 'Audio khi chọn phím không hợp lệ', nullable: true })
   invalidAudioUrl?: string;
 
+  @ApiPropertyOptional({
+    description: 'Hành động khi nhập phím không hợp lệ',
+    enum: ['extension', 'sip_uri', 'voicemail', 'hangup'],
+    nullable: true,
+  })
+  invalidActionType?: 'extension' | 'sip_uri' | 'voicemail' | 'hangup' | null;
+
+  @ApiPropertyOptional({ description: 'Giá trị hành động khi nhập phím không hợp lệ', nullable: true })
+  invalidActionValue?: string | null;
+
   @ApiPropertyOptional({ description: 'Timeout chờ phím', example: 5 })
   timeoutSeconds?: number;
 
   @ApiPropertyOptional({ description: 'Số lần retry', example: 3 })
   maxRetries?: number;
+
+  @ApiPropertyOptional({
+    description: 'Hành động khi hết thời gian chờ phím',
+    enum: ['extension', 'sip_uri', 'voicemail', 'hangup'],
+    nullable: true,
+  })
+  timeoutActionType?: 'extension' | 'sip_uri' | 'voicemail' | 'hangup' | null;
+
+  @ApiPropertyOptional({ description: 'Giá trị hành động khi hết thời gian chờ phím', nullable: true })
+  timeoutActionValue?: string | null;
 
   @ApiProperty({ type: [IvrMenuOptionDto], description: 'Danh sách tuỳ chọn' })
   options!: IvrMenuOptionDto[];

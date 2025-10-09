@@ -33,8 +33,12 @@ interface MenuFormState {
   description: string;
   greetingAudioUrl: string;
   invalidAudioUrl: string;
+  invalidActionType: "" | IvrActionType;
+  invalidActionValue: string;
   timeoutSeconds: string;
   maxRetries: string;
+  timeoutActionType: "" | IvrActionType;
+  timeoutActionValue: string;
 }
 
 interface OptionFormState {
@@ -52,8 +56,12 @@ const defaultMenuForm: MenuFormState = {
   description: "",
   greetingAudioUrl: "",
   invalidAudioUrl: "",
+  invalidActionType: "",
+  invalidActionValue: "",
   timeoutSeconds: "5",
   maxRetries: "3",
+  timeoutActionType: "",
+  timeoutActionValue: "",
 };
 
 const defaultOption: OptionFormState = {
@@ -64,6 +72,21 @@ const defaultOption: OptionFormState = {
   position: "0",
 };
 
+const actionTypeLabels: Record<IvrActionType, string> = {
+  extension: "Chuyển tới extension",
+  sip_uri: "Bridge tới SIP URI",
+  voicemail: "Gửi vào voicemail",
+  hangup: "Kết thúc cuộc gọi",
+};
+
+const fallbackActionChoices: Array<{ value: "" | IvrActionType; label: string }> = [
+  { value: "", label: "Phát thông báo & kết thúc" },
+  { value: "extension", label: actionTypeLabels.extension },
+  { value: "sip_uri", label: actionTypeLabels.sip_uri },
+  { value: "voicemail", label: actionTypeLabels.voicemail },
+  { value: "hangup", label: actionTypeLabels.hangup },
+];
+
 function formatBytes(bytes: number) {
   if (bytes >= 1024 * 1024) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -72,6 +95,20 @@ function formatBytes(bytes: number) {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${bytes} B`;
+}
+
+function formatFallbackAction(actionType?: IvrActionType | null, actionValue?: string | null) {
+  if (!actionType) {
+    return "Phát thông báo & kết thúc";
+  }
+  const label = actionTypeLabels[actionType];
+  if (actionType === "hangup") {
+    return label;
+  }
+  if (!actionValue) {
+    return `${label} (chưa cấu hình)`;
+  }
+  return `${label} → ${actionValue}`;
 }
 
 export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecordings }: IvrMenuManagerProps) {
@@ -136,8 +173,12 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
       description: menu.description || "",
       greetingAudioUrl: menu.greetingAudioUrl || "",
       invalidAudioUrl: menu.invalidAudioUrl || "",
+      invalidActionType: menu.invalidActionType || "",
+      invalidActionValue: menu.invalidActionValue || "",
       timeoutSeconds: String(menu.timeoutSeconds ?? 5),
       maxRetries: String(menu.maxRetries ?? 3),
+      timeoutActionType: menu.timeoutActionType || "",
+      timeoutActionValue: menu.timeoutActionValue || "",
     });
     setOptions(
       menu.options.map((option, index) => ({
@@ -195,6 +236,12 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
   const buildPayload = () => {
     const timeoutSeconds = Number(form.timeoutSeconds.trim()) || 5;
     const maxRetries = Number(form.maxRetries.trim()) || 3;
+    const invalidActionType = form.invalidActionType ? form.invalidActionType : null;
+    const invalidActionValue =
+      invalidActionType && invalidActionType !== "hangup" ? form.invalidActionValue.trim() || null : null;
+    const timeoutActionType = form.timeoutActionType ? form.timeoutActionType : null;
+    const timeoutActionValue =
+      timeoutActionType && timeoutActionType !== "hangup" ? form.timeoutActionValue.trim() || null : null;
 
     return {
       tenantId: form.tenantId.trim(),
@@ -204,6 +251,10 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
       invalidAudioUrl: form.invalidAudioUrl.trim() || undefined,
       timeoutSeconds,
       maxRetries,
+      invalidActionType,
+      invalidActionValue,
+      timeoutActionType,
+      timeoutActionValue,
       options: options.map((option, index) => ({
         digit: option.digit.trim(),
         description: option.description.trim() || undefined,
@@ -227,6 +278,14 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
     }
     if (options.length === 0) {
       alert("Cần cấu hình ít nhất một lựa chọn");
+      return;
+    }
+    if (form.invalidActionType && form.invalidActionType !== "hangup" && !form.invalidActionValue.trim()) {
+      alert("Vui lòng nhập giá trị cho hành động khi bấm sai phím.");
+      return;
+    }
+    if (form.timeoutActionType && form.timeoutActionType !== "hangup" && !form.timeoutActionValue.trim()) {
+      alert("Vui lòng nhập giá trị cho hành động khi timeout.");
       return;
     }
 
@@ -322,6 +381,18 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
                 <div>
                   <span className="text-muted-foreground">Timeout / Lặp</span>
                   <p className="font-medium">{menu.timeoutSeconds}s · {menu.maxRetries} lần</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Sau khi bấm sai</span>
+                  <p className="font-medium">{formatFallbackAction(menu.invalidActionType, menu.invalidActionValue)}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Khi timeout</span>
+                  <p className="font-medium">
+                    {menu.timeoutActionType
+                      ? formatFallbackAction(menu.timeoutActionType, menu.timeoutActionValue)
+                      : `Theo cấu hình nhập sai (${formatFallbackAction(menu.invalidActionType, menu.invalidActionValue)})`}
+                  </p>
                 </div>
               </div>
 
@@ -459,6 +530,112 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
               <div className="space-y-2">
                 <Label>Số lần lặp</Label>
                 <Input value={form.maxRetries} onChange={(event) => handleForm("maxRetries", event.target.value.replace(/[^\d]/g, ""))} />
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Hành động khi bấm sai</Label>
+                <select
+                  value={form.invalidActionType}
+                  onChange={(event) => {
+                    const value = event.target.value as IvrActionType | "";
+                    handleForm("invalidActionType", value);
+                    if (!value || value === "hangup") {
+                      handleForm("invalidActionValue", "");
+                    }
+                  }}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {fallbackActionChoices.map((choice) => (
+                    <option key={choice.value || "none"} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Giá trị đích (bấm sai)</Label>
+                <div className="flex flex-col gap-2">
+                  <Input
+                    value={form.invalidActionValue}
+                    onChange={(event) => handleForm("invalidActionValue", event.target.value)}
+                    placeholder={form.invalidActionType === "extension" ? "Ví dụ: 1001" : form.invalidActionType === "sip_uri" ? "sofia/gateway/pstn/..." : "Voicemail box"}
+                    disabled={!form.invalidActionType || form.invalidActionType === "hangup"}
+                  />
+                  {form.invalidActionType === "extension" && currentExtensionOptions.length > 0 ? (
+                    <select
+                      value=""
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          handleForm("invalidActionValue", event.target.value);
+                          event.target.value = "";
+                        }
+                      }}
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs"
+                    >
+                      <option value="">Chọn extension…</option>
+                      {currentExtensionOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Hành động khi timeout</Label>
+                <select
+                  value={form.timeoutActionType}
+                  onChange={(event) => {
+                    const value = event.target.value as IvrActionType | "";
+                    handleForm("timeoutActionType", value);
+                    if (!value || value === "hangup") {
+                      handleForm("timeoutActionValue", "");
+                    }
+                  }}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {fallbackActionChoices.map((choice) => (
+                    <option key={choice.value || "none-timeout"} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Giá trị đích (timeout)</Label>
+                <div className="flex flex-col gap-2">
+                  <Input
+                    value={form.timeoutActionValue}
+                    onChange={(event) => handleForm("timeoutActionValue", event.target.value)}
+                    placeholder={form.timeoutActionType === "extension" ? "Ví dụ: 1001" : form.timeoutActionType === "sip_uri" ? "sofia/gateway/pstn/..." : "Voicemail box"}
+                    disabled={!form.timeoutActionType || form.timeoutActionType === "hangup"}
+                  />
+                  {form.timeoutActionType === "extension" && currentExtensionOptions.length > 0 ? (
+                    <select
+                      value=""
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          handleForm("timeoutActionValue", event.target.value);
+                          event.target.value = "";
+                        }
+                      }}
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs"
+                    >
+                      <option value="">Chọn extension…</option>
+                      {currentExtensionOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
               </div>
             </div>
 

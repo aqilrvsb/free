@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { create } from 'xmlbuilder2';
+import type { XMLBuilder } from 'xmlbuilder2/lib/interfaces';
 import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,6 +11,7 @@ import {
   OutboundRuleEntity,
   InboundRouteEntity,
   IvrMenuEntity,
+  IvrMenuOptionEntity,
   BillingConfigEntity,
 } from '../entities';
 import { DialplanConfigService } from '../routing/dialplan-config.service';
@@ -585,11 +587,51 @@ export class FsService {
       optionCondition.up();
     }
 
-    menuCondition
-      .ele('action', { application: 'playback', data: invalidPrompt })
-      .up()
-      .ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' })
-      .up();
+    const resultField = '${play_and_get_digits_result}';
+
+    const timeoutCondition = menuCondition.ele('condition', {
+      field: resultField,
+      expression: '^timeout$',
+      break: 'on-true',
+    });
+    this.appendMenuFallback(timeoutCondition, {
+      prompt: invalidPrompt,
+      actionType: menu.timeoutActionType ?? null,
+      actionValue: menu.timeoutActionValue ?? null,
+      defaultActionType: menu.invalidActionType ?? null,
+      defaultActionValue: menu.invalidActionValue ?? null,
+      context,
+      fallbackDomain,
+    });
+    timeoutCondition.up();
+
+    const maxTriesCondition = menuCondition.ele('condition', {
+      field: resultField,
+      expression: '^maxtries$',
+      break: 'on-true',
+    });
+    this.appendMenuFallback(maxTriesCondition, {
+      prompt: invalidPrompt,
+      actionType: menu.invalidActionType ?? null,
+      actionValue: menu.invalidActionValue ?? null,
+      context,
+      fallbackDomain,
+    });
+    maxTriesCondition.up();
+
+    const invalidCondition = menuCondition.ele('condition', {
+      field: digitField,
+      expression: '^.*$',
+      break: 'always',
+    });
+    this.appendMenuFallback(invalidCondition, {
+      prompt: invalidPrompt,
+      actionType: menu.invalidActionType ?? null,
+      actionValue: menu.invalidActionValue ?? null,
+      context,
+      fallbackDomain,
+    });
+    invalidCondition.up();
 
     return doc.end({ prettyPrint: true });
   }
@@ -621,6 +663,83 @@ export class FsService {
 
     this.logger.warn(`IVR prompt ${value} has unsupported extension; falling back to ${fallback}.`);
     return fallback;
+  }
+
+  private appendMenuFallback(
+    node: XMLBuilder,
+    params: {
+      prompt: string;
+      actionType?: IvrMenuOptionEntity['actionType'] | null;
+      actionValue?: string | null;
+      defaultActionType?: IvrMenuOptionEntity['actionType'] | null;
+      defaultActionValue?: string | null;
+      context: string;
+      fallbackDomain: string;
+    },
+  ): void {
+    if (params.prompt) {
+      node.ele('action', { application: 'playback', data: params.prompt }).up();
+    }
+
+    const primaryType = params.actionType ?? undefined;
+    const primaryValue = params.actionValue ?? undefined;
+    const secondaryType = params.defaultActionType ?? undefined;
+    const secondaryValue = params.defaultActionValue ?? undefined;
+
+    const actionType = primaryType ?? secondaryType ?? null;
+    const actionValue = primaryType !== undefined ? primaryValue : secondaryValue;
+
+    if (!actionType) {
+      node.ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' }).up();
+      return;
+    }
+
+    this.appendMenuAction(node, actionType, actionValue ?? null, params.context, params.fallbackDomain);
+  }
+
+  private appendMenuAction(
+    node: XMLBuilder,
+    actionType: IvrMenuOptionEntity['actionType'],
+    actionValue: string | null,
+    context: string,
+    fallbackDomain: string,
+  ): void {
+    switch (actionType) {
+      case 'extension': {
+        const target = (actionValue || '').trim();
+        if (!target) {
+          this.logger.warn('IVR extension action thiếu giá trị extension, thực hiện hangup.');
+          node.ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' }).up();
+          return;
+        }
+        node.ele('action', { application: 'transfer', data: `${target} XML ${context}` }).up();
+        break;
+      }
+      case 'sip_uri': {
+        const target = (actionValue || '').trim();
+        if (!target) {
+          this.logger.warn('IVR SIP URI action thiếu giá trị, thực hiện hangup.');
+          node.ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' }).up();
+          return;
+        }
+        node.ele('action', { application: 'bridge', data: target }).up();
+        break;
+      }
+      case 'voicemail': {
+        const target = (actionValue || '').trim();
+        if (!target) {
+          this.logger.warn('IVR voicemail action thiếu hộp thư, thực hiện hangup.');
+          node.ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' }).up();
+          return;
+        }
+        node.ele('action', { application: 'voicemail', data: `default ${fallbackDomain} ${target}` }).up();
+        break;
+      }
+      case 'hangup':
+      default:
+        node.ele('action', { application: 'hangup', data: 'NORMAL_CLEARING' }).up();
+        break;
+    }
   }
 
   private buildDialplanXml(params: {

@@ -303,8 +303,12 @@ export interface IvrMenuSummary {
   description?: string | null;
   greetingAudioUrl?: string | null;
   invalidAudioUrl?: string | null;
+  invalidActionType?: IvrActionType | null;
+  invalidActionValue?: string | null;
   timeoutSeconds: number;
   maxRetries: number;
+  timeoutActionType?: IvrActionType | null;
+  timeoutActionValue?: string | null;
   options: IvrMenuOptionSummary[];
   createdAt?: string;
   updatedAt?: string;

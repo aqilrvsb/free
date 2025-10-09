@@ -1,13 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { IvrMenuEntity, IvrMenuOptionEntity, TenantEntity } from '../entities';
+
+const SUPPORTED_ACTION_TYPES = ['extension', 'sip_uri', 'voicemail', 'hangup'] as const;
+type SupportedActionType = (typeof SUPPORTED_ACTION_TYPES)[number];
 
 export interface IvrMenuOptionDto {
   id?: string;
   digit: string;
   description?: string;
-  actionType: 'extension' | 'sip_uri' | 'voicemail' | 'hangup';
+  actionType: SupportedActionType;
   actionValue?: string | null;
   position?: number;
 }
@@ -18,8 +21,12 @@ export interface CreateIvrMenuDto {
   description?: string;
   greetingAudioUrl?: string;
   invalidAudioUrl?: string;
+  invalidActionType?: SupportedActionType | null;
+  invalidActionValue?: string | null;
   timeoutSeconds?: number;
   maxRetries?: number;
+  timeoutActionType?: SupportedActionType | null;
+  timeoutActionValue?: string | null;
   options: IvrMenuOptionDto[];
 }
 
@@ -54,6 +61,8 @@ export class IvrMenuService {
     }
 
     const options = this.prepareOptions(dto.options);
+    const invalidAction = this.normalizeMenuAction(dto.invalidActionType, dto.invalidActionValue);
+    const timeoutAction = this.normalizeMenuAction(dto.timeoutActionType, dto.timeoutActionValue);
 
     const menu = this.menuRepo.create({
       tenantId: tenant.id,
@@ -61,8 +70,12 @@ export class IvrMenuService {
       description: dto.description?.trim() || null,
       greetingAudioUrl: dto.greetingAudioUrl?.trim() || null,
       invalidAudioUrl: dto.invalidAudioUrl?.trim() || null,
+      invalidActionType: invalidAction?.actionType ?? null,
+      invalidActionValue: invalidAction?.actionValue ?? null,
       timeoutSeconds: dto.timeoutSeconds !== undefined ? this.normalizePositiveInt(dto.timeoutSeconds, 5) : 5,
       maxRetries: dto.maxRetries !== undefined ? this.normalizePositiveInt(dto.maxRetries, 3) : 3,
+      timeoutActionType: timeoutAction?.actionType ?? null,
+      timeoutActionValue: timeoutAction?.actionValue ?? null,
       options,
     });
 
@@ -96,11 +109,21 @@ export class IvrMenuService {
     if (dto.invalidAudioUrl !== undefined) {
       menu.invalidAudioUrl = dto.invalidAudioUrl.trim() ? dto.invalidAudioUrl.trim() : null;
     }
+    if (dto.invalidActionType !== undefined || dto.invalidActionValue !== undefined) {
+      const normalized = this.normalizeMenuAction(dto.invalidActionType ?? null, dto.invalidActionValue);
+      menu.invalidActionType = normalized?.actionType ?? null;
+      menu.invalidActionValue = normalized?.actionValue ?? null;
+    }
     if (dto.timeoutSeconds !== undefined) {
       menu.timeoutSeconds = this.normalizePositiveInt(dto.timeoutSeconds, 5);
     }
     if (dto.maxRetries !== undefined) {
       menu.maxRetries = this.normalizePositiveInt(dto.maxRetries, 3);
+    }
+    if (dto.timeoutActionType !== undefined || dto.timeoutActionValue !== undefined) {
+      const normalized = this.normalizeMenuAction(dto.timeoutActionType ?? null, dto.timeoutActionValue);
+      menu.timeoutActionType = normalized?.actionType ?? null;
+      menu.timeoutActionValue = normalized?.actionValue ?? null;
     }
 
     if (dto.options !== undefined) {
@@ -137,8 +160,12 @@ export class IvrMenuService {
       description: menu.description,
       greetingAudioUrl: menu.greetingAudioUrl,
       invalidAudioUrl: menu.invalidAudioUrl,
+      invalidActionType: menu.invalidActionType,
+      invalidActionValue: menu.invalidActionValue,
       timeoutSeconds: menu.timeoutSeconds,
       maxRetries: menu.maxRetries,
+      timeoutActionType: menu.timeoutActionType,
+      timeoutActionValue: menu.timeoutActionValue,
       options: sortedOptions.map((option) => ({
         id: option.id,
         digit: option.digit,
@@ -172,7 +199,7 @@ export class IvrMenuService {
       normalizedDigits.add(digit);
 
       const actionType = option.actionType;
-      if (!['extension', 'sip_uri', 'voicemail', 'hangup'].includes(actionType)) {
+      if (!SUPPORTED_ACTION_TYPES.includes(actionType)) {
         throw new BadRequestException(`Hành động không hợp lệ: ${actionType}`);
       }
 
@@ -193,6 +220,32 @@ export class IvrMenuService {
 
       return entity;
     });
+  }
+
+  private normalizeMenuAction(
+    actionTypeRaw: SupportedActionType | string | null | undefined,
+    actionValueRaw: string | null | undefined,
+  ): { actionType: IvrMenuOptionEntity['actionType']; actionValue: string | null } | null {
+    const normalizedType = actionTypeRaw === undefined || actionTypeRaw === null ? '' : String(actionTypeRaw).trim();
+    if (!normalizedType) {
+      return null;
+    }
+
+    if (!SUPPORTED_ACTION_TYPES.includes(normalizedType as SupportedActionType)) {
+      throw new BadRequestException(`Hành động không hợp lệ: ${actionTypeRaw}`);
+    }
+
+    const actionType = normalizedType as IvrMenuOptionEntity['actionType'];
+    if (actionType === 'hangup') {
+      return { actionType, actionValue: null };
+    }
+
+    const actionValue = (actionValueRaw || '').trim();
+    if (!actionValue) {
+      throw new BadRequestException(`Vui lòng nhập giá trị cho hành động ${actionType}`);
+    }
+
+    return { actionType, actionValue };
   }
 
   private normalizePositiveInt(value: number, fallback: number): number {
