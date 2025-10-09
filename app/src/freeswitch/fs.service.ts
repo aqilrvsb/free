@@ -857,6 +857,9 @@ export class FsService {
   ): Array<{ app: string; data?: string }> {
     const filenameSuffix = this.safeFilename(target || 'dest');
     const recordingFile = '$${recordings_dir}/${uuid}-' + filenameSuffix + '.wav';
+    if (executeOnAnswer) {
+      executeOnAnswer.push(`record_session ${recordingFile}`);
+    }
     const actions: Array<{ app: string; data?: string }> = [
       { app: 'set', data: `recording_file=${recordingFile}` },
       { app: 'export', data: `recording_file=${recordingFile}` },
@@ -864,7 +867,6 @@ export class FsService {
       { app: 'export', data: `nolocal:absolute_codec_string=${codecString}` },
       { app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` },
       { app: 'export', data: 'recording_follow_transfer=true' },
-      { app: 'record_session', data: recordingFile },
     ];
     return actions;
   }
