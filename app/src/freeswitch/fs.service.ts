@@ -117,14 +117,25 @@ export class FsService {
       });
 
       if (matchedCustom) {
+        const customExecuteOnAnswer: string[] = [];
         const actions: Array<{ app: string; data?: string }> = matchedCustom.rule.inheritDefault
           ? [...baseActions]
           : [];
 
         const shouldAutoRecord = matchedCustom.rule.recordingEnabled !== false;
-        const hasCustomRecording = matchedCustom.actions.some((action) => action.app === 'record_session');
+        const hasCustomRecording = matchedCustom.actions.some(
+          (action) =>
+            action.app === 'record_session' ||
+            (action.app === 'set' && action.data?.startsWith('execute_on_answer')),
+        );
         if (shouldAutoRecord && !hasCustomRecording) {
-          actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString));
+          actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString, customExecuteOnAnswer));
+        }
+        if (customExecuteOnAnswer.length > 0) {
+          actions.push({ app: 'set', data: `execute_on_answer=${customExecuteOnAnswer[0]}` });
+          for (let index = 1; index < customExecuteOnAnswer.length; index += 1) {
+            actions.push({ app: 'set', data: `execute_on_answer_${index + 1}=${customExecuteOnAnswer[index]}` });
+          }
         }
 
         actions.push(...matchedCustom.actions);
@@ -139,6 +150,7 @@ export class FsService {
     }
 
     const actions: Array<{ app: string; data?: string }> = [...baseActions];
+    const executeOnAnswer: string[] = [];
 
     const outboundRules = await this.outboundRepo.find({
       where: { tenantId, enabled: true },
@@ -277,14 +289,20 @@ export class FsService {
 
         if (prepaidAllowance?.type === 'limited') {
           const hangupSeconds = Math.max(1, prepaidAllowance.allowedSeconds - 1);
-          actions.push({ app: 'set', data: `execute_on_answer=sched_hangup +${hangupSeconds} ALLOTTED_TIMEOUT` });
+          executeOnAnswer.push(`sched_hangup +${hangupSeconds} ALLOTTED_TIMEOUT`);
           actions.push({
             app: 'export',
             data: `prepaid_limit_seconds=${prepaidAllowance.allowedSeconds}`,
           });
         }
       }
-      actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString));
+      actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString, executeOnAnswer));
+      if (executeOnAnswer.length > 0) {
+        actions.push({ app: 'set', data: `execute_on_answer=${executeOnAnswer[0]}` });
+        for (let index = 1; index < executeOnAnswer.length; index += 1) {
+          actions.push({ app: 'set', data: `execute_on_answer_${index + 1}=${executeOnAnswer[index]}` });
+        }
+      }
       actions.push({ app: 'bridge', data: extBridge });
     }
 
@@ -438,11 +456,12 @@ export class FsService {
     }
 
     const actions: Array<{ app: string; data?: string }> = [...baseActions];
+    const executeOnAnswer: string[] = [];
 
     switch (route.destinationType) {
       case 'extension': {
         const ext = route.destinationValue;
-        actions.push(...this.buildRecordingActions(ext, codecString));
+        actions.push(...this.buildRecordingActions(ext, codecString, executeOnAnswer));
         actions.push({ app: 'bridge', data: `user/${ext}@${fallbackDomain}` });
         break;
       }
@@ -460,6 +479,13 @@ export class FsService {
       default: {
         actions.push({ app: 'hangup', data: 'UNALLOCATED_NUMBER' });
         break;
+      }
+    }
+
+    if (executeOnAnswer.length > 0) {
+      actions.push({ app: 'set', data: `execute_on_answer=${executeOnAnswer[0]}` });
+      for (let index = 1; index < executeOnAnswer.length; index += 1) {
+        actions.push({ app: 'set', data: `execute_on_answer_${index + 1}=${executeOnAnswer[index]}` });
       }
     }
 
@@ -654,12 +680,16 @@ export class FsService {
     return base.replace(/[^a-zA-Z0-9._-]/g, '_');
   }
 
-  private buildRecordingActions(target: string, codecString: string): Array<{ app: string; data?: string }> {
+  private buildRecordingActions(
+    target: string,
+    codecString: string,
+    executeOnAnswer: string[],
+  ): Array<{ app: string; data?: string }> {
     const filenameSuffix = this.safeFilename(target || 'dest');
     const recordingFile = '$${recordings_dir}/${uuid}-' + filenameSuffix + '.wav';
+    executeOnAnswer.push(`record_session ${recordingFile}`);
     return [
       { app: 'set', data: `recording_file=${recordingFile}` },
-      { app: 'record_session', data: recordingFile },
       { app: 'export', data: `nolocal:absolute_codec_string=${codecString}` },
       { app: 'export', data: `nolocal:outbound_codec_prefs=${codecString}` },
     ];
