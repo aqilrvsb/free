@@ -209,26 +209,27 @@ export class CdrService {
       ) ??
       null;
 
-    const fromNumber = this.coalesceString(
-      variables.caller_id_number,
-      variables.ani,
-      variables.caller_id_name,
+    const fromNumber = this.pickBestNumber([
+      variables.sip_from_user,
+      this.extractUser(variables.sip_from_uri),
       callerProfile?.caller_id_number,
       callerProfile?.ani,
       callerProfile?.username,
-      variables.sip_from_user,
-      this.extractUser(variables.sip_from_uri),
-    );
+      variables.caller_id_number,
+      variables.ani,
+      variables.caller_id_name,
+    ]);
 
-    const toNumber = this.coalesceString(
+    const toNumber = this.pickBestNumber([
+      variables.sip_to_user,
+      this.extractUser(variables.sip_to_uri),
       variables.destination_number,
       variables.originate_called_number,
       variables.dialed_user,
       callerProfile?.destination_number,
       callerProfile?.callee_id_number,
       callerProfile?.dialed_user,
-      variables.sip_to_user,
-    );
+    ]);
     const startTime = this.parseEpoch({ primary: variables.start_epoch, fallback: variables.start_stamp_epoch });
     const answerTime = this.parseEpoch({ primary: variables.answer_epoch, fallback: variables.answer_stamp_epoch });
     const endTime = this.parseEpoch({ primary: variables.end_epoch, fallback: variables.end_stamp_epoch });
@@ -424,6 +425,35 @@ export class CdrService {
       }
     }
     return null;
+  }
+
+  private pickBestNumber(values: Array<string | null | undefined>): string | null {
+    const candidates: string[] = [];
+    for (const value of values) {
+      if (value === undefined || value === null) {
+        continue;
+      }
+      const trimmed = String(value).trim();
+      if (!trimmed) {
+        continue;
+      }
+      if (!candidates.includes(trimmed)) {
+        candidates.push(trimmed);
+      }
+    }
+    if (candidates.length === 0) {
+      return null;
+    }
+    const leadingZero = candidates.find((item) => /^0\d+/.test(item));
+    if (leadingZero) {
+      return leadingZero;
+    }
+    const international = candidates.find((item) => /^\+\d+/.test(item));
+    if (international) {
+      return international;
+    }
+    candidates.sort((a, b) => b.length - a.length);
+    return candidates[0];
   }
 
   private normalizeBoolean(value: unknown): boolean | null {
