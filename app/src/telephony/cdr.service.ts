@@ -426,6 +426,34 @@ export class CdrService {
     return null;
   }
 
+  private normalizeBoolean(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      if (value === 1) {
+        return true;
+      }
+      if (value === 0) {
+        return false;
+      }
+      return null;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) {
+        return null;
+      }
+      if (['true', '1', 'yes', 'on'].includes(normalized)) {
+        return true;
+      }
+      if (['false', '0', 'no', 'off'].includes(normalized)) {
+        return false;
+      }
+    }
+    return null;
+  }
+
   private resolveCallDirection(args: {
     variables: Record<string, any>;
     payloadDirection?: string | null;
@@ -454,17 +482,26 @@ export class CdrService {
       return null;
     };
 
+    const outboundFlag = this.normalizeBoolean(variables?.is_outbound ?? variables?.outbound);
+    if (outboundFlag === true) {
+      return 'outbound';
+    }
+    const inboundFlag = this.normalizeBoolean(variables?.is_inbound ?? variables?.inbound);
+    if (inboundFlag === true) {
+      return 'inbound';
+    }
+
     const candidateValues: Array<unknown> = [
-      variables?.originating_leg_direction,
-      variables?.call_lead_direction,
       variables?.call_direction,
       payloadDirection,
       variables?.direction,
+      variables?.originating_leg_direction,
+      variables?.call_lead_direction,
     ];
 
     const callflowDirection = this.extractCallflowDirection(callflow);
     if (callflowDirection) {
-      candidateValues.unshift(callflowDirection);
+      candidateValues.push(callflowDirection);
     }
 
     for (const candidate of candidateValues) {
