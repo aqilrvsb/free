@@ -380,7 +380,9 @@ export class CdrService {
     if (!xml) {
       return xml;
     }
-    return xml.replace(/<(\/?)sip:/gi, '<$1sip_');
+    return xml.replace(/<\/?sip:[^>]*>/gi, (match) =>
+      match.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+    );
   }
 
   private resolveLeg(variables: Record<string, string>, payload: any): string | null {
