@@ -482,6 +482,19 @@ export class CdrService {
       return null;
     };
 
+    const likelyFromExtension = this.isLikelyExtension(fromNumber);
+    const likelyToExtension = this.isLikelyExtension(toNumber);
+
+    if (likelyFromExtension && !likelyToExtension) {
+      return 'outbound';
+    }
+    if (!likelyFromExtension && likelyToExtension) {
+      return 'inbound';
+    }
+    if (likelyFromExtension && likelyToExtension) {
+      return 'internal';
+    }
+
     const outboundFlag = this.normalizeBoolean(variables?.is_outbound ?? variables?.outbound);
     if (outboundFlag === true) {
       return 'outbound';
@@ -519,19 +532,6 @@ export class CdrService {
     );
     if (gatewayName) {
       return 'outbound';
-    }
-
-    const likelyFromExtension = this.isLikelyExtension(fromNumber);
-    const likelyToExtension = this.isLikelyExtension(toNumber);
-
-    if (likelyFromExtension && !likelyToExtension) {
-      return 'outbound';
-    }
-    if (!likelyFromExtension && likelyToExtension) {
-      return 'inbound';
-    }
-    if (likelyFromExtension && likelyToExtension) {
-      return 'internal';
     }
 
     return null;
@@ -960,6 +960,13 @@ export class CdrService {
     const bond = rawPayload.match(/<signal_bond>([^<]+)<\/signal_bond>/i);
     if (bond && bond[1]) {
       return bond[1].trim();
+    }
+    const originatorMatch = rawPayload.match(/<originator_caller_profile>[\s\S]*?<uuid>([^<]+)<\/uuid>[\s\S]*?<\/originator_caller_profile>/i);
+    if (originatorMatch && originatorMatch[1]) {
+      const candidate = originatorMatch[1].trim();
+      if (candidate) {
+        return candidate;
+      }
     }
     return null;
   }
