@@ -22,6 +22,78 @@ function buildUrl(path: string): string {
   return `${base}${suffix}`;
 }
 
+async function resolveAuthToken(): Promise<string | null> {
+  if (typeof window === "undefined") {
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      return cookieStore.get("portal_token")?.value ?? null;
+    } catch (error) {
+      console.warn("[apiFetch] Unable to read cookies on server", error);
+      return null;
+    }
+  }
+
+  try {
+    let token = window.localStorage?.getItem("portal_token") ?? null;
+    if (!token) {
+      const cookieMatch = document.cookie
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith("portal_token="));
+      if (cookieMatch) {
+        token = decodeURIComponent(cookieMatch.split("=")[1]);
+      }
+    }
+    return token;
+  } catch (error) {
+    console.warn("[apiFetch] Unable to resolve client token", error);
+    return null;
+  }
+}
+
+function updateClientTokenStorage(accessToken: string, user?: Record<string, unknown>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage?.setItem("portal_token", accessToken);
+  } catch (error) {
+    console.warn("[apiFetch] Unable to persist access token", error);
+  }
+  if (user) {
+    try {
+      window.localStorage?.setItem("portal_user", JSON.stringify(user));
+    } catch (error) {
+      console.warn("[apiFetch] Unable to persist user info", error);
+    }
+  }
+}
+
+async function requestClientRefresh(): Promise<boolean> {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    const response = await fetch("/api/session/refresh", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = (await response.json()) as { accessToken?: string; user?: Record<string, unknown> };
+    if (!payload?.accessToken) {
+      return false;
+    }
+    updateClientTokenStorage(payload.accessToken, payload.user);
+    return true;
+  } catch (error) {
+    console.warn("[apiFetch] Refresh request failed", error);
+    return false;
+  }
+}
+
 export async function apiFetch<T>(path: string, options?: FetchOptions<T>): Promise<T> {
   const opts = options ?? {};
   const {
@@ -68,31 +140,7 @@ export async function apiFetch<T>(path: string, options?: FetchOptions<T>): Prom
     headers,
   };
 
-  let authToken: string | null = null;
-  if (typeof window === "undefined") {
-    try {
-      const { cookies } = await import("next/headers");
-      const cookieStore = await cookies();
-      authToken = cookieStore.get("portal_token")?.value ?? null;
-    } catch (error) {
-      console.warn("[apiFetch] Unable to read cookies on server", error);
-    }
-  } else {
-    try {
-      authToken = window.localStorage?.getItem("portal_token") ?? null;
-      if (!authToken) {
-        const cookieMatch = document.cookie
-          .split(";")
-          .map((part) => part.trim())
-          .find((part) => part.startsWith("portal_token="));
-        if (cookieMatch) {
-          authToken = decodeURIComponent(cookieMatch.split("=")[1]);
-        }
-      }
-    } catch (error) {
-      console.warn("[apiFetch] Unable to resolve client token", error);
-    }
-  }
+  let authToken = await resolveAuthToken();
 
   if (authToken) {
     headers.set("Authorization", `Bearer ${authToken}`);
@@ -126,28 +174,44 @@ export async function apiFetch<T>(path: string, options?: FetchOptions<T>): Prom
     return fallbackResult;
   };
 
-  let response: Response;
-  try {
-    response = await fetch(url, requestInit);
-  } catch (err) {
-    return handleError(err);
-  }
+  let attemptedRefresh = false;
+  while (true) {
+    let response: Response;
+    try {
+      response = await fetch(url, requestInit);
+    } catch (err) {
+      return handleError(err);
+    }
 
-  if (!response.ok) {
+    if (response.ok) {
+      if (response.status === 204) {
+        const fallbackResult = (typeof fallbackValue === "undefined" ? undefined : fallbackValue) as T;
+        return fallbackResult;
+      }
+      try {
+        return (await response.json()) as T;
+      } catch (err) {
+        return handleError(err);
+      }
+    }
+
+    if (response.status === 401 && !attemptedRefresh && typeof window !== "undefined") {
+      const refreshed = await requestClientRefresh();
+      if (refreshed) {
+        attemptedRefresh = true;
+        authToken = await resolveAuthToken();
+        if (authToken) {
+          headers.set("Authorization", `Bearer ${authToken}`);
+        } else {
+          headers.delete("Authorization");
+        }
+        continue;
+      }
+    }
+
     const text = await response.text().catch(() => "");
     const error = new Error(`API request failed (${response.status}): ${text}`);
     return handleError(error);
-  }
-
-  if (response.status === 204) {
-    const fallbackResult = (typeof fallbackValue === "undefined" ? undefined : fallbackValue) as T;
-    return fallbackResult;
-  }
-
-  try {
-    return (await response.json()) as T;
-  } catch (err) {
-    return handleError(err);
   }
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { API_BASE_URL } from "@/lib/api";
+import { resolveSecureFlag, sanitizeErrorMessage } from "./helpers";
 
 interface LoginRequestBody {
   email?: string;
@@ -15,58 +16,14 @@ interface LoginResponsePayload {
     role: string;
     [key: string]: unknown;
   };
+  refreshToken?: string;
+  accessTokenExpiresIn?: number;
+  refreshTokenExpiresIn?: number;
   [key: string]: unknown;
 }
 
-const MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours
-
-function resolveSecureFlag(request: NextRequest): boolean {
-  const preference = (process.env.PORTAL_COOKIE_SECURE || "").toLowerCase();
-  if (preference === "true") {
-    return true;
-  }
-  if (preference === "false") {
-    return false;
-  }
-
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-  if (forwardedProto?.toLowerCase().includes("https")) {
-    return true;
-  }
-
-  const forwarded = request.headers.get("forwarded");
-  if (forwarded?.toLowerCase().includes("proto=https")) {
-    return true;
-  }
-
-  return process.env.NODE_ENV === "production";
-}
-
-function sanitizeErrorMessage(error: unknown): string {
-  if (!error) {
-    return "Đăng nhập thất bại";
-  }
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  try {
-    const parsed = JSON.parse(String(error)) as { message?: unknown };
-    if (parsed && typeof parsed === "object" && parsed.message) {
-      if (Array.isArray(parsed.message)) {
-        return parsed.message.join(", ");
-      }
-      if (typeof parsed.message === "string") {
-        return parsed.message;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return "Đăng nhập thất bại";
-}
+const ACCESS_MAX_AGE_DEFAULT = 60 * 60 * 12; // 12 hours fallback
+const REFRESH_MAX_AGE_DEFAULT = 60 * 60 * 24 * 7; // 7 days fallback
 
 export async function POST(request: NextRequest) {
   let body: LoginRequestBody;
@@ -103,12 +60,23 @@ export async function POST(request: NextRequest) {
     }
 
     const secure = resolveSecureFlag(request);
-    const cookieOptions = {
+    const accessMaxAge = Math.max(60, Math.floor(payload.accessTokenExpiresIn ?? ACCESS_MAX_AGE_DEFAULT));
+    const refreshMaxAge = Math.max(60, Math.floor(payload.refreshTokenExpiresIn ?? REFRESH_MAX_AGE_DEFAULT));
+
+    const accessCookieOptions = {
       httpOnly: false,
       sameSite: "lax" as const,
       secure,
       path: "/",
-      maxAge: MAX_AGE_SECONDS,
+      maxAge: accessMaxAge,
+    };
+
+    const refreshCookieOptions = {
+      httpOnly: true,
+      sameSite: "lax" as const,
+      secure,
+      path: "/",
+      maxAge: refreshMaxAge,
     };
 
     const responseBody = NextResponse.json({
@@ -116,8 +84,11 @@ export async function POST(request: NextRequest) {
       user: payload.user,
     });
 
-    responseBody.cookies.set("portal_token", payload.accessToken, cookieOptions);
-    responseBody.cookies.set("portal_user", encodeURIComponent(JSON.stringify(payload.user)), cookieOptions);
+    responseBody.cookies.set("portal_token", payload.accessToken, accessCookieOptions);
+    responseBody.cookies.set("portal_user", encodeURIComponent(JSON.stringify(payload.user)), accessCookieOptions);
+    if (payload.refreshToken) {
+      responseBody.cookies.set("portal_refresh", payload.refreshToken, refreshCookieOptions);
+    }
 
     return responseBody;
   } catch (error) {
@@ -139,5 +110,19 @@ export async function DELETE(request: NextRequest) {
   const response = NextResponse.json({ success: true });
   response.cookies.set("portal_token", "", cookieOptions);
   response.cookies.set("portal_user", "", cookieOptions);
+  response.cookies.set("portal_refresh", "", { ...cookieOptions, httpOnly: true });
+
+  const refreshToken = request.cookies.get("portal_refresh")?.value;
+  if (refreshToken) {
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch (error) {
+      console.warn("[session] Logout notify failed", error);
+    }
+  }
   return response;
 }

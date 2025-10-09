@@ -61,15 +61,6 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
         console.warn("[login] Không thể lưu token vào localStorage", storageError);
       }
 
-      try {
-        const secure = window.location.protocol === "https:" ? "; Secure" : "";
-        const maxAge = 60 * 60 * 12;
-        document.cookie = `portal_token=${payload.accessToken}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
-        document.cookie = `portal_user=${encodeURIComponent(JSON.stringify(payload.user))}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`;
-      } catch (cookieError) {
-        console.warn("[login] Không thể ghi cookie", cookieError);
-      }
-
       const nextUrl = target || "/";
       window.location.assign(nextUrl);
       return;

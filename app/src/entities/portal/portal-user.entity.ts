@@ -45,6 +45,12 @@ export class PortalUserEntity {
   @Column({ name: 'last_login_at', type: 'datetime', nullable: true })
   lastLoginAt?: Date | null;
 
+  @Column({ name: 'refresh_token_hash', type: 'varchar', length: 255, nullable: true })
+  refreshTokenHash?: string | null;
+
+  @Column({ name: 'refresh_token_expires_at', type: 'datetime', nullable: true })
+  refreshTokenExpiresAt?: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

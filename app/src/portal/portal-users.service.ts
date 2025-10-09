@@ -129,6 +129,56 @@ export class PortalUsersService {
     });
   }
 
+  async findRawById(id: string): Promise<PortalUserEntity | null> {
+    return this.portalUserRepo.findOne({ where: { id } });
+  }
+
+  async updateRefreshToken(userId: string, tokenId: string, expiresAt: Date): Promise<void> {
+    const tokenHash = await hash(tokenId, 10);
+    await this.portalUserRepo.update(
+      { id: userId },
+      {
+        refreshTokenHash: tokenHash,
+        refreshTokenExpiresAt: expiresAt,
+      },
+    );
+  }
+
+  async clearRefreshToken(userId: string, tokenId?: string): Promise<void> {
+    const user = await this.portalUserRepo.findOne({ where: { id: userId } });
+    if (!user || !user.refreshTokenHash) {
+      return;
+    }
+    if (tokenId) {
+      const matches = await compare(tokenId, user.refreshTokenHash);
+      if (!matches) {
+        return;
+      }
+    }
+    await this.portalUserRepo.update(
+      { id: userId },
+      {
+        refreshTokenHash: null,
+        refreshTokenExpiresAt: null,
+      },
+    );
+  }
+
+  async verifyRefreshToken(userId: string, tokenId: string): Promise<PortalUserEntity | null> {
+    const user = await this.portalUserRepo.findOne({ where: { id: userId } });
+    if (!user || !user.isActive || !user.refreshTokenHash) {
+      return null;
+    }
+    if (!user.refreshTokenExpiresAt || user.refreshTokenExpiresAt.getTime() <= Date.now()) {
+      return null;
+    }
+    const matches = await compare(tokenId, user.refreshTokenHash);
+    if (!matches) {
+      return null;
+    }
+    return user;
+  }
+
   async createUser(
     dto: CreatePortalUserDto,
     scope?: { isSuperAdmin: boolean; tenantIds: string[] },
