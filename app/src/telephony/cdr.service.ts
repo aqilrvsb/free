@@ -265,12 +265,30 @@ export class CdrService {
     );
     const billingCid = this.coalesceString(variables.billing_cid, variables.billing_customer_id, variables.cid);
 
+    const billingCallerCandidatesRaw = [
+      variables.billing_cid,
+      variables.effective_caller_id_number,
+      variables.origination_caller_id_number,
+      variables.originator_caller_id_number,
+      variables.originatee_caller_id_number,
+      callerProfile?.originator_caller_id_number,
+      callerProfile?.origination_caller_id_number,
+      callerProfile?.originatee_caller_id_number,
+      variables.caller_id_number,
+      callerProfile?.caller_id_number,
+      variables.sip_from_user,
+      this.extractUser(variables.sip_from_uri),
+    ];
+    const billingCaller = this.pickBestNumber(
+      billingCallerCandidatesRaw.filter((candidate) => !this.isLikelyExtension(candidate)),
+    );
+
     const billing = await this.computeBillingContext({
       tenantId: tenantBillingId,
       routeId: billingRouteId ?? undefined,
       billSeconds,
       variables,
-      fallbackCaller: fromNumber ?? undefined,
+      fallbackCaller: billingCaller ?? fromNumber ?? undefined,
       presetCid: billingCid ?? undefined,
     });
 
