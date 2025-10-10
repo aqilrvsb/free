@@ -48,13 +48,6 @@ export default async function RootLayout({
 
   const permissions = resolvePermissions(currentUser);
   const isAuthenticated = Boolean(token && currentUser && currentUser.isActive !== false);
-  const sanitizedTimezone = timezone || "UTC";
-  const currentTimeLabel = new Intl.DateTimeFormat("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: sanitizedTimezone,
-  }).format(new Date());
 
   if (!isAuthenticated) {
     return (
@@ -101,46 +94,8 @@ export default async function RootLayout({
                     </div>
                   </div>
                 </header>
-                <main className="relative mx-auto w-full max-w-7xl flex-1 px-6 py-12">
-                  <div className="space-y-10">
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
-                      <div className="rounded-3xl border border-border/60 bg-card/80 px-6 py-6 shadow-sm">
-                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Trung tâm PBX</p>
-                        <h2 className="mt-3 text-2xl font-semibold leading-tight">
-                          Xin chào, {currentUser?.displayName ?? currentUser?.email ?? "Quản trị viên"}
-                        </h2>
-                        <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-                          Theo dõi FreeSWITCH, quản lý tenant và xử lý cước gọi trên cùng một bảng điều khiển.
-                        </p>
-                      </div>
-                      <div className="grid gap-3">
-                        <div className="rounded-2xl border border-border/60 bg-background/80 px-5 py-4 text-xs shadow-sm">
-                          <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            <span>Múi giờ hệ thống</span>
-                            <span className="font-medium text-foreground normal-case tracking-normal">
-                              {currentTimeLabel}
-                            </span>
-                          </div>
-                          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                            {sanitizedTimezone}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-border/60 bg-background/80 px-5 py-4 text-xs shadow-sm">
-                          <div className="flex items-center justify-between uppercase tracking-[0.2em] text-muted-foreground">
-                            <span>Trạng thái</span>
-                            <span className="flex items-center gap-2 font-medium normal-case tracking-normal text-emerald-500">
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.85)]" />
-                              Hoạt động
-                            </span>
-                          </div>
-                          <p className="mt-3 text-xs text-muted-foreground">
-                            ESL & webhook kết nối ổn định.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-10">{children}</div>
-                  </div>
+                <main className="relative mx-auto w-full max-w-7xl flex-1 space-y-10 px-6 py-12">
+                  {children}
                 </main>
                 <footer className="relative border-t border-border/60 bg-card/70">
                   <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-6 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
