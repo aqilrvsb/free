@@ -39,6 +39,7 @@ export class PortalRolesService implements OnModuleInit {
     'manage_roles',
     'manage_security',
     'manage_billing',
+    'manage_agents',
   ];
 
   private readonly defaultRoleMap: Record<string, Omit<CreatePortalRoleDto, 'key'>> = {
@@ -75,6 +76,7 @@ export class PortalRolesService implements OnModuleInit {
         'manage_ivr',
         'manage_extensions',
         'manage_portal_users',
+        'manage_agents',
       ],
     },
     super_admin: {
