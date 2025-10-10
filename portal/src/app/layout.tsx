@@ -11,9 +11,7 @@ import { parsePortalUserCookie } from "@/lib/auth";
 import { resolvePermissions } from "@/lib/permissions";
 import { apiFetch } from "@/lib/api";
 import type { PortalUserSummary } from "@/lib/types";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -100,66 +98,55 @@ export default async function RootLayout({
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="hidden items-center gap-3 rounded-2xl border border-border/60 bg-card/80 px-4 py-2 text-xs text-muted-foreground md:flex">
-                        <span className="flex items-center gap-1 text-foreground">
-                          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                          Trực tuyến
-                        </span>
-                        <span className="hidden md:inline">Tỷ lệ uptime 99.98%</span>
-                      </div>
                       <UserAccountMenu user={currentUser} permissions={permissions} />
                     </div>
                   </div>
                 </header>
                 <main className="relative mx-auto w-full max-w-7xl flex-1 px-6 py-12">
                   <div className="space-y-10">
-                    <AspectRatio
-                      ratio={16 / 9}
-                      className="hidden w-full overflow-hidden rounded-[32px] border border-border/60 bg-gradient-to-br from-primary/20 via-background to-primary/5 shadow-lg md:block"
-                    >
-                      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.18),transparent),radial-gradient(circle_at_70%_30%,rgba(249,115,22,0.18),transparent)]" />
-                      <div className="relative flex h-full flex-col justify-between gap-6 p-8 text-foreground">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="border-primary/40 bg-background/70 text-primary">
-                            {sanitizedTimezone}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">Múi giờ hệ thống đồng bộ</span>
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+                      <div className="rounded-[32px] border border-border/60 bg-card/85 px-6 py-7 shadow-sm">
+                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Trung tâm PBX</p>
+                        <h2 className="mt-3 text-3xl font-semibold leading-tight">
+                          Xin chào, {currentUser?.displayName ?? currentUser?.email ?? "Quản trị viên"}
+                        </h2>
+                        <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+                          Theo dõi FreeSWITCH, quản lý tenant và xử lý cước gọi trên cùng một bảng điều khiển.
+                        </p>
+                      </div>
+                      <div className="grid gap-3">
+                        <div className="rounded-3xl border border-border/60 bg-background/80 px-5 py-4 text-sm shadow-sm backdrop-blur">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                              Múi giờ hệ thống
+                            </span>
+                          </div>
+                          <div className="mt-3 flex items-baseline justify-between gap-4">
+                            <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+                              {sanitizedTimezone}
+                            </Badge>
+                            <span className="text-xl font-semibold text-foreground">{currentTimeLabel}</span>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Đồng bộ thời gian giữa portal và FreeSWITCH.
+                          </p>
                         </div>
-                        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                          <div className="space-y-4">
-                            <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground/80">Bảng điều khiển PBX</p>
-                            <h2 className="text-3xl font-semibold leading-tight md:text-4xl">
-                              Xin chào, {currentUser?.displayName ?? currentUser?.email ?? "quản trị viên"}.
-                            </h2>
-                            <p className="max-w-2xl text-sm text-muted-foreground">
-                              Theo dõi hoạt động tổng đài, quản lý tenant và đảm bảo trải nghiệm khách hàng đồng nhất trên mọi kênh
-                              liên lạc.
-                            </p>
+                        <div className="rounded-3xl border border-border/60 bg-background/80 px-5 py-4 text-sm shadow-sm backdrop-blur">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                              Trạng thái kết nối
+                            </span>
+                            <span className="flex items-center gap-2 font-medium text-emerald-500">
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.85)]" />
+                              Trực tuyến
+                            </span>
                           </div>
-                          <div className="flex flex-col gap-4 rounded-3xl border border-border/60 bg-background/70 px-6 py-5 text-sm shadow-sm">
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-muted-foreground">Quyền truy cập</span>
-                              <span className="font-semibold text-foreground">
-                                {currentUser?.roleName ?? currentUser?.role ?? "Không xác định"}
-                              </span>
-                            </div>
-                            <Separator />
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-muted-foreground">Thời gian hiện tại</span>
-                              <span className="font-semibold text-foreground">{currentTimeLabel}</span>
-                            </div>
-                            <Separator />
-                            <div className="flex items-center justify-between gap-6">
-                              <span className="text-muted-foreground">Tình trạng</span>
-                              <span className="flex items-center gap-2 font-medium text-emerald-500">
-                                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.75)]" />
-                                Hoạt động
-                              </span>
-                            </div>
-                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Kênh ESL và webhook hoạt động ổn định.
+                          </p>
                         </div>
                       </div>
-                    </AspectRatio>
+                    </div>
                     <div className="space-y-10">{children}</div>
                   </div>
                 </main>
