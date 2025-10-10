@@ -55,6 +55,22 @@ export class AgentsController {
     return this.agentsService.listAgents(params, scope);
   }
 
+  @Roles('super_admin', 'tenant_admin', 'operator')
+  @Get('/agents/talktime')
+  async talktimeStats(@Query() query: TalktimeQueryDto, @Req() req: AuthenticatedRequest) {
+    const fromDate = query.from ? new Date(query.from) : undefined;
+    const toDate = query.to ? new Date(query.to) : undefined;
+    return this.agentsService.getTalktimeStats(
+      {
+        tenantId: query.tenantId?.trim() || undefined,
+        groupId: query.groupId?.trim() || undefined,
+        fromDate: fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : undefined,
+        toDate: toDate && !Number.isNaN(toDate.getTime()) ? toDate : undefined,
+      },
+      this.resolveScope(req),
+    );
+  }
+
   @Get('/agents/:id')
   async getAgent(@Param() params: AgentIdParamDto, @Req() req: AuthenticatedRequest) {
     return this.agentsService.getAgent(params.id, this.resolveScope(req));
@@ -107,21 +123,5 @@ export class AgentsController {
   @Delete('/agent-groups/:id')
   async deleteGroup(@Param() params: AgentGroupIdParamDto, @Req() req: AuthenticatedRequest) {
     return this.agentsService.deleteGroup(params.id, this.resolveScope(req));
-  }
-
-  @Roles('super_admin', 'tenant_admin', 'operator')
-  @Get('/agents/talktime')
-  async talktimeStats(@Query() query: TalktimeQueryDto, @Req() req: AuthenticatedRequest) {
-    const fromDate = query.from ? new Date(query.from) : undefined;
-    const toDate = query.to ? new Date(query.to) : undefined;
-    return this.agentsService.getTalktimeStats(
-      {
-        tenantId: query.tenantId?.trim() || undefined,
-        groupId: query.groupId?.trim() || undefined,
-        fromDate: fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : undefined,
-        toDate: toDate && !Number.isNaN(toDate.getTime()) ? toDate : undefined,
-      },
-      this.resolveScope(req),
-    );
   }
 }
