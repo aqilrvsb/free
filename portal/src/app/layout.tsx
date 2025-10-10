@@ -11,6 +11,7 @@ import { parsePortalUserCookie } from "@/lib/auth";
 import { resolvePermissions } from "@/lib/permissions";
 import { apiFetch } from "@/lib/api";
 import type { PortalUserSummary } from "@/lib/types";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Badge } from "@/components/ui/badge";
 
 const geistSans = Geist({
@@ -104,46 +105,68 @@ export default async function RootLayout({
                 </header>
                 <main className="relative mx-auto w-full max-w-7xl flex-1 px-6 py-12">
                   <div className="space-y-10">
-                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
-                      <div className="rounded-[32px] border border-border/60 bg-card/85 px-6 py-7 shadow-sm">
-                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Trung tâm PBX</p>
-                        <h2 className="mt-3 text-3xl font-semibold leading-tight">
-                          Xin chào, {currentUser?.displayName ?? currentUser?.email ?? "Quản trị viên"}
-                        </h2>
-                        <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-                          Theo dõi FreeSWITCH, quản lý tenant và xử lý cước gọi trên cùng một bảng điều khiển.
-                        </p>
-                      </div>
-                      <div className="grid gap-3">
-                        <div className="rounded-3xl border border-border/60 bg-background/80 px-5 py-4 text-sm shadow-sm backdrop-blur">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                              Múi giờ hệ thống
-                            </span>
+                    <AspectRatio
+                      ratio={16 / 6}
+                      className="hidden w-full overflow-hidden rounded-[32px] border border-border/60 bg-gradient-to-br from-primary/15 via-background to-primary/5 shadow-xl md:block"
+                    >
+                      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(120%_160%_at_20%_-10%,rgba(59,130,246,0.18),transparent),radial-gradient(110%_150%_at_90%_0%,rgba(249,115,22,0.16),transparent)]" />
+                      <div className="relative grid h-full gap-8 px-8 py-9 md:grid-cols-[minmax(0,1fr)_280px]">
+                        <div className="flex flex-col justify-between gap-6">
+                          <div className="space-y-3">
+                            <p className="text-xs uppercase tracking-[0.32em] text-muted-foreground/80">Trung tâm PBX</p>
+                            <h2 className="text-3xl font-semibold leading-tight">
+                              Xin chào, {currentUser?.displayName ?? currentUser?.email ?? "Quản trị viên"}
+                            </h2>
+                            <p className="max-w-2xl text-sm text-muted-foreground">
+                              Theo dõi FreeSWITCH, quản lý tenant và xử lý cước gọi trên cùng một bảng điều khiển.
+                            </p>
                           </div>
-                          <div className="mt-3 flex items-baseline justify-between gap-4">
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                             <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
                               {sanitizedTimezone}
                             </Badge>
-                            <span className="text-xl font-semibold text-foreground">{currentTimeLabel}</span>
+                            <span>Múi giờ đồng bộ · {currentTimeLabel}</span>
                           </div>
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            Đồng bộ thời gian giữa portal và FreeSWITCH.
-                          </p>
                         </div>
-                        <div className="rounded-3xl border border-border/60 bg-background/80 px-5 py-4 text-sm shadow-sm backdrop-blur">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                              Trạng thái kết nối
-                            </span>
-                            <span className="flex items-center gap-2 font-medium text-emerald-500">
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.85)]" />
-                              Trực tuyến
-                            </span>
+                        <div className="flex h-full flex-col justify-between rounded-3xl border border-border/60 bg-background/80 px-6 py-5 text-sm shadow-lg backdrop-blur">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                Múi giờ hệ thống
+                              </span>
+                              <span className="text-sm font-semibold text-foreground">{currentTimeLabel}</span>
+                            </div>
+                            <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-medium text-primary">
+                              {sanitizedTimezone}
+                            </div>
                           </div>
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            Kênh ESL và webhook hoạt động ổn định.
-                          </p>
+                          <div className="h-[1px] bg-border/60" />
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                              <span>Trạng thái</span>
+                              <span className="flex items-center gap-2 font-medium text-emerald-500">
+                                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.85)]" />
+                                Hoạt động
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              ESL & webhook đang đồng bộ, hệ thống ổn định.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </AspectRatio>
+                    <div className="md:hidden">
+                      <div className="rounded-[28px] border border-border/60 bg-card/85 px-6 py-6 shadow-sm">
+                        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">Trung tâm PBX</p>
+                        <h2 className="mt-3 text-2xl font-semibold leading-tight">
+                          Xin chào, {currentUser?.displayName ?? currentUser?.email ?? "Quản trị viên"}
+                        </h2>
+                        <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                          <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+                            {sanitizedTimezone}
+                          </Badge>
+                          <span>{currentTimeLabel}</span>
                         </div>
                       </div>
                     </div>

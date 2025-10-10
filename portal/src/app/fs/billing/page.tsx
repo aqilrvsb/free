@@ -9,11 +9,18 @@ import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BillingFilters } from "@/components/fs/billing-filters";
 import { BillingTenantPanel } from "@/components/fs/billing-tenant-panel";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BadgeDollarSign, PhoneCall, Timer, TrendingUp } from "lucide-react";
+import {
+  ChartContainer,
+  type ChartConfig,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+} from "@/components/ui/chart";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +55,25 @@ function formatCurrency(value: number, currency: string) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatCurrencyCompact(value: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency,
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(value);
+  } catch {
+    if (Math.abs(value) >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(1)}M ${currency}`;
+    }
+    if (Math.abs(value) >= 1_000) {
+      return `${(value / 1_000).toFixed(1)}K ${currency}`;
+    }
+    return `${value.toFixed(1)} ${currency}`;
+  }
 }
 
 function formatDayLabel(day: string) {
@@ -133,7 +159,28 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
   const chargesTotal = summary.chargesTotal ?? charges.reduce((acc, item) => acc + item.amount, 0);
   const overallCost = summary.totals.totalCost + chargesTotal;
   const byDay = summary.byDay.slice(-14);
-  const maxCost = byDay.reduce((max, item) => Math.max(max, item.totalCost), 0);
+  const chartData = byDay.map((item) => ({
+    day: formatDayLabel(item.day),
+    rawDay: item.day,
+    cost: Number(item.totalCost.toFixed(2)),
+    calls: Number(item.totalCalls.toFixed(2)),
+  }));
+  const chartConfig: ChartConfig = {
+    cost: {
+      label: "Chi phí",
+      theme: {
+        light: "hsl(var(--chart-1))",
+        dark: "hsl(var(--chart-1))",
+      },
+    },
+    calls: {
+      label: "Cuộc gọi",
+      theme: {
+        light: "hsl(var(--chart-2))",
+        dark: "hsl(var(--chart-2))",
+      },
+    },
+  };
 
   const heroMetrics = [
     {
@@ -296,40 +343,65 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
           {byDay.length === 0 ? (
             <p className="text-sm text-muted-foreground">Không có dữ liệu trong giai đoạn đã chọn.</p>
           ) : (
-            <AspectRatio ratio={16 / 9} className="w-full">
-              <div className="flex h-full items-end gap-3 rounded-[24px] border border-dashed border-primary/30 bg-gradient-to-t from-primary/5 via-background to-background p-6">
-                {byDay.map((item) => {
-                  const heightPercent =
-                    maxCost > 0 ? Math.max(12, Math.min(100, (item.totalCost / maxCost) * 100)) : 12;
-                  const dayLabel = formatDayLabel(item.day);
-                  return (
-                    <Tooltip key={item.day}>
-                      <TooltipTrigger asChild>
-                        <div className="group flex h-full flex-1 flex-col items-center justify-end gap-2">
-                          <div className="relative flex h-full w-full items-end">
-                            <div className="relative w-full overflow-hidden rounded-full bg-primary/15">
-                              <div
-                                className="w-full rounded-full bg-primary/80 transition-all duration-300 group-hover:bg-primary"
-                                style={{ height: `${heightPercent}%` }}
-                              />
-                            </div>
+            <ChartContainer
+              config={chartConfig}
+              className="rounded-[24px] border border-dashed border-primary/30 bg-gradient-to-t from-primary/5 via-background to-background p-4"
+            >
+              <BarChart data={chartData} barSize={14}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="day"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <YAxis
+                  yAxisId="left"
+                  orientation="left"
+                  tickLine={false}
+                  axisLine={false}
+                  width={80}
+                  tickFormatter={(value) => formatCurrencyCompact(value as number, currency)}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tickLine={false}
+                  axisLine={false}
+                  width={50}
+                  tickFormatter={(value) => formatNumber(value as number)}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <ChartTooltip
+                  cursor={{ fill: "hsl(var(--muted) / 0.35)" }}
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value, name) => {
+                        const numeric = typeof value === "number" ? value : Number(value ?? 0);
+                        const label = chartConfig[name as keyof typeof chartConfig]?.label ?? name;
+                        const formattedValue =
+                          name === "cost" ? formatCurrency(numeric, currency) : formatNumber(numeric);
+                        return (
+                          <div className="flex w-full items-center justify-between gap-2">
+                            <span className="text-muted-foreground">{label}</span>
+                            <span className="font-mono font-semibold tabular-nums">{formattedValue}</span>
                           </div>
-                          <span className="text-xs font-medium text-muted-foreground">{dayLabel}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">{dayLabel}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatCurrency(item.totalCost, currency)} · {formatNumber(item.totalCalls)} cuộc gọi
-                          </p>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            </AspectRatio>
+                        );
+                      }}
+                      labelFormatter={(_value, payload) => {
+                        const rawDay = payload?.[0]?.payload?.rawDay as string | undefined;
+                        return rawDay ? formatDayLabel(rawDay) : payload?.[0]?.payload?.day;
+                      }}
+                    />
+                  }
+                />
+                <ChartLegend content={<ChartLegendContent />} verticalAlign="top" align="right" />
+                <Bar yAxisId="left" dataKey="cost" radius={[6, 6, 0, 0]} fill="var(--color-cost)" />
+                <Bar yAxisId="right" dataKey="calls" radius={[6, 6, 0, 0]} fill="var(--color-calls)" />
+              </BarChart>
+            </ChartContainer>
           )}
         </CardContent>
       </Card>
