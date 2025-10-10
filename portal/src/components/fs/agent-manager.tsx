@@ -51,6 +51,7 @@ interface GroupFormState {
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_GROUP_FETCH = 200;
+const NO_GROUP_VALUE = "__none__";
 
 function formatDateInput(date: Date): string {
   const year = date.getFullYear();
@@ -1032,15 +1033,20 @@ export function AgentManager({
             <div className="space-y-2">
               <Label htmlFor="agent-group">Nhóm quản lý</Label>
               <Select
-                value={agentForm.groupId || ""}
-                onValueChange={(value) => setAgentForm((prev) => ({ ...prev, groupId: value }))}
+                value={agentForm.groupId && agentForm.groupId.trim() ? agentForm.groupId : NO_GROUP_VALUE}
+                onValueChange={(value) =>
+                  setAgentForm((prev) => ({
+                    ...prev,
+                    groupId: value === NO_GROUP_VALUE ? "" : value,
+                  }))
+                }
                 disabled={formGroupOptions.length === 0}
               >
                 <SelectTrigger id="agent-group">
                   <SelectValue placeholder={formGroupOptions.length ? "Chọn nhóm" : "Chưa có nhóm"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Không</SelectItem>
+                  <SelectItem value={NO_GROUP_VALUE}>Không</SelectItem>
                   {formGroupOptions.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
                       {group.name}
