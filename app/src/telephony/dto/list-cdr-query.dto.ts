@@ -16,6 +16,15 @@ export class ListCdrQueryDto {
   @ApiPropertyOptional({ description: 'UUID cuộc gọi' })
   callUuid?: string;
 
+  @ApiPropertyOptional({ description: 'Số gọi đi (extension/máy gọi)' })
+  fromNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Số bị gọi' })
+  toNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Trạng thái cuộc gọi (answered/busy/cancelled/no_answer/failed/unknown)' })
+  status?: string;
+
   @ApiPropertyOptional({ description: 'Ngày bắt đầu (ISO string)' })
   from?: string;
 

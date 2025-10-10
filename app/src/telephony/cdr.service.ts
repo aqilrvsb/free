@@ -19,6 +19,9 @@ export interface CdrQuery {
   fromDate?: Date;
   toDate?: Date;
   callUuid?: string;
+  fromNumber?: string;
+  toNumber?: string;
+  status?: string;
   page: number;
   pageSize: number;
 }
@@ -112,6 +115,63 @@ export class CdrService {
     }
     if (query.callUuid) {
       qb.andWhere('cdr.callUuid = :callUuid', { callUuid: query.callUuid });
+    }
+    const fromNumber = query.fromNumber?.trim();
+    if (fromNumber) {
+      qb.andWhere('cdr.fromNumber LIKE :fromNumber', { fromNumber: `%${fromNumber}%` });
+    }
+    const toNumber = query.toNumber?.trim();
+    if (toNumber) {
+      qb.andWhere('cdr.toNumber LIKE :toNumber', { toNumber: `%${toNumber}%` });
+    }
+    if (query.status) {
+      const normalizedStatus = query.status.trim().toLowerCase();
+      if (normalizedStatus === 'answered') {
+        qb.andWhere('(cdr.billSeconds > 0 OR cdr.answerTime IS NOT NULL)');
+      } else if (normalizedStatus === 'busy') {
+        const causes = Array.from(this.busyCauses);
+        if (causes.length > 0) {
+          qb.andWhere('UPPER(cdr.hangupCause) IN (:...busyCauses)', { busyCauses: causes });
+        } else {
+          qb.andWhere('1=0');
+        }
+      } else if (normalizedStatus === 'cancelled') {
+        const causes = Array.from(this.cancelCauses);
+        if (causes.length > 0) {
+          qb.andWhere('UPPER(cdr.hangupCause) IN (:...cancelCauses)', { cancelCauses: causes });
+        } else {
+          qb.andWhere('1=0');
+        }
+      } else if (normalizedStatus === 'no_answer') {
+        const causes = Array.from(this.noAnswerCauses);
+        if (causes.length > 0) {
+          qb.andWhere('UPPER(cdr.hangupCause) IN (:...noAnswerCauses)', { noAnswerCauses: causes });
+        } else {
+          qb.andWhere('1=0');
+        }
+      } else if (normalizedStatus === 'failed') {
+        const causes = Array.from(this.failedCauses);
+        if (causes.length > 0) {
+          qb.andWhere('UPPER(cdr.hangupCause) IN (:...failedCauses)', { failedCauses: causes });
+        } else {
+          qb.andWhere('1=0');
+        }
+      } else if (normalizedStatus === 'unknown') {
+        const knownCauses = new Set<string>([
+          ...this.busyCauses,
+          ...this.cancelCauses,
+          ...this.noAnswerCauses,
+          ...this.failedCauses,
+        ]);
+        if (knownCauses.size > 0) {
+          qb.andWhere(
+            '( (cdr.billSeconds IS NULL OR cdr.billSeconds <= 0) AND cdr.answerTime IS NULL AND (cdr.hangupCause IS NULL OR cdr.hangupCause = \'\' OR UPPER(cdr.hangupCause) NOT IN (:...knownCauses)) )',
+            { knownCauses: Array.from(knownCauses) },
+          );
+        } else {
+          qb.andWhere('( (cdr.billSeconds IS NULL OR cdr.billSeconds <= 0) AND cdr.answerTime IS NULL )');
+        }
+      }
     }
     if (query.fromDate) {
       qb.andWhere('cdr.startTime >= :fromDate', { fromDate: query.fromDate });
