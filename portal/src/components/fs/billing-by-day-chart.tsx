@@ -9,7 +9,15 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+} from "recharts"
 import { formatDistanceToNow } from "date-fns"
 import { vi } from "date-fns/locale"
 
@@ -58,6 +66,29 @@ export function BillingByDayChart({ data, config, currency }: BillingByDayChartP
     })
   }, [data, hasData])
 
+  const insight = useMemo(() => {
+    if (!hasData) {
+      return null
+    }
+    const totalCost = data.reduce((acc, item) => acc + item.cost, 0)
+    const totalCalls = data.reduce((acc, item) => acc + item.calls, 0)
+    const averageCost = totalCost / data.length
+    const peakCost = data.reduce(
+      (acc, item) => (item.cost > acc.cost ? item : acc),
+      data[0],
+    )
+    const peakCalls = data.reduce(
+      (acc, item) => (item.calls > acc.calls ? item : acc),
+      data[0],
+    )
+    return {
+      averageCost,
+      averageCalls: totalCalls / data.length,
+      peakCost,
+      peakCalls,
+    }
+  }, [data, hasData])
+
   if (!hasData) {
     return (
       <div className="rounded-[24px] border border-dashed border-primary/30 bg-gradient-to-t from-primary/5 via-background to-background px-6 py-10 text-sm text-muted-foreground">
@@ -72,7 +103,13 @@ export function BillingByDayChart({ data, config, currency }: BillingByDayChartP
         config={config}
         className="rounded-[24px] border border-dashed border-primary/30 bg-gradient-to-t from-primary/5 via-background to-background p-4"
       >
-        <BarChart data={data} barSize={14} className="pt-2">
+        <ComposedChart data={data} className="pt-2">
+          <defs>
+            <linearGradient id="billingCostGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-cost)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--color-cost)" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis
             dataKey="day"
@@ -123,14 +160,67 @@ export function BillingByDayChart({ data, config, currency }: BillingByDayChartP
             }
           />
           <ChartLegend content={<ChartLegendContent />} verticalAlign="top" align="right" />
-          <Bar yAxisId="left" dataKey="cost" radius={[6, 6, 0, 0]} fill="var(--color-cost)" />
-          <Bar yAxisId="right" dataKey="calls" radius={[6, 6, 0, 0]} fill="var(--color-calls)" />
-        </BarChart>
+          {insight ? (
+            <ReferenceLine
+              yAxisId="left"
+              y={insight.averageCost}
+              stroke="var(--color-cost)"
+              strokeDasharray="6 6"
+              strokeOpacity={0.3}
+            />
+          ) : null}
+          <Area
+            yAxisId="left"
+            type="monotone"
+            dataKey="cost"
+            stroke="var(--color-cost)"
+            strokeWidth={2.5}
+            fill="url(#billingCostGradient)"
+            activeDot={{ r: 5, strokeWidth: 1.5 }}
+          />
+          <Line
+            yAxisId="right"
+            type="monotone"
+            dataKey="calls"
+            stroke="var(--color-calls)"
+            strokeWidth={2.4}
+            dot={{ r: 3.2 }}
+            activeDot={{ r: 5, strokeWidth: 0 }}
+          />
+        </ComposedChart>
       </ChartContainer>
       {caption ? (
         <p className="px-1 text-xs text-muted-foreground">
           Dữ liệu mới nhất cập nhật {caption}.
         </p>
+      ) : null}
+      {insight ? (
+        <div className="grid gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <span className="font-medium text-primary">Chi phí trung bình</span>
+            <span className="font-mono text-sm text-foreground">
+              {formatCurrency(insight.averageCost, currency)}
+            </span>
+            <span>
+              Ngày cao nhất:{" "}
+              <span className="font-medium text-foreground">
+                {insight.peakCost.day} · {formatCurrency(insight.peakCost.cost, currency)}
+              </span>
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="font-medium text-primary">Cuộc gọi trung bình</span>
+            <span className="font-mono text-sm text-foreground">
+              {formatNumber(insight.averageCalls)}
+            </span>
+            <span>
+              Đỉnh tần suất:{" "}
+              <span className="font-medium text-foreground">
+                {insight.peakCalls.day} · {formatNumber(insight.peakCalls.calls)} cuộc
+              </span>
+            </span>
+          </div>
+        </div>
       ) : null}
     </div>
   )
