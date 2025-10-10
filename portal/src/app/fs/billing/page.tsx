@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { BadgeDollarSign, PhoneCall, Timer, TrendingUp } from "lucide-react";
 import type { ChartConfig } from "@/components/ui/chart";
 import { BillingByDayChart, type BillingChartPoint } from "@/components/fs/billing-by-day-chart";
+import { BillingFundUsageChart } from "@/components/fs/billing-fund-usage-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +140,28 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     cost: Number(item.totalCost.toFixed(2)),
     calls: Number(item.totalCalls.toFixed(2)),
   }));
+  let fundUsageSlices: Array<{ key: "spent" | "remaining" | "overdrawn"; label: string; value: number }> = [];
+  if (tenantId !== "all") {
+    fundUsageSlices = [
+      {
+        key: "spent",
+        label: "Đã sử dụng",
+        value: Math.max(overallCost, 0),
+      },
+      {
+        key: "remaining",
+        label: "Còn lại",
+        value: Math.max(currentBalance, 0),
+      },
+    ];
+    if (currentBalance < 0) {
+      fundUsageSlices.push({
+        key: "overdrawn",
+        label: "Âm quỹ",
+        value: Math.abs(currentBalance),
+      });
+    }
+  }
   const chartConfig: ChartConfig = {
     cost: {
       label: "Chi phí",
@@ -187,6 +210,20 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     },
   ];
 
+  const fundCard = tenantId !== "all" ? (
+    <Card className="overflow-hidden rounded-[28px] border border-border/50 bg-card/80 shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardTitle>Tình trạng quỹ</CardTitle>
+        <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+          Chu kỳ hiện tại
+        </Badge>
+      </CardHeader>
+      <CardContent>
+        <BillingFundUsageChart slices={fundUsageSlices} currency={currency} />
+      </CardContent>
+    </Card>
+  ) : null;
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -220,18 +257,25 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
         ))}
       </div>
 
-      {tenantId !== "all" && config ? (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Cấu hình billing cho {tenantId}</h2>
-          <BillingTenantPanel
-            tenantId={tenantId}
-            config={config}
-            currency={currency}
-            initialBalance={currentBalance}
-            initialCharges={charges}
-            initialTopups={topups}
-          />
-        </div>
+      {tenantId !== "all" ? (
+        config ? (
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+            {fundCard}
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">Cấu hình billing cho {tenantId}</h2>
+              <BillingTenantPanel
+                tenantId={tenantId}
+                config={config}
+                currency={currency}
+                initialBalance={currentBalance}
+                initialCharges={charges}
+                initialTopups={topups}
+              />
+            </div>
+          </div>
+        ) : (
+          fundCard
+        )
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
