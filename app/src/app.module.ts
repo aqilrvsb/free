@@ -33,6 +33,10 @@ import {
   PortalUserTenantEntity,
   AgentGroupEntity,
   AgentEntity,
+  AutoDialerCampaignEntity,
+  AutoDialerLeadEntity,
+  AutoDialerJobEntity,
+  AutoDialerCdrEntity,
 } from './entities';
 import { FsEventsService } from './freeswitch/fs-events.service';
 import { FsRegistrationsGateway } from './freeswitch/fs-registrations.gateway';
@@ -72,6 +76,7 @@ import { BillingController } from './billing/billing.controller';
 import { BillingService } from './billing/billing.service';
 import { AgentsController } from './agents/agents.controller';
 import { AgentsService } from './agents/agents.service';
+import { AutoDialerModule } from './autodialer/auto-dialer.module';
 
 @Module({
   imports: [
@@ -107,6 +112,10 @@ import { AgentsService } from './agents/agents.service';
           PortalUserTenantEntity,
           AgentGroupEntity,
           AgentEntity,
+          AutoDialerCampaignEntity,
+          AutoDialerLeadEntity,
+          AutoDialerJobEntity,
+          AutoDialerCdrEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -138,6 +147,10 @@ import { AgentsService } from './agents/agents.service';
       PortalUserTenantEntity,
       AgentGroupEntity,
       AgentEntity,
+      AutoDialerCampaignEntity,
+      AutoDialerLeadEntity,
+      AutoDialerJobEntity,
+      AutoDialerCdrEntity,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt', session: false }),
     JwtModule.registerAsync({
@@ -153,6 +166,7 @@ import { AgentsService } from './agents/agents.service';
       timeout: 3000,
       maxRedirects: 3,
     }),
+    AutoDialerModule,
   ],
   controllers: [
     FsXmlController,

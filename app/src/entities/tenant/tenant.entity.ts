@@ -5,6 +5,7 @@ import { UserEntity } from './user.entity';
 import { BillingConfigEntity } from './billing-config.entity';
 import { AgentGroupEntity } from './agent-group.entity';
 import { AgentEntity } from './agent.entity';
+import { AutoDialerCampaignEntity } from '../autodialer/auto-dialer-campaign.entity';
 
 @Entity({ name: 'tenants' })
 @Unique(['domain'])
@@ -44,4 +45,7 @@ export class TenantEntity {
 
   @OneToMany(() => AgentEntity, (agent) => agent.tenant)
   agents?: AgentEntity[];
+
+  @OneToMany(() => AutoDialerCampaignEntity, (campaign) => campaign.tenant)
+  autoDialerCampaigns?: AutoDialerCampaignEntity[];
 }

@@ -1,0 +1,21 @@
+<include>
+  <context name="auto_dialer">
+    <extension name="auto_dialer_entry">
+      <condition field="destination_number" expression="^auto_dialer$">
+        <action application="set" data="continue_on_fail=true" />
+        <action application="set" data="hangup_after_bridge=true" />
+        <action application="set" data="ringback=${us-ring}" />
+        <action application="set" data="transfer_ringback=${us-ring}" />
+        <action application="set" data="od-campaign=${auto_campaign_id}" />
+        <action application="set" data="od-lead=${auto_lead_id}" />
+        <action application="set" data="od-job=${auto_job_id}" />
+      </condition>
+      <condition field="${auto_dialer_mode}" expression="^playback$">
+        <action application="playback" data="${playback_file}" />
+      </condition>
+      <condition field="${auto_dialer_mode}" expression="^ivr$">
+        <action application="transfer" data="${ivr_menu}|XML|ivr" />
+      </condition>
+    </extension>
+  </context>
+</include>

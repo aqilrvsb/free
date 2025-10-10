@@ -1,0 +1,30 @@
+<profile name="auto_dialer">
+  <aliases>
+  </aliases>
+  <gateways>
+  </gateways>
+  <domains>
+    <domain name="all" alias="true" parse="false" />
+  </domains>
+  <settings>
+    <param name="debug" value="0" />
+    <param name="sip-trace" value="no" />
+    <param name="sip-capture" value="no" />
+    <param name="context" value="auto_dialer" />
+    <param name="dtmf-duration" value="2000" />
+    <param name="dialplan" value="XML" />
+    <param name="sip-port" value="$${auto_dialer_sip_port:=5070}" />
+    <param name="rtp-ip" value="$${local_ip_v4}" />
+    <param name="sip-ip" value="$${local_ip_v4}" />
+    <param name="hold-music" value="$${hold_music}" />
+    <param name="local-network-acl" value="localnet.auto" />
+    <param name="inbound-codec-prefs" value="$${global_codec_prefs}" />
+    <param name="outbound-codec-prefs" value="$${global_codec_prefs}" />
+    <param name="ignore-183" value="true" />
+    <param name="apply-nat-acl" value="nat.auto" />
+    <param name="auto-nat" value="true" />
+    <param name="log-auth-failures" value="true" />
+    <param name="record-path" value="$${recordings_dir}" />
+    <param name="record-template" value="${caller_id_number}.${strftime(%Y-%m-%d-%H-%M-%S)}.wav" />
+  </settings>
+</profile>

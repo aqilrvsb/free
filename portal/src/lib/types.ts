@@ -265,6 +265,90 @@ export interface AgentTalktimeResponse {
   };
 }
 
+export interface AutoDialerCampaign {
+  id: string;
+  tenantId: string;
+  tenantName?: string | null;
+  name: string;
+  description?: string | null;
+  status: string;
+  dialMode: 'ivr' | 'playback';
+  ivrMenuId?: string | null;
+  ivrMenuName?: string | null;
+  audioUrl?: string | null;
+  maxConcurrentCalls: number;
+  maxRetries: number;
+  retryDelaySeconds: number;
+  callWindowStart?: string | null;
+  callWindowEnd?: string | null;
+  allowWeekends: boolean;
+  metadata?: Record<string, unknown> | null;
+  leadCount?: number;
+  activeLeadCount?: number;
+  completedLeadCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutoDialerLead {
+  id: string;
+  campaignId: string;
+  phoneNumber: string;
+  name?: string | null;
+  metadata?: Record<string, unknown> | null;
+  status: string;
+  attemptCount: number;
+  lastAttemptAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutoDialerJob {
+  id: string;
+  campaignId: string;
+  campaignName?: string | null;
+  tenantId?: string | null;
+  leadId: string;
+  leadPhoneNumber?: string | null;
+  leadName?: string | null;
+  scheduledAt: string;
+  status: string;
+  attemptNumber: number;
+  callUuid?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutoDialerCdrRecord {
+  id: string;
+  campaignId: string;
+  tenantId: string;
+  leadId?: string | null;
+  jobId?: string | null;
+  callUuid: string;
+  direction?: string | null;
+  fromNumber?: string | null;
+  toNumber?: string | null;
+  durationSeconds: number;
+  billSeconds: number;
+  billingCost: number;
+  billingCurrency?: string | null;
+  billingRouteId?: string | null;
+  billingCid?: string | null;
+  billingRateApplied: number;
+  hangupCause?: string | null;
+  startTime?: string | null;
+  answerTime?: string | null;
+  endTime?: string | null;
+  recordingUrl?: string | null;
+  finalStatus?: string | null;
+  finalStatusLabel?: string | null;
+  createdAt: string;
+}
+
 export interface CallEvent {
   eventName: string;
   callUuid: string;

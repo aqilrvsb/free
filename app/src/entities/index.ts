@@ -4,6 +4,10 @@ export * from './tenant/routing-config.entity';
 export * from './tenant/billing-config.entity';
 export * from './tenant/agent-group.entity';
 export * from './tenant/agent.entity';
+export * from './autodialer/auto-dialer-campaign.entity';
+export * from './autodialer/auto-dialer-lead.entity';
+export * from './autodialer/auto-dialer-job.entity';
+export * from './autodialer/auto-dialer-cdr.entity';
 export * from './billing/billing-topup.entity';
 export * from './billing/billing-charge.entity';
 

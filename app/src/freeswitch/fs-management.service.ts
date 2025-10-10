@@ -283,6 +283,10 @@ export class FsManagementService {
     }
   }
 
+  async execute(command: string): Promise<string> {
+    return this.runCommand(command);
+  }
+
   async getChannels(): Promise<CommandResult<Record<string, any>>> {
     const raw = await this.runCommand('show channels as json');
     try {

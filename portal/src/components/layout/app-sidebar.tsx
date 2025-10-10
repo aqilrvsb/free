@@ -162,6 +162,14 @@ const NAV_SECTIONS: Array<{
           permission: "manage_agents",
         },
         {
+          title: "Auto Dialer",
+          description: "Chiến dịch gọi tự động",
+          href: "/fs/auto-dialer",
+          icon: Workflow,
+          roles: ["super_admin", "tenant_admin", "operator"],
+          permission: "manage_outbound",
+        },
+        {
           title: "Portal Users",
           description: "Quản lý tài khoản đăng nhập",
           href: "/admin/users",
