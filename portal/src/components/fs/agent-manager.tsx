@@ -16,6 +16,7 @@ import type {
   AgentGroupSummary,
   AgentSummary,
   AgentTalktimeResponse,
+  ExtensionSummary,
   PaginatedResult,
   TenantLookupItem,
 } from "@/lib/types";
@@ -51,7 +52,9 @@ interface GroupFormState {
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_GROUP_FETCH = 200;
+const MAX_EXTENSION_FETCH = 200;
 const NO_GROUP_VALUE = "__none__";
+const NO_EXTENSION_VALUE = "__none__";
 
 function formatDateInput(date: Date): string {
   const year = date.getFullYear();
@@ -156,6 +159,10 @@ export function AgentManager({
 
   const [groupData, setGroupData] = useState<AgentGroupSummary[]>(initialGroups);
   const [groupLoading, setGroupLoading] = useState(false);
+
+  const [extensionOptions, setExtensionOptions] = useState<ExtensionSummary[]>([]);
+  const [extensionLoading, setExtensionLoading] = useState(false);
+  const [extensionError, setExtensionError] = useState<string | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const [talktimeData, setTalktimeData] = useState<AgentTalktimeResponse>(initialTalktime);
@@ -314,6 +321,42 @@ export function AgentManager({
     [apiBase, buildHeaders],
   );
 
+  const fetchExtensions = useCallback(
+    async (tenantId: string | null | undefined) => {
+      if (!apiBase || !tenantId) {
+        setExtensionOptions([]);
+        return;
+      }
+      setExtensionLoading(true);
+      setExtensionError(null);
+      try {
+        const params = new URLSearchParams({
+          page: "1",
+          pageSize: String(MAX_EXTENSION_FETCH),
+          tenantId,
+        });
+        const response = await fetch(`${apiBase}/extensions?${params.toString()}`, {
+          method: "GET",
+          headers: buildHeaders(),
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const payload = (await response.json()) as PaginatedResult<ExtensionSummary> | ExtensionSummary[];
+        const list = Array.isArray(payload) ? payload : payload.items ?? [];
+        setExtensionOptions(list);
+      } catch (error) {
+        console.error("[agents] Failed to fetch extensions", error);
+        setExtensionError("Không thể tải danh sách extension");
+        setExtensionOptions([]);
+      } finally {
+        setExtensionLoading(false);
+      }
+    },
+    [apiBase, buildHeaders],
+  );
+
   const fetchTalktime = useCallback(async () => {
     if (!apiBase) {
       return;
@@ -381,6 +424,13 @@ export function AgentManager({
     });
     setAgentDialogOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (!agentDialogOpen) {
+      return;
+    }
+    void fetchExtensions(agentForm.tenantId?.trim() || null);
+  }, [agentDialogOpen, agentForm.tenantId, fetchExtensions]);
 
   const handleAgentSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1002,7 +1052,13 @@ export function AgentManager({
               <Select
                 value={agentForm.tenantId || ""}
                 onValueChange={(value) => {
-                  setAgentForm((prev) => ({ ...prev, tenantId: value, groupId: "" }));
+                  setAgentForm((prev) => ({
+                    ...prev,
+                    tenantId: value,
+                    groupId: "",
+                    extensionId: "",
+                  }));
+                  void fetchExtensions(value);
                 }}
                 disabled={agentDialogMode === "edit"}
               >
@@ -1021,13 +1077,44 @@ export function AgentManager({
 
             <div className="space-y-2">
               <Label htmlFor="agent-extension">Extension</Label>
-              <Input
-                id="agent-extension"
-                value={agentForm.extensionId}
-                onChange={(event) => setAgentForm((prev) => ({ ...prev, extensionId: event.target.value }))}
-                placeholder="Nhập mã extension (ví dụ 1001)"
-              />
-              <p className="text-xs text-muted-foreground">Để trống nếu chưa muốn gán extension.</p>
+              <Select
+                value={agentForm.extensionId && agentForm.extensionId.trim() ? agentForm.extensionId : NO_EXTENSION_VALUE}
+                onValueChange={(value) =>
+                  setAgentForm((prev) => ({
+                    ...prev,
+                    extensionId: value === NO_EXTENSION_VALUE ? "" : value,
+                  }))
+                }
+                disabled={!agentForm.tenantId || extensionLoading}
+              >
+                <SelectTrigger id="agent-extension">
+                  <SelectValue
+                    placeholder={
+                      agentForm.tenantId
+                        ? extensionLoading
+                          ? "Đang tải extension…"
+                          : extensionOptions.length
+                          ? "Chọn extension"
+                          : "Không có extension"
+                        : "Chọn tenant trước"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_EXTENSION_VALUE}>Không</SelectItem>
+                  {extensionOptions.map((extension) => (
+                    <SelectItem key={extension.id} value={extension.id}>
+                      {extension.id}
+                      {extension.displayName ? ` · ${extension.displayName}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {extensionError ? (
+                <p className="text-xs text-destructive">{extensionError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Để trống nếu chưa muốn gán extension.</p>
+              )}
             </div>
 
             <div className="space-y-2">
