@@ -110,16 +110,40 @@ function getPortalToken(): string | null {
 }
 
 function getPortalUserMeta(): PortalUserSummary | null {
-  const payload = readCookie("portal_user");
-  if (!payload) {
+  const parseUser = (raw: string | null | undefined): PortalUserSummary | null => {
+    if (!raw) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(raw) as PortalUserSummary;
+      if (parsed && typeof parsed === "object") {
+        return parsed;
+      }
+    } catch {
+      /* ignore */
+    }
     return null;
+  };
+
+  const cookiePayload = readCookie("portal_user");
+  const fromCookie = parseUser(cookiePayload);
+  if (fromCookie) {
+    return fromCookie;
   }
-  try {
-    const parsed = JSON.parse(payload) as PortalUserSummary;
-    return parsed;
-  } catch {
-    return null;
+
+  if (typeof window !== "undefined") {
+    try {
+      const stored = window.localStorage?.getItem("portal_user") ?? null;
+      const fromStorage = parseUser(stored);
+      if (fromStorage) {
+        return fromStorage;
+      }
+    } catch (error) {
+      console.warn("[portal-user-manager] Unable to read portal_user from localStorage", error);
+    }
   }
+
+  return null;
 }
 
 async function extractErrorMessage(response: Response): Promise<string> {
