@@ -3,6 +3,8 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
 @Entity({ name: 'cdr_records' })
 @Index(['tenantId', 'startTime'])
 @Index(['callUuid'])
+@Index(['agentId'])
+@Index(['agentGroupId'])
 export class CdrEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -57,6 +59,18 @@ export class CdrEntity {
 
   @Column({ name: 'billing_rate_applied', type: 'decimal', precision: 12, scale: 4, default: '0.0000' })
   billingRateApplied!: string;
+
+  @Column({ name: 'agent_id', type: 'char', length: 36, nullable: true })
+  agentId?: string | null;
+
+  @Column({ name: 'agent_name', type: 'varchar', length: 255, nullable: true })
+  agentName?: string | null;
+
+  @Column({ name: 'agent_group_id', type: 'char', length: 36, nullable: true })
+  agentGroupId?: string | null;
+
+  @Column({ name: 'agent_group_name', type: 'varchar', length: 255, nullable: true })
+  agentGroupName?: string | null;
 
   @Column({ name: 'raw_payload', type: 'longtext' })
   rawPayload!: string;

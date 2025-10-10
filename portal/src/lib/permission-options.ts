@@ -25,6 +25,7 @@ export const PERMISSION_OPTIONS: PermissionOption[] = [
   { key: "manage_recordings", label: "Quản lý ghi âm", description: "Xử lý ghi âm hệ thống", group: "Quản trị" },
   { key: "manage_extensions", label: "Quản lý extension", description: "Thêm/sửa/xoá máy nhánh SIP", group: "Quản trị" },
   { key: "manage_security", label: "Quản lý bảo mật", description: "Quản lý Fail2Ban & firewall", group: "Quản trị" },
+  { key: "manage_agents", label: "Quản lý agent", description: "Gán extension, nhóm và KPI cho agent", group: "Quản trị" },
   { key: "manage_billing", label: "Quản lý billing", description: "Cấu hình billing và xem báo cáo", group: "Quản trị" },
 ];
 
@@ -80,6 +81,7 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
       "manage_billing",
       "manage_ivr",
       "manage_extensions",
+      "manage_agents",
     ],
     isSystem: true,
   },
@@ -105,6 +107,7 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
       "manage_portal_users",
       "manage_roles",
       "manage_security",
+      "manage_agents",
     ],
     isSystem: true,
   },

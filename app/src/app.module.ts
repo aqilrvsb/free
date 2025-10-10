@@ -31,6 +31,8 @@ import {
   PortalUserEntity,
   PortalRoleEntity,
   PortalUserTenantEntity,
+  AgentGroupEntity,
+  AgentEntity,
 } from './entities';
 import { FsEventsService } from './freeswitch/fs-events.service';
 import { FsRegistrationsGateway } from './freeswitch/fs-registrations.gateway';
@@ -68,6 +70,8 @@ import { SecurityController } from './security/security.controller';
 import { SecurityService } from './security/security.service';
 import { BillingController } from './billing/billing.controller';
 import { BillingService } from './billing/billing.service';
+import { AgentsController } from './agents/agents.controller';
+import { AgentsService } from './agents/agents.service';
 
 @Module({
   imports: [
@@ -101,6 +105,8 @@ import { BillingService } from './billing/billing.service';
           PortalUserEntity,
           PortalRoleEntity,
           PortalUserTenantEntity,
+          AgentGroupEntity,
+          AgentEntity,
         ],
         synchronize: String(config.get('DB_SYNC', 'true')).toLowerCase() === 'true',
         logging: String(config.get('DB_LOGGING', 'false')).toLowerCase() === 'true',
@@ -130,6 +136,8 @@ import { BillingService } from './billing/billing.service';
       PortalUserEntity,
       PortalRoleEntity,
       PortalUserTenantEntity,
+      AgentGroupEntity,
+      AgentEntity,
     ]),
     PassportModule.register({ defaultStrategy: 'jwt', session: false }),
     JwtModule.registerAsync({
@@ -164,6 +172,7 @@ import { BillingService } from './billing/billing.service';
     AuthController,
     SecurityController,
     BillingController,
+    AgentsController,
   ],
   providers: [
     FsService,
@@ -190,6 +199,7 @@ import { BillingService } from './billing/billing.service';
     RolesGuard,
     SecurityService,
     BillingService,
+    AgentsService,
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpLoggingInterceptor,

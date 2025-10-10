@@ -1,5 +1,12 @@
 import { apiFetch } from "@/lib/api";
-import type { PaginatedCdrResponse, PortalUserSummary, TenantLookupItem } from "@/lib/types";
+import type {
+  AgentGroupSummary,
+  AgentSummary,
+  PaginatedCdrResponse,
+  PaginatedResult,
+  PortalUserSummary,
+  TenantLookupItem,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +136,9 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
   const fromNumber = getSearchParamValue(resolvedSearchParams.fromNumber) ?? "";
   const toNumber = getSearchParamValue(resolvedSearchParams.toNumber) ?? "";
   const status = getSearchParamValue(resolvedSearchParams.status) ?? "";
+  const agentIdFilter = getSearchParamValue(resolvedSearchParams.agentId) ?? "";
+  const agentGroupFilter = getSearchParamValue(resolvedSearchParams.agentGroupId) ?? "";
+  const agentExtensionFilter = getSearchParamValue(resolvedSearchParams.agentExtension) ?? "";
   const fromTime = getSearchParamValue(resolvedSearchParams.from) ?? "";
   const toTime = getSearchParamValue(resolvedSearchParams.to) ?? "";
   const tenantIdFilter = getSearchParamValue(resolvedSearchParams.tenantId) ?? "";
@@ -148,6 +158,15 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
   }
   if (status) {
     query.set("status", status);
+  }
+  if (agentIdFilter) {
+    query.set("agentId", agentIdFilter);
+  }
+  if (agentGroupFilter) {
+    query.set("agentGroupId", agentGroupFilter);
+  }
+  if (agentExtensionFilter) {
+    query.set("agentExtension", agentExtensionFilter);
   }
   if (fromTime) {
     query.set("from", fromTime);
@@ -182,7 +201,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
 
   const isSuperAdmin = currentUser?.role === "super_admin";
 
-  const [cdr, timezone, tenantOptions] = await Promise.all([
+  const [cdr, timezone, tenantOptions, agentOptionsPayload, agentGroupPayload] = await Promise.all([
     apiFetch<PaginatedCdrResponse>(`/cdr?${query.toString()}`, {
       cache: "no-store",
       fallbackValue: fallbackCdr,
@@ -198,7 +217,22 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
           onError: (error) => console.warn("[cdr] Không thể tải tenant options", error),
         })
       : Promise.resolve<TenantLookupItem[]>([]),
+    apiFetch<PaginatedResult<AgentSummary>>(`/agents?page=1&pageSize=200`, {
+      cache: "no-store",
+      fallbackValue: { items: [], total: 0, page: 1, pageSize: 200 },
+      suppressError: true,
+      onError: (error) => console.warn("[cdr] Không thể tải danh sách agent", error),
+    }),
+    apiFetch<PaginatedResult<AgentGroupSummary>>(`/agent-groups?page=1&pageSize=200`, {
+      cache: "no-store",
+      fallbackValue: { items: [], total: 0, page: 1, pageSize: 200 },
+      suppressError: true,
+      onError: (error) => console.warn("[cdr] Không thể tải danh sách nhóm agent", error),
+    }),
   ]);
+
+  const agentOptions = agentOptionsPayload?.items ?? [];
+  const agentGroupOptions = agentGroupPayload?.items ?? [];
 
   const recordingsBaseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || "http://localhost:3000";
@@ -220,7 +254,12 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
           <CardTitle>Bộ lọc</CardTitle>
         </CardHeader>
         <CardContent>
-          <CdrFilter showTenantFilter={isSuperAdmin} tenantOptions={tenantOptions} />
+          <CdrFilter
+            showTenantFilter={isSuperAdmin}
+            tenantOptions={tenantOptions}
+            agentOptions={agentOptions}
+            agentGroupOptions={agentGroupOptions}
+          />
         </CardContent>
       </Card>
 
@@ -238,6 +277,8 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   {/* <TableHead>Leg</TableHead> */}
                   <TableHead>Chiều</TableHead>
                   <TableHead>Extension</TableHead>
+                  <TableHead>Agent</TableHead>
+                  <TableHead>Nhóm</TableHead>
                   <TableHead>Số bị gọi</TableHead>
                   <TableHead>Thời lượng</TableHead>
                   <TableHead>Chi phí</TableHead>
@@ -269,6 +310,19 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                       </TableCell> */}
                       <TableCell>{formatDirectionLabel(item.direction)}</TableCell>
                       <TableCell>{item.fromNumber ?? "-"}</TableCell>
+                      <TableCell>
+                        {item.agentName ? (
+                          <div>
+                            <div className="font-medium">{item.agentName}</div>
+                            {item.agentId ? (
+                              <div className="text-xs text-muted-foreground">ID: {item.agentId}</div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{item.agentGroupName ?? <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell>{item.toNumber ?? "-"}</TableCell>
                       <TableCell>
                         {item.durationSeconds}s
@@ -335,7 +389,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                 })}
                 {cdrItems.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="text-center text-muted-foreground">
                       Không có dữ liệu.
                     </TableCell>
                   </TableRow>

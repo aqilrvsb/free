@@ -16,6 +16,15 @@ export class ListCdrQueryDto {
   @ApiPropertyOptional({ description: 'UUID cuộc gọi' })
   callUuid?: string;
 
+  @ApiPropertyOptional({ description: 'Agent ID để lọc' })
+  agentId?: string;
+
+  @ApiPropertyOptional({ description: 'Agent group ID để lọc' })
+  agentGroupId?: string;
+
+  @ApiPropertyOptional({ description: 'Extension của agent' })
+  agentExtension?: string;
+
   @ApiPropertyOptional({ description: 'Số gọi đi (extension/máy gọi)' })
   fromNumber?: string;
 

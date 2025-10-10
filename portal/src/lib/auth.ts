@@ -46,6 +46,7 @@ export const ADMIN_PATH_PREFIXES = [
   "/fs/ivr",
   "/fs/settings",
   "/fs/system-recordings",
+  "/fs/agents",
   "/security",
 ];
 

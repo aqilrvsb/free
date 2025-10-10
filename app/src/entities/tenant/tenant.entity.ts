@@ -3,6 +3,8 @@ import { PortalUserTenantEntity } from '../portal/portal-user-tenant.entity';
 import { RoutingConfigEntity } from './routing-config.entity';
 import { UserEntity } from './user.entity';
 import { BillingConfigEntity } from './billing-config.entity';
+import { AgentGroupEntity } from './agent-group.entity';
+import { AgentEntity } from './agent.entity';
 
 @Entity({ name: 'tenants' })
 @Unique(['domain'])
@@ -36,4 +38,10 @@ export class TenantEntity {
 
   @OneToMany(() => PortalUserTenantEntity, (link) => link.tenant)
   portalUserMemberships?: PortalUserTenantEntity[];
+
+  @OneToMany(() => AgentGroupEntity, (group) => group.tenant)
+  agentGroups?: AgentGroupEntity[];
+
+  @OneToMany(() => AgentEntity, (agent) => agent.tenant)
+  agents?: AgentEntity[];
 }

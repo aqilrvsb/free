@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
-import { Repository } from 'typeorm';
-import { CdrEntity, OutboundRuleEntity, BillingConfigEntity, TenantEntity } from '../entities';
+import { In, Repository } from 'typeorm';
+import { CdrEntity, OutboundRuleEntity, BillingConfigEntity, TenantEntity, AgentEntity } from '../entities';
 import { RecordingsService } from './recordings.service';
 import { BillingService } from '../billing/billing.service';
 
@@ -22,6 +22,9 @@ export interface CdrQuery {
   fromNumber?: string;
   toNumber?: string;
   status?: string;
+  agentId?: string;
+  agentGroupId?: string;
+  agentExtension?: string;
   page: number;
   pageSize: number;
 }
@@ -67,6 +70,7 @@ export class CdrService {
     @InjectRepository(CdrEntity) private readonly cdrRepo: Repository<CdrEntity>,
     @InjectRepository(OutboundRuleEntity) private readonly outboundRepo: Repository<OutboundRuleEntity>,
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
+    @InjectRepository(AgentEntity) private readonly agentRepo: Repository<AgentEntity>,
     private readonly configService: ConfigService,
     private readonly recordingsService: RecordingsService,
     private readonly billingService: BillingService,
@@ -115,6 +119,18 @@ export class CdrService {
     }
     if (query.callUuid) {
       qb.andWhere('cdr.callUuid = :callUuid', { callUuid: query.callUuid });
+    }
+    if (query.agentId) {
+      qb.andWhere('cdr.agentId = :agentId', { agentId: query.agentId });
+    }
+    if (query.agentGroupId) {
+      qb.andWhere('cdr.agentGroupId = :agentGroupId', { agentGroupId: query.agentGroupId });
+    }
+    const agentExtension = query.agentExtension?.trim();
+    if (agentExtension) {
+      qb.andWhere('(cdr.fromNumber = :agentExtension OR cdr.toNumber = :agentExtension)', {
+        agentExtension,
+      });
     }
     const fromNumber = query.fromNumber?.trim();
     if (fromNumber) {
@@ -372,6 +388,14 @@ export class CdrService {
       toNumber,
     });
 
+    const agentContext = await this.resolveAgentContext({
+      tenantId: resolvedTenantId,
+      direction,
+      fromNumber,
+      toNumber,
+      variables,
+    });
+
     return {
       callUuid,
       leg,
@@ -390,6 +414,10 @@ export class CdrService {
       billingCurrency: billing.currency,
       billingCost: billing.cost,
       billingRateApplied: billing.rateApplied,
+      agentId: agentContext?.agentId ?? null,
+      agentName: agentContext?.agentName ?? null,
+      agentGroupId: agentContext?.groupId ?? null,
+      agentGroupName: agentContext?.groupName ?? null,
       rawPayload,
     };
   }
@@ -798,6 +826,170 @@ export class CdrService {
       }
     }
     return null;
+  }
+
+  private async resolveAgentContext(input: {
+    tenantId?: string | null;
+    direction?: string | null;
+    fromNumber?: string | null;
+    toNumber?: string | null;
+    variables: Record<string, string>;
+  }): Promise<{
+    agentId: string;
+    agentName: string | null;
+    groupId: string | null;
+    groupName: string | null;
+  } | null> {
+    const tenantId = input.tenantId?.trim();
+    if (!tenantId) {
+      return null;
+    }
+
+    const agentIdCandidates = this.collectAgentIdCandidates(input.variables);
+    if (agentIdCandidates.length > 0) {
+      const direct = await this.agentRepo.findOne({
+        where: {
+          tenantId,
+          id: In(agentIdCandidates),
+        },
+        relations: ['group'],
+      });
+      if (direct) {
+        return {
+          agentId: direct.id,
+          agentName: direct.displayName ?? null,
+          groupId: direct.group?.id ?? direct.groupId ?? null,
+          groupName: direct.group?.name ?? null,
+        };
+      }
+    }
+
+    const extensionCandidates = this.collectAgentExtensionCandidates({
+      direction: input.direction,
+      fromNumber: input.fromNumber,
+      toNumber: input.toNumber,
+      variables: input.variables,
+    });
+    if (extensionCandidates.length === 0) {
+      return null;
+    }
+
+    const agent = await this.agentRepo.findOne({
+      where: {
+        tenantId,
+        extensionId: In(extensionCandidates),
+      },
+      relations: ['group'],
+    });
+    if (!agent) {
+      return null;
+    }
+
+    return {
+      agentId: agent.id,
+      agentName: agent.displayName ?? null,
+      groupId: agent.group?.id ?? agent.groupId ?? null,
+      groupName: agent.group?.name ?? null,
+    };
+  }
+
+  private collectAgentIdCandidates(variables: Record<string, string>): string[] {
+    const keys = [
+      'agent_id',
+      'agent_uuid',
+      'agent_uuid_str',
+      'agentId',
+      'agentUuid',
+    ];
+    const seen = new Set<string>();
+    for (const key of keys) {
+      const value = variables[key];
+      if (!value) {
+        continue;
+      }
+      const trimmed = value.trim();
+      if (trimmed) {
+        seen.add(trimmed);
+      }
+    }
+    return Array.from(seen.values());
+  }
+
+  private collectAgentExtensionCandidates(input: {
+    direction?: string | null;
+    fromNumber?: string | null;
+    toNumber?: string | null;
+    variables: Record<string, string>;
+  }): string[] {
+    const seen = new Set<string>();
+    const pushCandidate = (raw?: string | null) => {
+      if (!raw) {
+        return;
+      }
+      const value = String(raw).trim();
+      if (!value) {
+        return;
+      }
+      seen.add(value);
+      const extracted = this.extractUser(value);
+      if (extracted) {
+        seen.add(extracted);
+      }
+      if (value.includes('@')) {
+        const [userPart] = value.split('@');
+        if (userPart) {
+          seen.add(userPart.trim());
+        }
+      }
+    };
+
+    const { variables } = input;
+    [
+      variables.agent_extension,
+      variables.agent,
+      variables.agent_login,
+      variables.agent_name,
+      variables.extension,
+      variables.internal_caller_extension,
+      variables.effective_caller_id_number,
+      variables.originator_caller_id_number,
+      variables.origination_caller_id_number,
+      variables.originatee_caller_id_number,
+      variables.user_name,
+      variables.username,
+      variables.sip_auth_username,
+      variables.sip_auth_user,
+      variables.dialed_user,
+      variables.destination_number,
+      variables.called_extension,
+    ].forEach((candidate) => pushCandidate(candidate));
+
+    const direction = input.direction?.toLowerCase();
+    if (direction === 'inbound') {
+      pushCandidate(input.toNumber ?? variables.called_extension);
+    } else if (direction === 'outbound') {
+      pushCandidate(input.fromNumber);
+    } else {
+      pushCandidate(input.fromNumber);
+      pushCandidate(input.toNumber);
+    }
+
+    const filtered = new Set<string>();
+    for (const value of seen.values()) {
+      const candidates = [
+        value,
+        this.extractUser(value),
+        value.includes('@') ? value.split('@')[0] : undefined,
+        value.replace(/\D+/g, ''),
+      ].filter((item): item is string => Boolean(item && item.trim()));
+      for (const candidate of candidates) {
+        const normalized = candidate.trim();
+        if (normalized && this.isLikelyExtension(normalized)) {
+          filtered.add(normalized);
+        }
+      }
+    }
+    return Array.from(filtered.values());
   }
 
   private async resolveTenantFilterKeys(tenantId: string): Promise<string[]> {

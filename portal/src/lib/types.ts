@@ -23,6 +23,10 @@ export interface CdrRecord {
   billingRateApplied?: string;
   billingCid?: string | null;
   billingRouteId?: string | null;
+  agentId?: string | null;
+  agentName?: string | null;
+  agentGroupId?: string | null;
+  agentGroupName?: string | null;
 }
 
 export interface PaginatedCdrResponse {
@@ -207,6 +211,58 @@ export interface TenantLookupItem {
   domain: string;
   extensionLimit?: number | null;
   extensionCount?: number;
+}
+
+export interface AgentGroupSummary {
+  id: string;
+  tenantId: string;
+  tenantName?: string | null;
+  name: string;
+  description?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AgentSummary {
+  id: string;
+  tenantId: string;
+  tenantName?: string | null;
+  displayName: string;
+  extensionId?: string | null;
+  extensionDisplayName?: string | null;
+  groupId?: string | null;
+  groupName?: string | null;
+  kpiTalktimeEnabled: boolean;
+  kpiTalktimeTargetSeconds?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AgentTalktimeStat {
+  agentId: string;
+  displayName: string;
+  tenantId: string | null;
+  tenantName?: string | null;
+  extensionId?: string | null;
+  extensionDisplayName?: string | null;
+  groupId?: string | null;
+  groupName?: string | null;
+  talktimeSeconds: number;
+  talktimeMinutes: number;
+  kpiTalktimeEnabled: boolean;
+  kpiTalktimeTargetSeconds?: number | null;
+  kpiAchieved?: boolean | null;
+  kpiProgressPercent?: number | null;
+  kpiRemainingSeconds?: number | null;
+}
+
+export interface AgentTalktimeResponse {
+  items: AgentTalktimeStat[];
+  total: number;
+  summary: {
+    totalTalktimeSeconds: number;
+    totalTalktimeMinutes: number;
+  };
 }
 
 export interface CallEvent {

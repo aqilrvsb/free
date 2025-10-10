@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { TenantLookupItem } from "@/lib/types";
+import type { AgentGroupSummary, AgentSummary, TenantLookupItem } from "@/lib/types";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -50,6 +50,8 @@ interface CdrFilterProps {
   className?: string;
   showTenantFilter?: boolean;
   tenantOptions?: TenantLookupItem[];
+  agentOptions?: AgentSummary[];
+  agentGroupOptions?: AgentGroupSummary[];
 }
 
 function toSelectValue(value: string) {
@@ -83,7 +85,13 @@ function applyTime(date: Date, time: string) {
   return patched;
 }
 
-export function CdrFilter({ className, showTenantFilter = false, tenantOptions = [] }: CdrFilterProps) {
+export function CdrFilter({
+  className,
+  showTenantFilter = false,
+  tenantOptions = [],
+  agentOptions = [],
+  agentGroupOptions = [],
+}: CdrFilterProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -107,6 +115,9 @@ export function CdrFilter({ className, showTenantFilter = false, tenantOptions =
   const [toDate, setToDate] = useState<Date | undefined>(initialToDate);
   const [toTime, setToTime] = useState(initialToTime);
   const [tenantId, setTenantId] = useState(searchParams.get("tenantId") ?? "");
+  const [agentId, setAgentId] = useState(searchParams.get("agentId") ?? "");
+  const [agentGroupId, setAgentGroupId] = useState(searchParams.get("agentGroupId") ?? "");
+  const [agentExtension, setAgentExtension] = useState(searchParams.get("agentExtension") ?? "");
 
   const fromTimeOptions = useMemo(() => buildTimeOptions(fromTime), [fromTime]);
   const toTimeOptions = useMemo(() => buildTimeOptions(toTime), [toTime]);
@@ -144,6 +155,24 @@ export function CdrFilter({ className, showTenantFilter = false, tenantOptions =
       params.set("status", status);
     } else {
       params.delete("status");
+    }
+
+    if (agentId) {
+      params.set("agentId", agentId);
+    } else {
+      params.delete("agentId");
+    }
+
+    if (agentGroupId) {
+      params.set("agentGroupId", agentGroupId);
+    } else {
+      params.delete("agentGroupId");
+    }
+
+    if (agentExtension.trim()) {
+      params.set("agentExtension", agentExtension.trim());
+    } else {
+      params.delete("agentExtension");
     }
 
     if (fromDate) {
@@ -184,6 +213,9 @@ export function CdrFilter({ className, showTenantFilter = false, tenantOptions =
     setToDate(undefined);
     setToTime(DEFAULT_TO_TIME);
     setTenantId("");
+    setAgentId("");
+    setAgentGroupId("");
+    setAgentExtension("");
 
     const params = new URLSearchParams(initialParams.toString());
     params.delete("callUuid");
@@ -194,6 +226,9 @@ export function CdrFilter({ className, showTenantFilter = false, tenantOptions =
     params.delete("from");
     params.delete("to");
     params.delete("tenantId");
+    params.delete("agentId");
+    params.delete("agentGroupId");
+    params.delete("agentExtension");
     params.set("page", "1");
 
     startTransition(() => {
@@ -230,12 +265,57 @@ export function CdrFilter({ className, showTenantFilter = false, tenantOptions =
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="fromNumber">Extension</Label>
+        <Label htmlFor="fromNumber">Số máy gọi</Label>
         <Input
           id="fromNumber"
           placeholder="Máy gọi (ví dụ 1001)"
           value={fromNumber}
           onChange={(event) => setFromNumber(event.target.value)}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="cdr-agent">Agent</Label>
+        <Select value={toSelectValue(agentId)} onValueChange={(value) => setAgentId(fromSelectValue(value))}>
+          <SelectTrigger id="cdr-agent">
+            <SelectValue placeholder="Tất cả agent" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Tất cả</SelectItem>
+            {agentOptions.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.displayName}
+                {agent.extensionId ? ` · ${agent.extensionId}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="cdr-agent-group">Nhóm agent</Label>
+        <Select value={toSelectValue(agentGroupId)} onValueChange={(value) => setAgentGroupId(fromSelectValue(value))}>
+          <SelectTrigger id="cdr-agent-group">
+            <SelectValue placeholder="Tất cả nhóm" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Tất cả</SelectItem>
+            {agentGroupOptions.map((group) => (
+              <SelectItem key={group.id} value={group.id}>
+                {group.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="agentExtension">Extension của agent</Label>
+        <Input
+          id="agentExtension"
+          placeholder="Ví dụ 1001"
+          value={agentExtension}
+          onChange={(event) => setAgentExtension(event.target.value)}
         />
       </div>
 

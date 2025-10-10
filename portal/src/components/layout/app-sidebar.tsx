@@ -59,7 +59,8 @@ type PermissionKey =
   | "manage_portal_users"
   | "manage_roles"
   | "manage_security"
-  | "manage_billing";
+  | "manage_billing"
+  | "manage_agents";
 
 interface NavItem {
   title: string
@@ -151,6 +152,14 @@ const NAV_SECTIONS: Array<{
           href: "/fs/extensions",
           icon: PhoneCall,
           roles: ["super_admin", "tenant_admin"],
+        },
+        {
+          title: "Agents",
+          description: "Gán extension & KPI",
+          href: "/fs/agents",
+          icon: Workflow,
+          roles: ["super_admin", "tenant_admin"],
+          permission: "manage_agents",
         },
         {
           title: "Portal Users",
