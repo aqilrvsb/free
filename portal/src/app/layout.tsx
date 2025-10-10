@@ -73,8 +73,9 @@ export default async function RootLayout({
               permissions={permissions}
             />
             <SidebarInset className="relative">
-              <div className="relative flex min-h-screen flex-col">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_50%_-20%,rgba(234,88,12,0.18),transparent),radial-gradient(120%_120%_at_25%_20%,rgba(249,115,22,0.12),transparent)]" />
+              <div className="relative flex min-h-screen flex-col bg-background">
+                <div className="pointer-events-none absolute inset-0 mix-blend-soft-light bg-[radial-gradient(120%_140%_at_0%_0%,rgba(59,130,246,0.16),transparent),radial-gradient(120%_140%_at_100%_-10%,rgba(249,115,22,0.14),transparent)]" />
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to bottom,rgba(15,23,42,0.08),transparent 40%,rgba(15,23,42,0.12))]" />
                 <header className="sticky top-0 z-40 border-b border-transparent bg-background/70 backdrop-blur-xl">
                   <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between gap-4 px-6">
                     <div className="flex items-center gap-4">
