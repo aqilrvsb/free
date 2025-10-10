@@ -2,6 +2,8 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
+import { cn } from "@/lib/utils"
 import {
   Sidebar,
   SidebarContent,
@@ -19,6 +21,7 @@ import {
 } from "@/components/ui/sidebar"
 import type { LucideIcon } from "lucide-react"
 import {
+  ChevronDown,
   Activity,
   FileAudio,
   GitBranch,
@@ -283,6 +286,7 @@ export function AppSidebar({ userRole, isAuthenticated, permissions }: AppSideba
     label: section.label,
     items: filterNavItems(section.items, userRole, isAuthenticated, permissions),
   })).filter((section) => section.items.length > 0)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
 
   return (
     <Sidebar collapsible="icon" className="backdrop-blur-xl">
@@ -313,52 +317,76 @@ export function AppSidebar({ userRole, isAuthenticated, permissions }: AppSideba
           className="hidden h-9 rounded-xl border border-border/70 bg-white/70 text-sm placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/60 md:block"
         />
       </SidebarHeader>
-      <SidebarContent className="space-y-6 px-2 pb-6">
-        {sections.map((section, index) => (
-          <SidebarGroup key={section.label}>
-            <SidebarGroupLabel className="px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/65">
-              {section.label}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {section.items.map((item) => {
-                  const Icon = item.icon
-                  const active = isActivePath(pathname, item)
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={active}
-                        className="group relative overflow-hidden rounded-xl border border-transparent bg-transparent ring-0 transition-all duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 hover:pl-3 data-[active=true]:border-primary/60 data-[active=true]:bg-primary/15 data-[active=true]:pl-3 py-5"
-                        tooltip={item.title}
-                      >
-                        <Link
-                          href={item.href}
-                          className="flex w-full items-center gap-3"
+      <SidebarContent className="space-y-4 px-2 pb-6">
+        {sections.map((section, index) => {
+          const defaultExpanded = index === 0
+          const resolved = expandedSections[section.label]
+          const isExpanded = open ? (resolved ?? defaultExpanded) : false
+          const showContent = !open || isExpanded
+          return (
+            <SidebarGroup key={section.label} data-open={showContent}>
+              <SidebarGroupLabel asChild>
+                <button
+                  type="button"
+                  className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/70 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  onClick={() =>
+                    setExpandedSections((prev) => {
+                      const current = prev[section.label]
+                      const next = current ?? defaultExpanded
+                      return { ...prev, [section.label]: !next }
+                    })
+                  }
+                >
+                  <span className="truncate">{section.label}</span>
+                  <ChevronDown
+                    className={cn(
+                      "size-4 shrink-0 transition-transform duration-200",
+                      showContent && open ? "rotate-0" : "-rotate-90",
+                    )}
+                  />
+                </button>
+              </SidebarGroupLabel>
+              <SidebarGroupContent
+                className={cn(
+                  "space-y-1 transition-all duration-200",
+                  open && !showContent && "pointer-events-none max-h-0 overflow-hidden opacity-0",
+                )}
+              >
+                <SidebarMenu>
+                  {section.items.map((item) => {
+                    const Icon = item.icon
+                    const active = isActivePath(pathname, item)
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={active}
+                          className="group relative overflow-hidden rounded-xl border border-transparent bg-transparent ring-0 transition-all duration-200 ease-out hover:border-primary/40 hover:bg-primary/10 hover:pl-3 data-[active=true]:border-primary/60 data-[active=true]:bg-primary/15 data-[active=true]:pl-3 py-5"
+                          tooltip={item.title}
                         >
-                          <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary group-data-[active=true]/sidebar-menu-button:bg-primary group-data-[active=true]/sidebar-menu-button:text-primary-foreground">
-                            <Icon className="size-4" />
-                          </span>
-                          <div className="flex min-w-0 flex-col text-left leading-tight">
-                            <span className="truncate text-sm font-medium">
-                              {item.title}
+                          <Link href={item.href} className="flex w-full items-center gap-3">
+                            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary group-data-[active=true]/sidebar-menu-button:bg-primary group-data-[active=true]/sidebar-menu-button:text-primary-foreground">
+                              <Icon className="size-4" />
                             </span>
-                            {item.description ? (
-                              <span className="text-xs text-muted-foreground group-data-[collapsible=icon]/sidebar-menu-button:hidden truncate">
-                                {item.description}
-                              </span>
-                            ) : null}
-                          </div>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-            {index < NAV_SECTIONS.length - 1 ? <SidebarSeparator /> : null}
-          </SidebarGroup>
-        ))}
+                            <div className="flex min-w-0 flex-col text-left leading-tight">
+                              <span className="truncate text-sm font-medium">{item.title}</span>
+                              {item.description ? (
+                                <span className="truncate text-xs text-muted-foreground group-data-[collapsible=icon]/sidebar-menu-button:hidden">
+                                  {item.description}
+                                </span>
+                              ) : null}
+                            </div>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+              {index < sections.length - 1 ? <SidebarSeparator /> : null}
+            </SidebarGroup>
+          )
+        })}
       </SidebarContent>
       {/* <SidebarFooter className="px-3 pb-6 pt-4">
         <div className="glass-surface relative overflow-hidden rounded-2xl px-4 py-4 text-xs text-muted-foreground">

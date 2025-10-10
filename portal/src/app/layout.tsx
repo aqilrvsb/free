@@ -11,6 +11,9 @@ import { parsePortalUserCookie } from "@/lib/auth";
 import { resolvePermissions } from "@/lib/permissions";
 import { apiFetch } from "@/lib/api";
 import type { PortalUserSummary } from "@/lib/types";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -48,6 +51,13 @@ export default async function RootLayout({
 
   const permissions = resolvePermissions(currentUser);
   const isAuthenticated = Boolean(token && currentUser && currentUser.isActive !== false);
+  const sanitizedTimezone = timezone || "UTC";
+  const currentTimeLabel = new Intl.DateTimeFormat("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: sanitizedTimezone,
+  }).format(new Date());
 
   if (!isAuthenticated) {
     return (
@@ -101,8 +111,57 @@ export default async function RootLayout({
                     </div>
                   </div>
                 </header>
-                <main className="relative mx-auto w-full max-w-7xl flex-1 space-y-10 px-6 py-12">
-                  {children}
+                <main className="relative mx-auto w-full max-w-7xl flex-1 px-6 py-12">
+                  <div className="space-y-10">
+                    <AspectRatio
+                      ratio={16 / 9}
+                      className="hidden w-full overflow-hidden rounded-[32px] border border-border/60 bg-gradient-to-br from-primary/20 via-background to-primary/5 shadow-lg md:block"
+                    >
+                      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.18),transparent),radial-gradient(circle_at_70%_30%,rgba(249,115,22,0.18),transparent)]" />
+                      <div className="relative flex h-full flex-col justify-between gap-6 p-8 text-foreground">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="border-primary/40 bg-background/70 text-primary">
+                            {sanitizedTimezone}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">Múi giờ hệ thống đồng bộ</span>
+                        </div>
+                        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                          <div className="space-y-4">
+                            <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground/80">Bảng điều khiển PBX</p>
+                            <h2 className="text-3xl font-semibold leading-tight md:text-4xl">
+                              Xin chào, {currentUser?.displayName ?? currentUser?.email ?? "quản trị viên"}.
+                            </h2>
+                            <p className="max-w-2xl text-sm text-muted-foreground">
+                              Theo dõi hoạt động tổng đài, quản lý tenant và đảm bảo trải nghiệm khách hàng đồng nhất trên mọi kênh
+                              liên lạc.
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-4 rounded-3xl border border-border/60 bg-background/70 px-6 py-5 text-sm shadow-sm">
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-muted-foreground">Quyền truy cập</span>
+                              <span className="font-semibold text-foreground">
+                                {currentUser?.roleName ?? currentUser?.role ?? "Không xác định"}
+                              </span>
+                            </div>
+                            <Separator />
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-muted-foreground">Thời gian hiện tại</span>
+                              <span className="font-semibold text-foreground">{currentTimeLabel}</span>
+                            </div>
+                            <Separator />
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-muted-foreground">Tình trạng</span>
+                              <span className="flex items-center gap-2 font-medium text-emerald-500">
+                                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.75)]" />
+                                Hoạt động
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </AspectRatio>
+                    <div className="space-y-10">{children}</div>
+                  </div>
                 </main>
                 <footer className="relative border-t border-border/60 bg-card/70">
                   <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-6 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">

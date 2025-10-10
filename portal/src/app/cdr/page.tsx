@@ -254,7 +254,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   const endMeta = buildTimeDisplay(item.endTime, timezoneValue, now);
                   return (
                     <TableRow key={item.id}>
-                      <TableCell className="truncate max-w-[150px]">
+                      <TableCell className="truncate max-w-[80px] cursor-pointer">
                         <Link href={`/cdr/${item.callUuid}`} className="text-primary hover:underline">
                           <Tooltip>
                             <TooltipTrigger>
