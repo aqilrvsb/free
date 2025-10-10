@@ -12,15 +12,8 @@ import { BillingTenantPanel } from "@/components/fs/billing-tenant-panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { BadgeDollarSign, PhoneCall, Timer, TrendingUp } from "lucide-react";
-import {
-  ChartContainer,
-  type ChartConfig,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-} from "@/components/ui/chart";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import type { ChartConfig } from "@/components/ui/chart";
+import { BillingByDayChart, type BillingChartPoint } from "@/components/fs/billing-by-day-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -55,25 +48,6 @@ function formatCurrency(value: number, currency: string) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value);
-}
-
-function formatCurrencyCompact(value: number, currency: string) {
-  try {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency,
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(value);
-  } catch {
-    if (Math.abs(value) >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(1)}M ${currency}`;
-    }
-    if (Math.abs(value) >= 1_000) {
-      return `${(value / 1_000).toFixed(1)}K ${currency}`;
-    }
-    return `${value.toFixed(1)} ${currency}`;
-  }
 }
 
 function formatDayLabel(day: string) {
@@ -159,7 +133,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
   const chargesTotal = summary.chargesTotal ?? charges.reduce((acc, item) => acc + item.amount, 0);
   const overallCost = summary.totals.totalCost + chargesTotal;
   const byDay = summary.byDay.slice(-14);
-  const chartData = byDay.map((item) => ({
+  const chartData: BillingChartPoint[] = byDay.map((item) => ({
     day: formatDayLabel(item.day),
     rawDay: item.day,
     cost: Number(item.totalCost.toFixed(2)),
@@ -340,69 +314,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
           </Badge>
         </CardHeader>
         <CardContent>
-          {byDay.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Không có dữ liệu trong giai đoạn đã chọn.</p>
-          ) : (
-            <ChartContainer
-              config={chartConfig}
-              className="rounded-[24px] border border-dashed border-primary/30 bg-gradient-to-t from-primary/5 via-background to-background p-4"
-            >
-              <BarChart data={chartData} barSize={14}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="day"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis
-                  yAxisId="left"
-                  orientation="left"
-                  tickLine={false}
-                  axisLine={false}
-                  width={80}
-                  tickFormatter={(value) => formatCurrencyCompact(value as number, currency)}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  tickLine={false}
-                  axisLine={false}
-                  width={50}
-                  tickFormatter={(value) => formatNumber(value as number)}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <ChartTooltip
-                  cursor={{ fill: "hsl(var(--muted) / 0.35)" }}
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => {
-                        const numeric = typeof value === "number" ? value : Number(value ?? 0);
-                        const label = chartConfig[name as keyof typeof chartConfig]?.label ?? name;
-                        const formattedValue =
-                          name === "cost" ? formatCurrency(numeric, currency) : formatNumber(numeric);
-                        return (
-                          <div className="flex w-full items-center justify-between gap-2">
-                            <span className="text-muted-foreground">{label}</span>
-                            <span className="font-mono font-semibold tabular-nums">{formattedValue}</span>
-                          </div>
-                        );
-                      }}
-                      labelFormatter={(_value, payload) => {
-                        const rawDay = payload?.[0]?.payload?.rawDay as string | undefined;
-                        return rawDay ? formatDayLabel(rawDay) : payload?.[0]?.payload?.day;
-                      }}
-                    />
-                  }
-                />
-                <ChartLegend content={<ChartLegendContent />} verticalAlign="top" align="right" />
-                <Bar yAxisId="left" dataKey="cost" radius={[6, 6, 0, 0]} fill="var(--color-cost)" />
-                <Bar yAxisId="right" dataKey="calls" radius={[6, 6, 0, 0]} fill="var(--color-calls)" />
-              </BarChart>
-            </ChartContainer>
-          )}
+          <BillingByDayChart data={chartData} config={chartConfig} currency={currency} />
         </CardContent>
       </Card>
     </div>
