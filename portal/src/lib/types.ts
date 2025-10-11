@@ -460,8 +460,10 @@ export interface SystemRecordingSummary {
   originalFilename: string;
   mimetype: string;
   sizeBytes: number;
-  playbackUrl: string;
+  playbackUrl?: string | null;
   downloadUrl: string;
+  storageMode: "local" | "cdn";
+  cdnUrl?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

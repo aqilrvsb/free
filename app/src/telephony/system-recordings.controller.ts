@@ -56,14 +56,27 @@ export class SystemRecordingsController {
   @Get(':id/download')
   @ApiParam({ name: 'id', description: 'ID ghi âm hệ thống' })
   async download(@Param('id') id: string, @Res() res: Response) {
-    const { recording, streamPath } = await this.recordingsService.getStream(id);
+    const result = await this.recordingsService.getStream(id);
+    const { recording } = result;
     res.setHeader('Content-Type', recording.mimetype || 'audio/wav');
-    res.setHeader('Content-Length', String(recording.sizeBytes ?? ''));
+    const contentLength = Number(result.size ?? recording.sizeBytes ?? 0);
+    if (Number.isFinite(contentLength) && contentLength > 0) {
+      res.setHeader('Content-Length', String(contentLength));
+    }
     res.setHeader('Content-Disposition', `attachment; filename="${recording.originalFilename}"`);
-    const stream = createReadStream(streamPath);
-    stream.on('error', (error) => {
-      res.status(500).json({ message: (error as Error).message });
-    });
-    stream.pipe(res);
+
+    if (result.source === 'local') {
+      const stream = createReadStream(result.streamPath);
+      stream.on('error', (error) => {
+        res.status(500).json({ message: (error as Error).message });
+      });
+      stream.pipe(res);
+    } else {
+      const stream = result.stream;
+      stream.on('error', (error) => {
+        res.status(500).json({ message: (error as Error).message });
+      });
+      stream.pipe(res);
+    }
   }
 }

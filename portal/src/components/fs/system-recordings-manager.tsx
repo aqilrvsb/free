@@ -109,7 +109,11 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
     }
   };
 
-  const copyToClipboard = async (value: string) => {
+  const copyToClipboard = async (value?: string | null) => {
+    if (!value) {
+      alert("Không có nội dung để sao chép.");
+      return;
+    }
     try {
       await navigator.clipboard.writeText(value);
       alert(`Đã sao chép: ${value}`);
@@ -154,7 +158,7 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
                 Hủy chọn
               </Button>
               <p className="text-xs text-muted-foreground">
-                Hỗ trợ định dạng WAV/MP3 tối đa 20 MB. File sẽ được lưu tại $${'{recordings_dir}'}/system/...
+                Hỗ trợ định dạng WAV/MP3 tối đa 20 MB. File sẽ được lưu tại $${'{recordings_dir}'}/system/... hoặc đồng bộ lên CDN tuỳ cấu hình.
               </p>
             </div>
           </form>
@@ -164,12 +168,19 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {recordings.map((recording) => {
           const downloadHref = `${apiBase}${recording.downloadUrl}`;
+          const playbackValue = recording.playbackUrl ?? "";
+          const storageLabel = recording.storageMode === "cdn" ? "CDN" : "Local";
           return (
             <Card key={recording.id} className="glass-surface border-none">
               <CardHeader className="flex flex-col gap-2">
                 <CardTitle className="flex items-center justify-between text-base">
                   <span>{recording.name}</span>
-                  <Badge variant="secondary">{formatBytes(recording.sizeBytes)}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{formatBytes(recording.sizeBytes)}</Badge>
+                    <Badge variant={recording.storageMode === "cdn" ? "default" : "outline"}>
+                      {storageLabel}
+                    </Badge>
+                  </div>
                 </CardTitle>
                 <div className="text-xs text-muted-foreground space-y-1">
                   <div>File gốc: {recording.originalFilename}</div>
@@ -177,17 +188,36 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
                 </div>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="space-y-1">
-                  <span className="text-muted-foreground">Playback path</span>
-                  <div className="flex items-center gap-2">
-                    <code className="rounded-xl bg-muted/70 px-2 py-1 text-xs">
-                      {recording.playbackUrl}
-                    </code>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void copyToClipboard(recording.playbackUrl)}>
-                      Copy
-                    </Button>
+                {playbackValue ? (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Playback path</span>
+                    <div className="flex items-center gap-2">
+                      <code className="rounded-xl bg-muted/70 px-2 py-1 text-xs">
+                        {playbackValue}
+                      </code>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void copyToClipboard(playbackValue)}>
+                        Copy
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    Playback path chưa sẵn sàng.
+                  </div>
+                )}
+                {recording.storageMode === "cdn" && recording.cdnUrl ? (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">CDN URL</span>
+                    <div className="flex items-center gap-2">
+                      <code className="rounded-xl bg-muted/70 px-2 py-1 text-xs">
+                        {recording.cdnUrl}
+                      </code>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void copyToClipboard(recording.cdnUrl)}>
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 <audio controls className="w-full rounded-xl bg-card/80">
                   <source src={downloadHref} type={recording.mimetype || 'audio/wav'} />
                   Trình duyệt của bạn không hỗ trợ phát audio.

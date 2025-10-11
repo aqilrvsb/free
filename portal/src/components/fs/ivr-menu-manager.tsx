@@ -134,14 +134,20 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
   }, [menus, selectedTenant]);
 
   const tenantMap = useMemo(() => new Map(tenants.map((tenant) => [tenant.id, tenant])), [tenants]);
-  const systemRecordingOptions = useMemo(
-    () =>
-      systemRecordings.map((recording) => ({
-        label: `${recording.name} (${formatBytes(recording.sizeBytes)})`,
-        value: recording.playbackUrl,
-      })),
-    [systemRecordings],
-  );
+  const systemRecordingOptions = useMemo(() => {
+    return systemRecordings
+      .map((recording) => {
+        const targetUrl = recording.playbackUrl || recording.cdnUrl;
+        if (!targetUrl) {
+          return null;
+        }
+        return {
+          label: `${recording.name} (${formatBytes(recording.sizeBytes)})`,
+          value: targetUrl,
+        };
+      })
+      .filter((item): item is { label: string; value: string } => Boolean(item));
+  }, [systemRecordings]);
 
   const extensionOptions = useMemo(() => {
     return extensions.reduce<Record<string, Array<{ label: string; value: string }>>>((acc, ext) => {
