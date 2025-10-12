@@ -147,8 +147,8 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="full_block">Block cố định (làm tròn lên)</SelectItem>
-              <SelectItem value="block_plus_one">Block + 1s (block đầu, sau đó tính từng giây)</SelectItem>
+              <SelectItem value="full_block">Block cố định</SelectItem>
+              <SelectItem value="block_plus_one">Block + 1s</SelectItem>
             </SelectContent>
           </Select>
         </div>
