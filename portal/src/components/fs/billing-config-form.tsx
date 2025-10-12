@@ -13,9 +13,10 @@ interface BillingConfigFormProps {
   balance?: number;
   onPrepaidChange?: (value: boolean) => void;
   onCurrencyChange?: (currency: string) => void;
+  readOnly?: boolean;
 }
 
-export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, onCurrencyChange }: BillingConfigFormProps) {
+export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, onCurrencyChange, readOnly = false }: BillingConfigFormProps) {
   const apiBase = resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
   const [currency, setCurrency] = useState(config.currency);
   const [defaultRate, setDefaultRate] = useState(String(config.defaultRatePerMinute ?? 0));
@@ -53,7 +54,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase) return;
+    if (!apiBase || readOnly) return;
     setLoading(true);
     setStatus(null);
     try {
@@ -102,6 +103,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
             value={currency}
             onChange={(event) => setCurrency(event.target.value.toUpperCase())}
             placeholder="VND"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -111,6 +113,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
             value={defaultRate}
             onChange={(event) => setDefaultRate(event.target.value)}
             inputMode="decimal"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -120,6 +123,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
             value={increment}
             onChange={(event) => setIncrement(event.target.value)}
             inputMode="numeric"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -129,6 +133,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
             value={setupFee}
             onChange={(event) => setSetupFee(event.target.value)}
             inputMode="decimal"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -138,6 +143,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
             value={taxPercent}
             onChange={(event) => setTaxPercent(event.target.value)}
             inputMode="decimal"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -147,6 +153,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
             value={billingEmail}
             onChange={(event) => setBillingEmail(event.target.value)}
             placeholder="billing@example.com"
+            disabled={readOnly}
           />
         </div>
       </div>
@@ -162,6 +169,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
               setPrepaidEnabled(event.target.checked);
               onPrepaidChange?.(event.target.checked);
             }}
+            disabled={readOnly}
           />
           <Label htmlFor="billing-prepaid" className="cursor-pointer">
             Bật chế độ trừ quỹ (prepaid)
@@ -173,10 +181,14 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
       </div>
 
       <div className="flex items-center gap-3">
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" disabled={loading || readOnly}>
           {loading ? "Đang lưu..." : "Lưu cấu hình"}
         </Button>
-        {status ? <span className="text-xs text-muted-foreground">{status}</span> : null}
+        {readOnly ? (
+          <span className="text-xs text-muted-foreground">Bạn chỉ có quyền xem cấu hình billing.</span>
+        ) : status ? (
+          <span className="text-xs text-muted-foreground">{status}</span>
+        ) : null}
       </div>
     </form>
   );

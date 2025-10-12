@@ -101,6 +101,9 @@ export function BillingChargesManager({
   };
 
   const startEdit = (record: BillingChargeRecord) => {
+    if (disabled) {
+      return;
+    }
     setEditingId(record.id);
     setEditingAmount(String(record.amount));
     setEditingDescription(record.description ?? "");

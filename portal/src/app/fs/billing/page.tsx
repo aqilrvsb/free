@@ -3,6 +3,7 @@ import type {
   BillingConfig,
   BillingSummaryResponse,
   BillingTopupRecord,
+  PortalUserSummary,
   TenantSummary,
 } from "@/lib/types";
 import { PageHeader } from "@/components/common/page-header";
@@ -15,6 +16,9 @@ import { BadgeDollarSign, PhoneCall, Timer, TrendingUp } from "lucide-react";
 import type { ChartConfig } from "@/components/ui/chart";
 import { BillingByDayChart, type BillingChartPoint } from "@/components/fs/billing-by-day-chart";
 import { BillingFundUsageChart } from "@/components/fs/billing-fund-usage-chart";
+import { cookies } from "next/headers";
+import { parsePortalUserCookie } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -77,14 +81,74 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     ? searchParams?.to[0]
     : (searchParams?.to as string | undefined);
 
+  const cookieStore = await cookies();
+  const rawUser = cookieStore.get("portal_user")?.value ?? null;
+  let currentUser = parsePortalUserCookie(rawUser);
+
+  if (!currentUser) {
+    currentUser =
+      (await apiFetch<PortalUserSummary | null>("/auth/profile", {
+        cache: "no-store",
+        fallbackValue: null,
+        suppressError: true,
+      })) || null;
+  }
+
+  const canManageBilling = hasPermission(currentUser, "manage_billing");
+  const canViewBilling = canManageBilling || hasPermission(currentUser, "view_billing");
+
+  if (!canViewBilling) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Billing"
+          description="Cước gọi và cấu hình billing."
+        />
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            Bạn không có quyền truy cập trang billing.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const isSuperAdmin = currentUser?.role === "super_admin";
   const defaultFrom = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const tenantId = tenantParam ?? "all";
   const from = fromParam ?? defaultFrom;
   const to = toParam;
 
+  const allTenants = await apiFetch<TenantSummary[]>("/tenants", {
+    cache: "no-store",
+    fallbackValue: [],
+    suppressError: true,
+    onError: (error) => console.warn("[billing] Không thể tải tenant", error),
+  });
+
+  const availableTenants = isSuperAdmin
+    ? allTenants
+    : allTenants.filter((tenant) => currentUser?.tenantIds?.includes(tenant.id));
+
+  let selectedTenantId: string | null =
+    tenantParam && tenantParam.trim().length > 0 ? tenantParam.trim() : null;
+
+  if (isSuperAdmin) {
+    if (!selectedTenantId) {
+      selectedTenantId = "all";
+    }
+  } else {
+    const allowedIds = currentUser?.tenantIds ?? [];
+    if (selectedTenantId && selectedTenantId !== "all" && !allowedIds.includes(selectedTenantId)) {
+      selectedTenantId = null;
+    }
+    if (!selectedTenantId || selectedTenantId === "all") {
+      selectedTenantId = availableTenants[0]?.id ?? allowedIds[0] ?? "";
+    }
+  }
+
   const query = new URLSearchParams();
-  if (tenantId && tenantId !== "all") {
-    query.set("tenantId", tenantId);
+  if (selectedTenantId && selectedTenantId !== "all") {
+    query.set("tenantId", selectedTenantId);
   }
   if (from) {
     query.set("from", from);
@@ -95,23 +159,15 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
 
   const summaryPath = `/billing/summary${query.toString() ? `?${query.toString()}` : ""}`;
 
-  const [tenants, summary] = await Promise.all([
-    apiFetch<TenantSummary[]>("/tenants", {
-      cache: "no-store",
-      fallbackValue: [],
-      suppressError: true,
-      onError: (error) => console.warn("[billing] Không thể tải tenant", error),
-    }),
-    apiFetch<BillingSummaryResponse>(summaryPath, {
-      cache: "no-store",
-      fallbackValue: emptySummary,
-      suppressError: true,
-      onError: (error) => console.warn("[billing] Không thể tải thống kê", error),
-    }),
-  ]);
+  const summary = await apiFetch<BillingSummaryResponse>(summaryPath, {
+    cache: "no-store",
+    fallbackValue: emptySummary,
+    suppressError: true,
+    onError: (error) => console.warn("[billing] Không thể tải thống kê", error),
+  });
 
-  const config = tenantId !== "all"
-    ? await apiFetch<BillingConfig | null>(`/billing/config?tenantId=${tenantId}`, {
+  const config = selectedTenantId && selectedTenantId !== "all"
+    ? await apiFetch<BillingConfig | null>(`/billing/config?tenantId=${selectedTenantId}`, {
         cache: "no-store",
         fallbackValue: null,
         suppressError: true,
@@ -119,8 +175,8 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
       })
     : null;
 
-  const topups: BillingTopupRecord[] = tenantId !== "all"
-    ? await apiFetch<BillingTopupRecord[]>(`/billing/topups?tenantId=${tenantId}`, {
+  const topups: BillingTopupRecord[] = selectedTenantId && selectedTenantId !== "all"
+    ? await apiFetch<BillingTopupRecord[]>(`/billing/topups?tenantId=${selectedTenantId}`, {
         cache: "no-store",
         fallbackValue: [],
         suppressError: true,
@@ -141,7 +197,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     calls: Number(item.totalCalls.toFixed(2)),
   }));
   let fundUsageSlices: Array<{ key: "spent" | "remaining" | "overdrawn"; label: string; value: number }> = [];
-  if (tenantId !== "all") {
+  if (selectedTenantId && selectedTenantId !== "all") {
     fundUsageSlices = [
       {
         key: "spent",
@@ -210,7 +266,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     },
   ];
 
-  const fundCard = tenantId !== "all" ? (
+  const fundCard = selectedTenantId && selectedTenantId !== "all" ? (
     <Card className="overflow-hidden rounded-[28px] border border-border/50 bg-card/80 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle>Tình trạng quỹ</CardTitle>
@@ -232,10 +288,11 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
       />
 
       <BillingFilters
-        tenants={tenants}
-        initialTenantId={tenantId}
+        tenants={availableTenants}
+        initialTenantId={selectedTenantId ?? (isSuperAdmin ? "all" : undefined)}
         initialFrom={from}
         initialTo={to ?? undefined}
+        canSelectAll={isSuperAdmin}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -257,20 +314,28 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
         ))}
       </div>
 
-      {tenantId !== "all" ? (
+      {selectedTenantId && selectedTenantId !== "all" ? (
         config ? (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
             {fundCard}
             <div className="space-y-3">
-              <h2 className="text-lg font-semibold">Cấu hình billing cho {tenantId}</h2>
-              <BillingTenantPanel
-                tenantId={tenantId}
-                config={config}
-                currency={currency}
-                initialBalance={currentBalance}
-                initialCharges={charges}
-                initialTopups={topups}
-              />
+              {(() => {
+                const tenantKey = selectedTenantId as string;
+                return (
+                  <>
+                    <h2 className="text-lg font-semibold">Cấu hình billing cho {tenantKey}</h2>
+                    <BillingTenantPanel
+                      tenantId={tenantKey}
+                      config={config}
+                      currency={currency}
+                      initialBalance={currentBalance}
+                      initialCharges={charges}
+                      initialTopups={topups}
+                      canManage={canManageBilling}
+                    />
+                  </>
+                );
+              })()}
             </div>
           </div>
         ) : (

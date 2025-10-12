@@ -38,6 +38,7 @@ export class PortalRolesService implements OnModuleInit {
     'manage_portal_users',
     'manage_roles',
     'manage_security',
+    'view_billing',
     'manage_billing',
     'manage_agents',
     'manage_sub_agents',
@@ -48,7 +49,7 @@ export class PortalRolesService implements OnModuleInit {
     viewer: {
       name: 'Viewer',
       description: 'Chỉ xem dashboard, CDR, recordings',
-      permissions: ['view_dashboard', 'view_cdr', 'view_recordings', 'view_channels'],
+      permissions: ['view_dashboard', 'view_cdr', 'view_recordings', 'view_channels', 'view_billing'],
     },
     operator: {
       name: 'Operator',
@@ -61,6 +62,7 @@ export class PortalRolesService implements OnModuleInit {
         'manage_outbound',
         'manage_billing',
         'manage_ivr',
+        'view_billing',
       ],
     },
     tenant_admin: {
@@ -74,7 +76,7 @@ export class PortalRolesService implements OnModuleInit {
         'manage_dialplan',
         'manage_inbound',
         'manage_outbound',
-        'manage_billing',
+        'view_billing',
         'manage_ivr',
         'manage_extensions',
         'manage_portal_users',

@@ -17,11 +17,15 @@ interface BillingFiltersProps {
   initialTenantId?: string;
   initialFrom?: string;
   initialTo?: string;
+  canSelectAll?: boolean;
 }
 
-export function BillingFilters({ tenants, initialTenantId, initialFrom, initialTo }: BillingFiltersProps) {
+export function BillingFilters({ tenants, initialTenantId, initialFrom, initialTo, canSelectAll = true }: BillingFiltersProps) {
   const router = useRouter();
-  const [tenantId, setTenantId] = useState(initialTenantId ?? "all");
+  const firstTenantId = tenants[0]?.id ?? "";
+  const [tenantId, setTenantId] = useState(
+    initialTenantId ?? (canSelectAll ? "all" : firstTenantId),
+  );
   const [fromDate, setFromDate] = useState<Date | undefined>(
     initialFrom ? (Number.isNaN(new Date(initialFrom).getTime()) ? undefined : new Date(initialFrom)) : undefined,
   );
@@ -62,7 +66,7 @@ export function BillingFilters({ tenants, initialTenantId, initialFrom, initialT
             <SelectValue placeholder="Chọn tenant" />
           </SelectTrigger>
           <SelectContent className="max-h-72">
-            <SelectItem value="all">Tất cả</SelectItem>
+            {canSelectAll ? <SelectItem value="all">Tất cả</SelectItem> : null}
             {hasTenants
               ? tenants.map((tenant) => (
                   <SelectItem key={tenant.id} value={tenant.id}>
@@ -132,7 +136,7 @@ export function BillingFilters({ tenants, initialTenantId, initialFrom, initialT
             variant="outline"
             className="h-11 flex-1 rounded-xl md:flex-none"
             onClick={() => {
-              setTenantId("all");
+              setTenantId(canSelectAll ? "all" : firstTenantId);
               setFromDate(undefined);
               setToDate(undefined);
               router.push("/fs/billing");

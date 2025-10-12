@@ -16,6 +16,7 @@ interface BillingTenantPanelProps {
   initialBalance: number;
   initialCharges: BillingChargeRecord[];
   initialTopups: BillingTopupRecord[];
+  canManage?: boolean;
 }
 
 export function BillingTenantPanel({
@@ -25,6 +26,7 @@ export function BillingTenantPanel({
   initialBalance,
   initialCharges,
   initialTopups,
+  canManage = false,
 }: BillingTenantPanelProps) {
   const [balance, setBalance] = useState(initialBalance);
   const [currentCurrency, setCurrentCurrency] = useState(currency || config.currency);
@@ -97,6 +99,7 @@ export function BillingTenantPanel({
             balance={balance}
             onPrepaidChange={(value) => setPrepaidEnabled(value)}
             onCurrencyChange={(value) => setCurrentCurrency(value)}
+            readOnly={!canManage}
           />
         </CardContent>
       </Card>
@@ -137,7 +140,7 @@ export function BillingTenantPanel({
                   console.error("[BillingTenantPanel] Không thể cập nhật danh sách nạp quỹ", error),
                 );
               }}
-              disabled={!prepaidEnabled}
+              disabled={!prepaidEnabled || !canManage}
             />
           </CardContent>
         </Card>
@@ -147,7 +150,7 @@ export function BillingTenantPanel({
           currency={currentCurrency || config.currency}
           records={topups}
           currentBalance={balance}
-          disabled={!prepaidEnabled}
+          disabled={!prepaidEnabled || !canManage}
           apiBase={apiBase}
           onBalanceChange={(newBalance) => setBalance(newBalance)}
           onRefresh={refreshTopups}
@@ -157,7 +160,7 @@ export function BillingTenantPanel({
           tenantId={tenantId}
           currency={currentCurrency || config.currency}
           initialCharges={charges}
-          disabled={!prepaidEnabled}
+          disabled={!canManage}
           onBalanceChange={(newBalance) => setBalance(newBalance)}
           onChangeCharges={setCharges}
         />

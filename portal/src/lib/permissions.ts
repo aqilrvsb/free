@@ -17,6 +17,7 @@ export type PermissionKey =
   | "manage_portal_users"
   | "manage_roles"
   | "manage_security"
+  | "view_billing"
   | "manage_billing"
   | "manage_agents"
   | "manage_sub_agents"
@@ -41,6 +42,7 @@ const BASE_PERMISSIONS: PermissionSet = {
   manage_portal_users: false,
   manage_roles: false,
   manage_security: false,
+  view_billing: false,
   manage_billing: false,
   manage_agents: false,
   manage_sub_agents: false,
@@ -48,13 +50,17 @@ const BASE_PERMISSIONS: PermissionSet = {
 };
 
 const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
-  viewer: { ...BASE_PERMISSIONS },
+  viewer: {
+    ...BASE_PERMISSIONS,
+    view_billing: true,
+  },
   operator: {
     ...BASE_PERMISSIONS,
     manage_inbound: true,
     manage_outbound: true,
     manage_ivr: true,
     manage_recordings: true,
+    view_billing: true,
   },
   tenant_admin: {
     ...BASE_PERMISSIONS,
@@ -68,7 +74,8 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
     manage_extensions: true,
     manage_portal_users: true,
     manage_security: false,
-    manage_billing: true,
+    view_billing: true,
+    manage_billing: false,
     manage_agents: true,
     manage_sub_agents: true,
     manage_own_groups: true,

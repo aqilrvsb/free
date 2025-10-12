@@ -215,7 +215,7 @@ const NAV_SECTIONS: Array<{
           href: "/fs/billing",
           icon: DollarSign,
           roles: ["super_admin", "tenant_admin"],
-          permission: "manage_billing",
+          permission: "view_billing",
         },
         {
           title: "Inbound Routing",

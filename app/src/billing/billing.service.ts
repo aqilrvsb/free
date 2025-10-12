@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import {
@@ -13,6 +13,11 @@ import { UpdateBillingConfigDto } from './dto/update-billing-config.dto';
 import { BillingSummaryQueryDto } from './dto/billing-summary-query.dto';
 import { UpdateTopupDto } from './dto/update-topup.dto';
 
+interface BillingScope {
+  isSuperAdmin: boolean;
+  tenantIds: string[];
+}
+
 @Injectable()
 export class BillingService {
   constructor(
@@ -24,15 +29,20 @@ export class BillingService {
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
   ) {}
 
-  async getConfig(tenantId: string): Promise<BillingConfigEntity> {
-    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+  async getConfig(tenantId: string, scope?: BillingScope): Promise<BillingConfigEntity> {
+    const normalized = tenantId?.trim();
+    if (!normalized) {
+      throw new BadRequestException('tenantId không hợp lệ');
+    }
+    const tenant = await this.tenantRepo.findOne({ where: { id: normalized } });
     if (!tenant) {
       throw new NotFoundException('Tenant không tồn tại');
     }
-    let config = await this.billingRepo.findOne({ where: { tenantId } });
+    this.ensureTenantAccess(scope, tenant.id);
+    let config = await this.billingRepo.findOne({ where: { tenantId: tenant.id } });
     if (!config) {
       config = this.billingRepo.create({
-        tenantId,
+        tenantId: tenant.id,
         currency: 'VND',
         defaultRatePerMinute: '0.0000',
         defaultIncrementSeconds: 60,
@@ -54,8 +64,8 @@ export class BillingService {
     return config;
   }
 
-  async updateConfig(tenantId: string, dto: UpdateBillingConfigDto): Promise<BillingConfigEntity> {
-    const config = await this.getConfig(tenantId);
+  async updateConfig(tenantId: string, dto: UpdateBillingConfigDto, scope?: BillingScope): Promise<BillingConfigEntity> {
+    const config = await this.getConfig(tenantId, scope);
     if (dto.currency !== undefined) {
       config.currency = dto.currency.trim().toUpperCase();
     }
@@ -81,9 +91,9 @@ export class BillingService {
     return config;
   }
 
-  async getSummary(query: BillingSummaryQueryDto) {
+  async getSummary(query: BillingSummaryQueryDto, scope?: BillingScope) {
     const timeBetween = this.resolveDateRange(query.from, query.to);
-    const tenantScope = await this.resolveTenantScope(query.tenantId);
+    const tenantScope = await this.resolveTenantScope(query.tenantId, scope);
     const tenantFilterClause =
       tenantScope.identifiers.length > 0 ? 'cdr.tenantId IN (:...tenantKeys)' : '1=1';
     const tenantFilterParams = tenantScope.identifiers.length > 0 ? { tenantKeys: tenantScope.identifiers } : {};
@@ -141,7 +151,7 @@ export class BillingService {
             .getRawOne<{ totalCharges: string | null }>()
         : Promise.resolve<{ totalCharges: string | null }>({ totalCharges: null }),
       tenantScope.tenant
-        ? this.listCharges(tenantScope.tenant.id, 50)
+        ? this.listCharges(tenantScope.tenant.id, 50, scope)
         : Promise.resolve([] as BillingChargeEntity[]),
     ]);
 
@@ -165,7 +175,7 @@ export class BillingService {
 
     let config: BillingConfigEntity | null = null;
     if (tenantScope.tenant) {
-      config = await this.getConfig(tenantScope.tenant.id);
+      config = await this.getConfig(tenantScope.tenant.id, scope);
     }
 
     const resultCurrency = config?.currency ?? 'VND';
@@ -209,11 +219,12 @@ export class BillingService {
     };
   }
 
-  async topup(tenantId: string, amount: number, note?: string): Promise<BillingConfigEntity> {
+  async topup(tenantId: string, amount: number, note: string | undefined, scope?: BillingScope): Promise<BillingConfigEntity> {
     if (amount <= 0) {
       throw new BadRequestException('Số tiền nạp phải lớn hơn 0');
     }
-    const config = await this.adjustBalance(tenantId, amount);
+    this.ensureTenantAccess(scope, tenantId);
+    const config = await this.adjustBalance(tenantId, amount, scope);
     await this.topupRepo.save(
       this.topupRepo.create({
         tenantId,
@@ -236,7 +247,8 @@ export class BillingService {
     await this.adjustBalance(tenantId, -amount);
   }
 
-  async listTopups(tenantId: string): Promise<BillingTopupEntity[]> {
+  async listTopups(tenantId: string, scope?: BillingScope): Promise<BillingTopupEntity[]> {
+    this.ensureTenantAccess(scope, tenantId);
     return this.topupRepo.find({
       where: { tenantId },
       order: { createdAt: 'DESC' },
@@ -247,6 +259,7 @@ export class BillingService {
   async updateLatestTopup(
     tenantId: string,
     params: UpdateTopupDto,
+    scope?: BillingScope,
   ): Promise<{ topup: BillingTopupEntity; balanceAmount: number }> {
     const hasAmountUpdate = params.amount !== undefined;
     const hasNoteUpdate = params.note !== undefined;
@@ -254,7 +267,8 @@ export class BillingService {
       throw new BadRequestException('Cần cung cấp số tiền hoặc ghi chú để cập nhật giao dịch nạp quỹ.');
     }
 
-    const config = await this.getConfig(tenantId);
+    this.ensureTenantAccess(scope, tenantId);
+    const config = await this.getConfig(tenantId, scope);
     const currentBalance = Number(config.balanceAmount ?? 0);
     if (currentBalance <= 0) {
       throw new BadRequestException('Không thể điều chỉnh khi số dư đã về 0.');
@@ -275,7 +289,7 @@ export class BillingService {
       const currentAmount = Number(latest.amount ?? 0);
       diff = numericAmount - currentAmount;
       if (diff !== 0) {
-        updatedConfig = await this.adjustBalance(tenantId, diff);
+        updatedConfig = await this.adjustBalance(tenantId, diff, scope);
       }
       latest.amount = numericAmount.toFixed(4);
       const previousBalanceAfter = Number(latest.balanceAfter ?? 0);
@@ -295,8 +309,9 @@ export class BillingService {
     };
   }
 
-  async deleteLatestTopup(tenantId: string): Promise<number> {
-    const config = await this.getConfig(tenantId);
+  async deleteLatestTopup(tenantId: string, scope?: BillingScope): Promise<number> {
+    this.ensureTenantAccess(scope, tenantId);
+    const config = await this.getConfig(tenantId, scope);
     const currentBalance = Number(config.balanceAmount ?? 0);
     if (currentBalance <= 0) {
       throw new BadRequestException('Không thể xoá giao dịch vì số dư đã về 0.');
@@ -308,20 +323,24 @@ export class BillingService {
     }
 
     const amount = Number(latest.amount ?? 0);
-    const updatedConfig = await this.adjustBalance(tenantId, -amount);
+    const updatedConfig = await this.adjustBalance(tenantId, -amount, scope);
     await this.topupRepo.delete({ id: latest.id });
     return Number(updatedConfig.balanceAmount ?? 0);
   }
 
-  async addCharge(params: {
-    tenantId: string;
-    amount: number;
-    description?: string | null;
-  }): Promise<{ charge: BillingChargeEntity; balance: number }> {
+  async addCharge(
+    params: {
+      tenantId: string;
+      amount: number;
+      description?: string | null;
+    },
+    scope?: BillingScope,
+  ): Promise<{ charge: BillingChargeEntity; balance: number }> {
     if (params.amount <= 0) {
       throw new BadRequestException('Số tiền phí phát sinh phải lớn hơn 0');
     }
-    const config = await this.adjustBalance(params.tenantId, -params.amount);
+    this.ensureTenantAccess(scope, params.tenantId);
+    const config = await this.adjustBalance(params.tenantId, -params.amount, scope);
     const charge = this.chargeRepo.create({
       tenantId: params.tenantId,
       amount: params.amount.toFixed(4),
@@ -334,11 +353,13 @@ export class BillingService {
   async updateCharge(
     id: string,
     params: { amount?: number; description?: string | null },
+    scope?: BillingScope,
   ): Promise<{ charge: BillingChargeEntity; balance: number }> {
     const charge = await this.chargeRepo.findOne({ where: { id } });
     if (!charge) {
       throw new NotFoundException('Billing charge không tồn tại');
     }
+    this.ensureTenantAccess(scope, charge.tenantId);
     const currentAmount = Number(charge.amount ?? 0);
     let diff = 0;
     if (params.amount !== undefined) {
@@ -354,7 +375,7 @@ export class BillingService {
     let updatedBalance: number | null = null;
     let latestConfig: BillingConfigEntity | null = null;
     if (diff !== 0) {
-      latestConfig = await this.adjustBalance(charge.tenantId, -diff);
+      latestConfig = await this.adjustBalance(charge.tenantId, -diff, scope);
       updatedBalance = Number(latestConfig.balanceAmount ?? 0);
     }
     const saved = await this.chargeRepo.save(charge);
@@ -365,17 +386,19 @@ export class BillingService {
     };
   }
 
-  async deleteCharge(id: string): Promise<number> {
+  async deleteCharge(id: string, scope?: BillingScope): Promise<number> {
     const charge = await this.chargeRepo.findOne({ where: { id } });
     if (!charge) {
       throw new NotFoundException('Billing charge không tồn tại');
     }
-    const config = await this.adjustBalance(charge.tenantId, Number(charge.amount ?? 0));
+    this.ensureTenantAccess(scope, charge.tenantId);
+    const config = await this.adjustBalance(charge.tenantId, Number(charge.amount ?? 0), scope);
     await this.chargeRepo.delete({ id });
     return Number(config.balanceAmount ?? 0);
   }
 
-  async listCharges(tenantId: string, limit = 50): Promise<BillingChargeEntity[]> {
+  async listCharges(tenantId: string, limit = 50, scope?: BillingScope): Promise<BillingChargeEntity[]> {
+    this.ensureTenantAccess(scope, tenantId);
     return this.chargeRepo.find({
       where: { tenantId },
       order: { createdAt: 'DESC' },
@@ -383,8 +406,8 @@ export class BillingService {
     });
   }
 
-  private async adjustBalance(tenantId: string, delta: number): Promise<BillingConfigEntity> {
-    const config = await this.getConfig(tenantId);
+  private async adjustBalance(tenantId: string, delta: number, scope?: BillingScope): Promise<BillingConfigEntity> {
+    const config = await this.getConfig(tenantId, scope);
     const current = Number(config.balanceAmount ?? 0);
     const next = current + delta;
     config.balanceAmount = (next < 0 ? 0 : next).toFixed(4);
@@ -417,23 +440,49 @@ export class BillingService {
   }
 
   private async resolveTenantScope(
-    tenantId?: string,
+    tenantId: string | undefined,
+    scope?: BillingScope,
   ): Promise<{ tenant: TenantEntity | null; identifiers: string[] }> {
-    if (!tenantId) {
-      return { tenant: null, identifiers: [] };
+    const trimmed = tenantId?.trim();
+
+    if (!scope || scope.isSuperAdmin) {
+      if (!trimmed) {
+        return { tenant: null, identifiers: [] };
+      }
+      const tenant = await this.tenantRepo.findOne({
+        where: [{ id: trimmed }, { domain: trimmed }],
+      });
+      if (!tenant) {
+        return { tenant: null, identifiers: [trimmed] };
+      }
+      const identifiers = new Set<string>([tenant.id]);
+      if (tenant.domain) {
+        identifiers.add(tenant.domain);
+      }
+      return { tenant, identifiers: Array.from(identifiers) };
     }
-    const trimmed = tenantId.trim();
-    if (!trimmed) {
-      return { tenant: null, identifiers: [] };
+
+    const allowed = Array.from(new Set(scope.tenantIds));
+    if (!allowed.length) {
+      throw new ForbiddenException('Bạn chưa được gán quyền truy cập tenant nào');
     }
+
+    let targetId: string | null = trimmed ?? null;
+    if (!targetId) {
+      targetId = allowed[0];
+    }
+
     const tenant = await this.tenantRepo.findOne({
-      where: [{ id: trimmed }, { domain: trimmed }],
+      where: [{ id: targetId }, { domain: targetId }],
     });
     if (!tenant) {
-      return { tenant: null, identifiers: [tenantId] };
+      throw new NotFoundException('Tenant không tồn tại');
     }
-    const identifiers = new Set<string>();
-    identifiers.add(tenant.id);
+    if (!allowed.includes(tenant.id)) {
+      throw new ForbiddenException('Không có quyền truy cập tenant này');
+    }
+
+    const identifiers = new Set<string>([tenant.id]);
     if (tenant.domain) {
       identifiers.add(tenant.domain);
     }
@@ -445,5 +494,14 @@ export class BillingService {
       where: { tenantId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  private ensureTenantAccess(scope: BillingScope | undefined, tenantId: string): void {
+    if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+    if (!scope.tenantIds.includes(tenantId)) {
+      throw new ForbiddenException('Không có quyền thao tác trên tenant này');
+    }
   }
 }
