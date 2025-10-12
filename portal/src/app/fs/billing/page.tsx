@@ -222,15 +222,15 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     cost: {
       label: "Chi phí",
       theme: {
-        light: "hsl(var(--primary))",
-        dark: "hsl(var(--primary))",
+        light: "hsl(17 90% 55%)",
+        dark: "hsl(17 95% 65%)",
       },
     },
     calls: {
       label: "Cuộc gọi",
       theme: {
-        light: "hsl(var(--primary) / 0.65)",
-        dark: "hsl(var(--primary) / 0.65)",
+        light: "hsl(200 85% 50%)",
+        dark: "hsl(200 95% 68%)",
       },
     },
   };
