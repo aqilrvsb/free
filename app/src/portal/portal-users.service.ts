@@ -57,7 +57,7 @@ export class PortalUsersService {
   ) {}
 
   async listUsers(
-    options?: { search?: string | null },
+    options?: { search?: string | null; tenantId?: string | null; role?: string | null },
     scope?: PortalUserScope,
   ): Promise<Array<Record<string, any>>> {
     const query = this.portalUserRepo
@@ -82,6 +82,17 @@ export class PortalUsersService {
       );
     }
 
+    if (options?.role) {
+      query.andWhere('user.roleKey = :roleFilter', { roleFilter: options.role.toLowerCase() });
+    }
+
+    if (options?.tenantId) {
+      query.andWhere(
+        'EXISTS (SELECT 1 FROM portal_user_tenants put_filter WHERE put_filter.portal_user_id = user.id AND put_filter.tenant_id = :filterTenantId)',
+        { filterTenantId: options.tenantId },
+      );
+    }
+
     await this.applyScopeFilter(query, scope);
 
     const users = await query.getMany();
@@ -92,8 +103,10 @@ export class PortalUsersService {
     page: number;
     pageSize: number;
     search?: string | null;
+    tenantId?: string | null;
+    role?: string | null;
   }, scope?: PortalUserScope): Promise<{ items: Array<Record<string, any>>; total: number; page: number; pageSize: number }> {
-    const { page, pageSize, search } = params;
+    const { page, pageSize, search, tenantId, role } = params;
     const query = this.portalUserRepo
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.roleDefinition', 'role')
@@ -115,6 +128,17 @@ export class PortalUsersService {
             .orWhere('LOWER(user.roleKey) LIKE :term', { term })
             .orWhere('LOWER(role.name) LIKE :term', { term });
         }),
+      );
+    }
+
+    if (role) {
+      query.andWhere('user.roleKey = :roleFilter', { roleFilter: role.toLowerCase() });
+    }
+
+    if (tenantId) {
+      query.andWhere(
+        'EXISTS (SELECT 1 FROM portal_user_tenants put_filter WHERE put_filter.portal_user_id = user.id AND put_filter.tenant_id = :filterTenantId)',
+        { filterTenantId: tenantId },
       );
     }
 

@@ -50,11 +50,13 @@ export class PortalUsersController {
     const page = Number.isFinite(pageRaw) ? pageRaw : 0;
     const pageSize = Number.isFinite(pageSizeRaw) ? pageSizeRaw : 0;
     const search = query.search?.trim();
+    const tenantId = query.tenantId?.trim() || undefined;
+    const role = query.role?.trim().toLowerCase() || undefined;
     const scope = this.resolveScope(req);
     if (page > 0 && pageSize > 0) {
-      return this.portalUsersService.listUsersPaginated({ page, pageSize, search }, scope);
+      return this.portalUsersService.listUsersPaginated({ page, pageSize, search, tenantId, role }, scope);
     }
-    return this.portalUsersService.listUsers({ search }, scope);
+    return this.portalUsersService.listUsers({ search, tenantId, role }, scope);
   }
 
   @Get('/portal-users/:id')

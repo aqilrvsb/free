@@ -18,6 +18,7 @@ import type {
   AgentTalktimeResponse,
   ExtensionSummary,
   PaginatedResult,
+  PortalUserSummary,
   TenantLookupItem,
 } from "@/lib/types";
 import { formatDistance } from "date-fns";
@@ -49,13 +50,18 @@ interface GroupFormState {
   tenantId: string;
   name: string;
   description: string;
+  ownerAgentId: string;
 }
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_GROUP_FETCH = 200;
 const MAX_EXTENSION_FETCH = 200;
+const MAX_AGENT_FETCH = 200;
+const MAX_PORTAL_USER_FETCH = 200;
 const NO_GROUP_VALUE = "__none__";
 const NO_EXTENSION_VALUE = "__none__";
+const NO_OWNER_VALUE = "__none__";
+const NO_PORTAL_USER_VALUE = "__none_portal__";
 
 function formatDateInput(date: Date): string {
   const year = date.getFullYear();
@@ -160,10 +166,17 @@ export function AgentManager({
 
   const [groupData, setGroupData] = useState<AgentGroupSummary[]>(initialGroups);
   const [groupLoading, setGroupLoading] = useState(false);
+  const [ownerOptions, setOwnerOptions] = useState<AgentSummary[]>([]);
+  const [ownerLoading, setOwnerLoading] = useState(false);
+  const [ownerError, setOwnerError] = useState<string | null>(null);
 
   const [extensionOptions, setExtensionOptions] = useState<ExtensionSummary[]>([]);
   const [extensionLoading, setExtensionLoading] = useState(false);
   const [extensionError, setExtensionError] = useState<string | null>(null);
+
+  const [portalUserOptions, setPortalUserOptions] = useState<PortalUserSummary[]>([]);
+  const [portalUserLoading, setPortalUserLoading] = useState(false);
+  const [portalUserError, setPortalUserError] = useState<string | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const [talktimeData, setTalktimeData] = useState<AgentTalktimeResponse>(initialTalktime);
@@ -193,6 +206,7 @@ export function AgentManager({
     tenantId: normalizeTenantId(initialTenantId),
     name: "",
     description: "",
+    ownerAgentId: "",
   }));
 
   useEffect(() => {
@@ -323,6 +337,96 @@ export function AgentManager({
     [apiBase, buildHeaders],
   );
 
+  const fetchOwnerOptions = useCallback(
+    async (tenantId: string | null | undefined) => {
+      if (!apiBase || !tenantId) {
+        setOwnerOptions([]);
+        return;
+      }
+      setOwnerLoading(true);
+      setOwnerError(null);
+      try {
+        const params = new URLSearchParams({
+          page: "1",
+          pageSize: String(MAX_AGENT_FETCH),
+          tenantId,
+        });
+        const response = await fetch(`${apiBase}/agents?${params.toString()}`, {
+          method: "GET",
+          headers: buildHeaders(),
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const payload = (await response.json()) as PaginatedResult<AgentSummary> | AgentSummary[];
+        const list = Array.isArray(payload) ? payload : payload.items ?? [];
+        setOwnerOptions(list);
+      } catch (error) {
+        console.error("[agents] Failed to fetch owner options", error);
+        setOwnerError("Không thể tải danh sách agent khả dụng");
+        setOwnerOptions([]);
+      } finally {
+        setOwnerLoading(false);
+      }
+    },
+    [apiBase, buildHeaders],
+  );
+
+  const fetchPortalUsers = useCallback(
+    async (tenantId: string | null | undefined, selectedUserId?: string | null) => {
+      if (!apiBase || !tenantId) {
+        setPortalUserOptions([]);
+        return;
+      }
+      setPortalUserLoading(true);
+      setPortalUserError(null);
+      try {
+        const params = new URLSearchParams({
+          page: "1",
+          pageSize: String(MAX_PORTAL_USER_FETCH),
+          tenantId,
+          role: "agent",
+        });
+        const response = await fetch(`${apiBase}/portal-users?${params.toString()}`, {
+          method: "GET",
+          headers: buildHeaders(),
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const payload = (await response.json()) as { items?: PortalUserSummary[] } | PortalUserSummary[];
+        const list = Array.isArray(payload) ? payload : payload.items ?? [];
+
+        if (selectedUserId && !list.some((user) => user.id === selectedUserId)) {
+          try {
+            const detailResponse = await fetch(`${apiBase}/portal-users/${selectedUserId}`, {
+              method: "GET",
+              headers: buildHeaders(),
+              cache: "no-store",
+            });
+            if (detailResponse.ok) {
+              const detail = (await detailResponse.json()) as PortalUserSummary;
+              list.push(detail);
+            }
+          } catch (detailError) {
+            console.warn("[agents] Unable to fetch portal user detail", detailError);
+          }
+        }
+
+        setPortalUserOptions(list);
+      } catch (error) {
+        console.error("[agents] Failed to fetch portal users", error);
+        setPortalUserError("Không thể tải danh sách portal user");
+        setPortalUserOptions([]);
+      } finally {
+        setPortalUserLoading(false);
+      }
+    },
+    [apiBase, buildHeaders],
+  );
+
   const fetchExtensions = useCallback(
     async (tenantId: string | null | undefined) => {
       if (!apiBase || !tenantId) {
@@ -402,6 +506,8 @@ export function AgentManager({
   const openCreateAgent = useCallback(() => {
     setAgentDialogMode("create");
     setEditingAgent(null);
+    setPortalUserOptions([]);
+    setPortalUserError(null);
     setAgentForm({
       displayName: "",
       tenantId: normalizeTenantId(isSuperAdmin ? tenantFilter === "all" ? initialTenantId : tenantFilter : initialTenantId),
@@ -433,8 +539,17 @@ export function AgentManager({
     if (!agentDialogOpen) {
       return;
     }
-    void fetchExtensions(agentForm.tenantId?.trim() || null);
-  }, [agentDialogOpen, agentForm.tenantId, fetchExtensions]);
+    const tenantKey = agentForm.tenantId?.trim() || null;
+    void fetchExtensions(tenantKey);
+    void fetchPortalUsers(tenantKey, agentForm.portalUserId?.trim() || null);
+  }, [agentDialogOpen, agentForm.portalUserId, agentForm.tenantId, fetchExtensions, fetchPortalUsers]);
+
+  useEffect(() => {
+    if (!groupDialogOpen) {
+      return;
+    }
+    void fetchOwnerOptions(groupForm.tenantId?.trim() || null);
+  }, [fetchOwnerOptions, groupDialogOpen, groupForm.tenantId]);
 
   const handleAgentSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -531,10 +646,13 @@ export function AgentManager({
   const openCreateGroup = useCallback(() => {
     setGroupDialogMode("create");
     setEditingGroup(null);
+    setOwnerOptions([]);
+    setOwnerError(null);
     setGroupForm({
       tenantId: normalizeTenantId(isSuperAdmin ? tenantFilter === "all" ? initialTenantId : tenantFilter : initialTenantId),
       name: "",
       description: "",
+      ownerAgentId: "",
     });
     setGroupDialogOpen(true);
   }, [initialTenantId, isSuperAdmin, tenantFilter]);
@@ -546,6 +664,7 @@ export function AgentManager({
       tenantId: group.tenantId,
       name: group.name,
       description: group.description ?? "",
+      ownerAgentId: group.ownerAgentId ?? "",
     });
     setGroupDialogOpen(true);
   }, []);
@@ -570,6 +689,7 @@ export function AgentManager({
         tenantId,
         name: groupForm.name.trim(),
         description: groupForm.description.trim() || undefined,
+        ownerAgentId: groupForm.ownerAgentId.trim() || undefined,
       };
 
       const isEdit = groupDialogMode === "edit" && editingGroup;
@@ -849,6 +969,7 @@ export function AgentManager({
                   <TableHead>Tên nhóm</TableHead>
                   <TableHead>Tenant</TableHead>
                   <TableHead>Mô tả</TableHead>
+                  <TableHead>Leader</TableHead>
                   <TableHead>Ngày tạo</TableHead>
                   {canManageAgents ? <TableHead className="text-right">Thao tác</TableHead> : null}
                 </TableRow>
@@ -859,6 +980,7 @@ export function AgentManager({
                     <TableCell className="font-medium">{group.name}</TableCell>
                     <TableCell>{formatTenantLabel(group.tenantId)}</TableCell>
                     <TableCell>{group.description || <span className="text-muted-foreground">-</span>}</TableCell>
+                    <TableCell>{group.ownerAgentName || <span className="text-muted-foreground">-</span>}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {group.createdAt ? formatDistance(new Date(group.createdAt), new Date(), { addSuffix: true }) : "-"}
                     </TableCell>
@@ -881,7 +1003,7 @@ export function AgentManager({
                 ))}
                 {groupData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={canManageAgents ? 5 : 4} className="text-center text-muted-foreground">
+                    <TableCell colSpan={canManageAgents ? 6 : 5} className="text-center text-muted-foreground">
                       Chưa có nhóm nào.
                     </TableCell>
                   </TableRow>
@@ -1123,16 +1245,42 @@ export function AgentManager({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="agent-portal-user">Portal user ID</Label>
-              <Input
-                id="agent-portal-user"
-                placeholder="Nhập ID portal user (tuỳ chọn)"
-                value={agentForm.portalUserId}
-                onChange={(event) => setAgentForm((prev) => ({ ...prev, portalUserId: event.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">
-                Gắn agent với tài khoản đăng nhập tương ứng. Để trống nếu chưa tạo portal user.
-              </p>
+              <Label htmlFor="agent-portal-user">Portal user</Label>
+              <Select
+                value={agentForm.portalUserId ? agentForm.portalUserId : NO_PORTAL_USER_VALUE}
+                onValueChange={(value) =>
+                  setAgentForm((prev) => ({ ...prev, portalUserId: value === NO_PORTAL_USER_VALUE ? "" : value }))
+                }
+                disabled={!agentForm.tenantId || portalUserLoading}
+              >
+                <SelectTrigger id="agent-portal-user">
+                  <SelectValue
+                    placeholder={
+                      agentForm.tenantId
+                        ? portalUserLoading
+                          ? "Đang tải danh sách user…"
+                          : "Chọn tài khoản (tuỳ chọn)"
+                        : "Chọn tenant trước"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PORTAL_USER_VALUE}>Không gán</SelectItem>
+                  {portalUserOptions.map((user) => (
+                    <SelectItem key={user.id} value={user.id} disabled={Boolean(user.agentId) && user.agentId !== editingAgent?.id}>
+                      {user.displayName || user.email}
+                      {user.agentId && user.agentId !== editingAgent?.id ? " · Đã gán" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {portalUserError ? (
+                <p className="text-xs text-destructive">{portalUserError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Gắn agent với tài khoản đăng nhập tương ứng. Để trống nếu chưa tạo portal user.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1256,6 +1404,45 @@ export function AgentManager({
                 placeholder="Tuỳ chọn"
               />
             </div>
+
+            {canManageAgents ? (
+              <div className="space-y-2">
+                <Label htmlFor="group-owner">Agent lead phụ trách</Label>
+                <Select
+                  value={groupForm.ownerAgentId ? groupForm.ownerAgentId : NO_OWNER_VALUE}
+                  onValueChange={(value) =>
+                    setGroupForm((prev) => ({ ...prev, ownerAgentId: value === NO_OWNER_VALUE ? "" : value }))
+                  }
+                  disabled={!groupForm.tenantId || ownerLoading}
+                >
+                  <SelectTrigger id="group-owner">
+                    <SelectValue
+                      placeholder={
+                        groupForm.tenantId
+                          ? ownerLoading
+                            ? "Đang tải danh sách agent…"
+                            : "Chọn agent (tuỳ chọn)"
+                          : "Chọn tenant trước"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_OWNER_VALUE}>Không gán</SelectItem>
+                    {ownerOptions.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.displayName}
+                        {agent.groupName ? ` · ${agent.groupName}` : agent.extensionId ? ` · ${agent.extensionId}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {ownerError ? (
+                  <p className="text-xs text-destructive">{ownerError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Để trống nếu muốn hệ thống tự gán lead phù hợp.</p>
+                )}
+              </div>
+            ) : null}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setGroupDialogOpen(false)}>

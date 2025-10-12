@@ -9,4 +9,10 @@ export class ListPortalUsersQueryDto {
 
   @ApiPropertyOptional({ description: 'Từ khoá tìm kiếm theo email/tên/role.' })
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Lọc theo tenant ID.' })
+  tenantId?: string;
+
+  @ApiPropertyOptional({ description: 'Lọc theo role khoá.' })
+  role?: string;
 }
