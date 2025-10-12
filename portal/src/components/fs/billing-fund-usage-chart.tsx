@@ -43,15 +43,15 @@ export function BillingFundUsageChart({ slices, currency }: BillingFundUsageChar
   const chartConfig: ChartConfig = {
     spent: {
       label: "Đã sử dụng",
-      color: "hsl(var(--primary))",
+      color: "hsl(17 88% 56%)",
     },
     remaining: {
       label: "Còn lại",
-      color: "hsl(var(--primary) / 0.18)",
+      color: "hsl(161 70% 40%)",
     },
     overdrawn: {
       label: "Âm quỹ",
-      color: "hsl(var(--destructive))",
+      color: "hsl(349 80% 58%)",
     },
   }
 
