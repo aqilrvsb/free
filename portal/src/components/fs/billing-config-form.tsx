@@ -29,7 +29,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
   const [defaultRate, setDefaultRate] = useState(String(config.defaultRatePerMinute ?? 0));
   const [increment, setIncrement] = useState(String(config.defaultIncrementSeconds ?? 60));
   const [setupFee, setSetupFee] = useState(String(config.defaultSetupFee ?? 0));
-  const [incrementMode, setIncrementMode] = useState(config.defaultIncrementMode ?? "full_block");
+  const [incrementMode, setIncrementMode] = useState<"full_block" | "block_plus_one">(config.defaultIncrementMode ?? "full_block");
   const [taxPercent, setTaxPercent] = useState(String(config.taxPercent ?? 0));
   const [billingEmail, setBillingEmail] = useState(config.billingEmail ?? "");
   const [prepaidEnabled, setPrepaidEnabled] = useState(config.prepaidEnabled);
@@ -140,7 +140,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
           <Label htmlFor="billing-increment-mode">Chế độ làm tròn</Label>
           <Select
             value={incrementMode}
-            onValueChange={setIncrementMode}
+            onValueChange={(value) => setIncrementMode(value as "full_block" | "block_plus_one")}
             disabled={readOnly}
           >
             <SelectTrigger id="billing-increment-mode">
