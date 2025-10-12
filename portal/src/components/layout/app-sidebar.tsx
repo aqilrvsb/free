@@ -59,6 +59,7 @@ type PermissionKey =
   | "manage_portal_users"
   | "manage_roles"
   | "manage_security"
+  | "view_billing"
   | "manage_billing"
   | "manage_agents";
 
