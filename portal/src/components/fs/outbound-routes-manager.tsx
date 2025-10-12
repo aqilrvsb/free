@@ -15,6 +15,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface OutboundRoutesManagerProps {
   tenants: TenantSummary[];
@@ -37,6 +44,7 @@ type RouteFormState = {
   billingEnabled: boolean;
   billingRatePerMinute: string;
   billingIncrementSeconds: string;
+  billingIncrementMode: "full_block" | "block_plus_one";
   billingSetupFee: string;
   billingCid: string;
 };
@@ -54,6 +62,7 @@ const defaultForm: RouteFormState = {
   billingEnabled: false,
   billingRatePerMinute: "0",
   billingIncrementSeconds: "60",
+  billingIncrementMode: "full_block",
   billingSetupFee: "0",
   billingCid: "",
 };
@@ -161,6 +170,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
         route.billingIncrementSeconds !== undefined
           ? String(route.billingIncrementSeconds)
           : defaultForm.billingIncrementSeconds,
+      billingIncrementMode: route.billingIncrementMode ?? defaultForm.billingIncrementMode,
       billingSetupFee:
         route.billingSetupFee !== undefined ? String(route.billingSetupFee) : defaultForm.billingSetupFee,
       billingCid: route.billingCid || "",
@@ -213,6 +223,9 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
     }
     if (form.billingIncrementSeconds.trim()) {
       payload.billingIncrementSeconds = Number(form.billingIncrementSeconds.trim());
+    }
+    if (form.billingIncrementMode) {
+      payload.billingIncrementMode = form.billingIncrementMode;
     }
     if (form.billingSetupFee.trim()) {
       payload.billingSetupFee = Number(form.billingSetupFee.trim());
@@ -567,6 +580,22 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="route-billing-mode">Chế độ làm tròn</Label>
+                  <Select
+                    value={form.billingIncrementMode}
+                    onValueChange={(value) => handleInput("billingIncrementMode", value)}
+                    disabled={!form.billingEnabled}
+                  >
+                    <SelectTrigger id="route-billing-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full_block">Block cố định (làm tròn lên)</SelectItem>
+                      <SelectItem value="block_plus_one">Block + 1s (block đầu, sau đó tính từng giây)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="route-billing-setup">Phí thiết lập</Label>
                   <Input
                     id="route-billing-setup"
@@ -588,7 +617,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Khi bật billing, hệ thống sẽ tính cước dựa trên `billsec` thực tế với bước tính cước đã cấu hình, cộng thêm setup fee nếu có.
+                Khi bật billing, hệ thống sẽ áp dụng chế độ làm tròn đã chọn: block cố định hoặc block + 1 giây sau block đầu, cộng thêm setup fee nếu có.
               </p>
             </div>
 

@@ -19,6 +19,9 @@ export class BillingConfigEntity {
   @Column({ name: 'default_increment_seconds', type: 'int', default: 60 })
   defaultIncrementSeconds!: number;
 
+  @Column({ name: 'default_increment_mode', type: 'varchar', length: 32, default: 'full_block' })
+  defaultIncrementMode!: string;
+
   @Column({ name: 'default_setup_fee', type: 'decimal', precision: 12, scale: 4, default: '0.0000' })
   defaultSetupFee!: string;
 

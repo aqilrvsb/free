@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { BILLING_INCREMENT_MODES, type BillingIncrementMode } from '../../billing/billing.constants';
 
 export class CreateOutboundRouteDto {
   @ApiProperty({ description: 'Tenant áp dụng route' })
@@ -36,6 +37,13 @@ export class CreateOutboundRouteDto {
 
   @ApiPropertyOptional({ description: 'Bước tính cước theo giây', example: 60 })
   billingIncrementSeconds?: number;
+
+  @ApiPropertyOptional({
+    description: 'Chế độ làm tròn thời lượng tính cước',
+    enum: BILLING_INCREMENT_MODES,
+    example: 'full_block',
+  })
+  billingIncrementMode?: BillingIncrementMode;
 
   @ApiPropertyOptional({ description: 'Phí thiết lập (nếu có)', example: 0 })
   billingSetupFee?: number;

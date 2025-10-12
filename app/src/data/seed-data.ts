@@ -26,6 +26,7 @@ export interface SeedBillingConfig {
   currency: string;
   defaultRatePerMinute: number;
   defaultIncrementSeconds: number;
+  defaultIncrementMode?: 'full_block' | 'block_plus_one';
   defaultSetupFee: number;
   taxPercent: number;
   billingEmail?: string | null;
@@ -69,6 +70,7 @@ export const SeedBillingConfigs: SeedBillingConfig[] = [
     currency: 'VND',
     defaultRatePerMinute: 150,
     defaultIncrementSeconds: 60,
+    defaultIncrementMode: 'full_block',
     defaultSetupFee: 0,
     taxPercent: 10,
     billingEmail: 'billing+tenant1@example.com',
@@ -80,6 +82,7 @@ export const SeedBillingConfigs: SeedBillingConfig[] = [
     currency: 'VND',
     defaultRatePerMinute: 120,
     defaultIncrementSeconds: 60,
+    defaultIncrementMode: 'full_block',
     defaultSetupFee: 0,
     taxPercent: 5,
     billingEmail: 'billing+tenant2@example.com',

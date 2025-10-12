@@ -61,6 +61,9 @@ export class OutboundRuleEntity {
   @Column({ name: 'billing_increment_seconds', type: 'int', default: 60 })
   billingIncrementSeconds!: number;
 
+  @Column({ name: 'billing_increment_mode', type: 'varchar', length: 32, default: 'full_block' })
+  billingIncrementMode!: string;
+
   @Column({ name: 'billing_setup_fee', type: 'decimal', precision: 12, scale: 4, default: '0.0000' })
   billingSetupFee!: string;
 

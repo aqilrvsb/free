@@ -6,6 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface BillingConfigFormProps {
   tenantId: string;
@@ -22,6 +29,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
   const [defaultRate, setDefaultRate] = useState(String(config.defaultRatePerMinute ?? 0));
   const [increment, setIncrement] = useState(String(config.defaultIncrementSeconds ?? 60));
   const [setupFee, setSetupFee] = useState(String(config.defaultSetupFee ?? 0));
+  const [incrementMode, setIncrementMode] = useState(config.defaultIncrementMode ?? "full_block");
   const [taxPercent, setTaxPercent] = useState(String(config.taxPercent ?? 0));
   const [billingEmail, setBillingEmail] = useState(config.billingEmail ?? "");
   const [prepaidEnabled, setPrepaidEnabled] = useState(config.prepaidEnabled);
@@ -36,7 +44,8 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
     setTaxPercent(String(config.taxPercent ?? 0));
     setBillingEmail(config.billingEmail ?? "");
     setPrepaidEnabled(config.prepaidEnabled);
-  }, [config.currency, config.defaultRatePerMinute, config.defaultIncrementSeconds, config.defaultSetupFee, config.taxPercent, config.billingEmail, config.prepaidEnabled]);
+    setIncrementMode(config.defaultIncrementMode ?? "full_block");
+  }, [config.currency, config.defaultRatePerMinute, config.defaultIncrementSeconds, config.defaultSetupFee, config.taxPercent, config.billingEmail, config.prepaidEnabled, config.defaultIncrementMode]);
 
   const displayedBalance = balance ?? config.balanceAmount ?? 0;
 
@@ -66,6 +75,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
         taxPercent: Number(taxPercent || 0),
         billingEmail: billingEmail.trim() || undefined,
         prepaidEnabled,
+        defaultIncrementMode: incrementMode,
       };
       const response = await fetch(`${apiBase}/billing/config/${tenantId}`, {
         method: "PUT",
@@ -125,6 +135,22 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
             inputMode="numeric"
             disabled={readOnly}
           />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="billing-increment-mode">Chế độ làm tròn</Label>
+          <Select
+            value={incrementMode}
+            onValueChange={setIncrementMode}
+            disabled={readOnly}
+          >
+            <SelectTrigger id="billing-increment-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="full_block">Block cố định (làm tròn lên)</SelectItem>
+              <SelectItem value="block_plus_one">Block + 1s (block đầu, sau đó tính từng giây)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="billing-setup-fee">Setup fee</Label>

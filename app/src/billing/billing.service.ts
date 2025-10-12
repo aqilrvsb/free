@@ -9,6 +9,11 @@ import {
   BillingTopupEntity,
   TenantEntity,
 } from '../entities';
+import {
+  DEFAULT_BILLING_INCREMENT_MODE,
+  normalizeBillingIncrementMode,
+  type BillingIncrementMode,
+} from './billing.constants';
 import { UpdateBillingConfigDto } from './dto/update-billing-config.dto';
 import { BillingSummaryQueryDto } from './dto/billing-summary-query.dto';
 import { UpdateTopupDto } from './dto/update-topup.dto';
@@ -46,6 +51,7 @@ export class BillingService {
         currency: 'VND',
         defaultRatePerMinute: '0.0000',
         defaultIncrementSeconds: 60,
+        defaultIncrementMode: DEFAULT_BILLING_INCREMENT_MODE,
         defaultSetupFee: '0.0000',
         taxPercent: '0.00',
         billingEmail: null,
@@ -59,6 +65,9 @@ export class BillingService {
       }
       if (config.prepaidEnabled === null || config.prepaidEnabled === undefined) {
         config.prepaidEnabled = false;
+      }
+      if (!config.defaultIncrementMode) {
+        config.defaultIncrementMode = DEFAULT_BILLING_INCREMENT_MODE;
       }
     }
     return config;
@@ -74,6 +83,9 @@ export class BillingService {
     }
     if (dto.defaultIncrementSeconds !== undefined) {
       config.defaultIncrementSeconds = this.normalizeInteger(dto.defaultIncrementSeconds, 1, 60);
+    }
+    if (dto.defaultIncrementMode !== undefined) {
+      config.defaultIncrementMode = this.normalizeIncrementMode(dto.defaultIncrementMode);
     }
     if (dto.defaultSetupFee !== undefined) {
       config.defaultSetupFee = this.normalizeDecimal(dto.defaultSetupFee, 4);
@@ -428,6 +440,10 @@ export class BillingService {
     }
     const parsed = Math.floor(Number(value));
     return parsed < min ? min : parsed;
+  }
+
+  private normalizeIncrementMode(value?: string | null): BillingIncrementMode {
+    return normalizeBillingIncrementMode(value);
   }
 
   private resolveDateRange(from?: Date, to?: Date): { from: Date; to: Date } | undefined {

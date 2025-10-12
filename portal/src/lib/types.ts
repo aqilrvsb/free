@@ -93,6 +93,7 @@ export interface BillingConfig {
   currency: string;
   defaultRatePerMinute: number;
   defaultIncrementSeconds: number;
+  defaultIncrementMode: 'full_block' | 'block_plus_one';
   defaultSetupFee: number;
   taxPercent: number;
   billingEmail?: string | null;
@@ -406,6 +407,7 @@ export interface OutboundRouteSummary {
   billingEnabled?: boolean;
   billingRatePerMinute?: number;
   billingIncrementSeconds?: number;
+  billingIncrementMode?: 'full_block' | 'block_plus_one';
   billingSetupFee?: number;
   billingCid?: string;
   createdAt?: string;

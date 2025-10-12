@@ -12,6 +12,7 @@ import {
 } from './entities';
 import { hash } from 'bcryptjs';
 import { SeedBillingConfigs, SeedRouting, SeedTenants, SeedUsers } from './data/seed-data';
+import { DEFAULT_BILLING_INCREMENT_MODE } from './billing/billing.constants';
 import { PortalRolesService } from './portal/portal-roles.service';
 
 @Injectable()
@@ -104,6 +105,7 @@ export class DemoSeedService implements OnApplicationBootstrap {
         currency: billing.currency,
         defaultRatePerMinute: billing.defaultRatePerMinute.toFixed(4),
         defaultIncrementSeconds: billing.defaultIncrementSeconds,
+        defaultIncrementMode: billing.defaultIncrementMode ?? DEFAULT_BILLING_INCREMENT_MODE,
         defaultSetupFee: billing.defaultSetupFee.toFixed(4),
         taxPercent: billing.taxPercent.toFixed(2),
         billingEmail: billing.billingEmail ?? null,

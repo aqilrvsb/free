@@ -10,6 +10,10 @@ import {
   IvrMenuEntity,
   BillingConfigEntity,
 } from '../entities';
+import {
+  DEFAULT_BILLING_INCREMENT_MODE,
+  normalizeBillingIncrementMode,
+} from '../billing/billing.constants';
 import { CreateAutoDialerCampaignDto } from './dto/create-campaign.dto';
 import { UpdateAutoDialerCampaignDto } from './dto/update-campaign.dto';
 import { ListCampaignsQueryDto } from './dto/list-campaigns-query.dto';
@@ -845,10 +849,26 @@ export class AutoDialerService {
     const increment = Number(config?.defaultIncrementSeconds ?? 60) || 60;
     const setupFee = Number(config?.defaultSetupFee ?? 0);
     const currency = config?.currency ?? 'VND';
+    const incrementMode = config?.defaultIncrementMode
+      ? normalizeBillingIncrementMode(config.defaultIncrementMode)
+      : DEFAULT_BILLING_INCREMENT_MODE;
 
-    const effectiveSeconds = increment > 0 ? Math.ceil(billSeconds / increment) * increment : billSeconds;
-    const billedMinutes = effectiveSeconds / 60;
-    const cost = billedMinutes * ratePerMinute + setupFee;
+    const safeIncrement = increment > 0 ? increment : 60;
+    const safeRatePerMinute = ratePerMinute > 0 ? ratePerMinute : 0;
+    const setupFeeAmount = setupFee > 0 ? setupFee : 0;
+    const ratePerSecond = safeRatePerMinute / 60;
+
+    let cost = setupFeeAmount;
+    if (billSeconds > 0 && safeRatePerMinute > 0) {
+      if (incrementMode === 'block_plus_one') {
+        const primaryBlock = safeIncrement > 0 ? safeIncrement : 1;
+        const billedSeconds = Math.max(primaryBlock, Math.ceil(billSeconds));
+        cost += billedSeconds * ratePerSecond;
+      } else {
+        const units = safeIncrement > 0 ? Math.ceil(billSeconds / safeIncrement) : Math.ceil(billSeconds);
+        cost += units * (ratePerSecond * safeIncrement);
+      }
+    }
 
     return {
       cost,

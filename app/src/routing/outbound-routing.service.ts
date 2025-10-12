@@ -2,6 +2,11 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { OutboundRuleEntity, GatewayEntity, TenantEntity } from '../entities';
+import {
+  DEFAULT_BILLING_INCREMENT_MODE,
+  normalizeBillingIncrementMode,
+  type BillingIncrementMode,
+} from '../billing/billing.constants';
 
 export interface CreateOutboundRouteDto {
   tenantId: string;
@@ -16,6 +21,7 @@ export interface CreateOutboundRouteDto {
   billingEnabled?: boolean;
   billingRatePerMinute?: number | string;
   billingIncrementSeconds?: number;
+  billingIncrementMode?: BillingIncrementMode;
   billingSetupFee?: number | string;
   billingCid?: string;
 }
@@ -98,6 +104,7 @@ export class OutboundRoutingService {
       billingEnabled: dto.billingEnabled !== undefined ? Boolean(dto.billingEnabled) : false,
       billingRatePerMinute: this.normalizeDecimal(dto.billingRatePerMinute, 4),
       billingIncrementSeconds: this.normalizeNumber(dto.billingIncrementSeconds, 1, 1),
+      billingIncrementMode: this.normalizeIncrementMode(dto.billingIncrementMode),
       billingSetupFee: this.normalizeDecimal(dto.billingSetupFee, 4),
       billingCid: dto.billingCid?.trim() || null,
     });
@@ -170,6 +177,9 @@ export class OutboundRoutingService {
     if (dto.billingIncrementSeconds !== undefined) {
       rule.billingIncrementSeconds = this.normalizeNumber(dto.billingIncrementSeconds, 1, 1);
     }
+    if (dto.billingIncrementMode !== undefined) {
+      rule.billingIncrementMode = this.normalizeIncrementMode(dto.billingIncrementMode);
+    }
     if (dto.billingSetupFee !== undefined) {
       rule.billingSetupFee = this.normalizeDecimal(dto.billingSetupFee, 4);
     }
@@ -220,11 +230,16 @@ export class OutboundRoutingService {
       billingEnabled: rule.billingEnabled,
       billingRatePerMinute: Number(rule.billingRatePerMinute ?? 0),
       billingIncrementSeconds: rule.billingIncrementSeconds,
+      billingIncrementMode: (rule.billingIncrementMode as BillingIncrementMode | undefined) ?? DEFAULT_BILLING_INCREMENT_MODE,
       billingSetupFee: Number(rule.billingSetupFee ?? 0),
       billingCid: rule.billingCid ?? undefined,
       createdAt: rule.createdAt,
       updatedAt: rule.updatedAt,
     };
+  }
+
+  private normalizeIncrementMode(value?: string | null): BillingIncrementMode {
+    return normalizeBillingIncrementMode(value);
   }
 
   private normalizeNumber(value?: number | string, min: number = 0, fallback: number = 0): number {

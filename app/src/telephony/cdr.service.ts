@@ -7,6 +7,7 @@ import { In, Repository } from 'typeorm';
 import { CdrEntity, OutboundRuleEntity, BillingConfigEntity, TenantEntity, AgentEntity } from '../entities';
 import { RecordingsService } from './recordings.service';
 import { BillingService } from '../billing/billing.service';
+import { normalizeBillingIncrementMode, type BillingIncrementMode } from '../billing/billing.constants';
 
 interface ParsedEpochInput {
   primary?: string | number | null;
@@ -1182,15 +1183,23 @@ export class CdrService {
     const variableRate = this.toNumber(variables.billing_rate_per_min ?? variables.billing_rate);
     const variableSetupFee = this.toNumber(variables.billing_setup_fee);
     const variableIncrement = this.toNumber(variables.billing_increment_seconds);
+    const variableIncrementModeRaw = this.coalesceString(variables.billing_increment_mode);
+    const variableIncrementMode = variableIncrementModeRaw
+      ? normalizeBillingIncrementMode(variableIncrementModeRaw)
+      : undefined;
 
     const billingEnabled = route?.billingEnabled ?? false;
     const routeRate = this.toNumber(route?.billingRatePerMinute);
     const routeSetupFee = this.toNumber(route?.billingSetupFee);
     const routeIncrement = route?.billingIncrementSeconds;
+    const routeIncrementMode = route?.billingIncrementMode
+      ? normalizeBillingIncrementMode(route.billingIncrementMode)
+      : undefined;
 
     const configRate = this.toNumber(config?.defaultRatePerMinute);
     const configSetupFee = this.toNumber(config?.defaultSetupFee);
     const configIncrement = config?.defaultIncrementSeconds;
+    const configIncrementMode = normalizeBillingIncrementMode(config?.defaultIncrementMode);
 
     const ratePerMinute = billingEnabled
       ? routeRate ?? variableRate ?? 0
@@ -1201,6 +1210,9 @@ export class CdrService {
     const incrementSeconds = billingEnabled
       ? routeIncrement ?? variableIncrement ?? configIncrement ?? 60
       : variableIncrement ?? configIncrement ?? 60;
+    const incrementMode: BillingIncrementMode = billingEnabled
+      ? routeIncrementMode ?? variableIncrementMode ?? configIncrementMode
+      : variableIncrementMode ?? configIncrementMode;
 
     const cid = presetCid ?? route?.billingCid ?? baseCid;
 
@@ -1217,17 +1229,34 @@ export class CdrService {
       };
     }
 
-    const increment = incrementSeconds && incrementSeconds > 0 ? incrementSeconds : 60;
-    const perUnitCharge = (ratePerMinute * increment) / 60;
-    const units = increment > 0 ? Math.ceil(effectiveSeconds / increment) : Math.ceil(effectiveSeconds / 60);
-    const subtotal = units * perUnitCharge + (setupFee ?? 0);
+    const safeIncrement = incrementSeconds && incrementSeconds > 0 ? incrementSeconds : 60;
+    const safeRatePerMinute = ratePerMinute ?? 0;
+    const setupFeeAmount = setupFee ?? 0;
+    const ratePerSecond = safeRatePerMinute / 60;
+
+    let subtotal = setupFeeAmount;
+    if (effectiveSeconds > 0 && safeRatePerMinute > 0) {
+      if (incrementMode === 'block_plus_one') {
+        const primaryBlock = safeIncrement > 0 ? safeIncrement : 1;
+        const billedSeconds = Math.max(primaryBlock, Math.ceil(effectiveSeconds));
+        subtotal += billedSeconds * ratePerSecond;
+      } else {
+        const perBlockCharge = ratePerSecond * safeIncrement;
+        const units =
+          safeIncrement > 0 ? Math.ceil(effectiveSeconds / safeIncrement) : Math.ceil(effectiveSeconds);
+        subtotal += units * perBlockCharge;
+      }
+    } else if (setupFeeAmount && effectiveSeconds <= 0) {
+      subtotal = setupFeeAmount;
+    }
+
     const total = taxPercent > 0 ? subtotal * (1 + taxPercent / 100) : subtotal;
 
     return {
       cost: total.toFixed(6),
       currency,
       cid,
-      rateApplied: (ratePerMinute ?? 0).toFixed(4),
+      rateApplied: safeRatePerMinute.toFixed(4),
       routeId: route?.id ?? routeId,
       prepaidEnabled: Boolean(config?.prepaidEnabled),
       chargeAmount: total,
