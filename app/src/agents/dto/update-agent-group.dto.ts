@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, Length } from 'class-validator';
+import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
 
 export class UpdateAgentGroupDto {
   @ApiPropertyOptional({ description: 'Tên nhóm quản lý' })
@@ -13,4 +13,9 @@ export class UpdateAgentGroupDto {
   @IsString()
   @Length(0, 500)
   description?: string | null;
+
+  @ApiPropertyOptional({ description: 'Agent sở hữu nhóm', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  ownerAgentId?: string | null;
 }

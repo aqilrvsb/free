@@ -18,13 +18,14 @@ interface AuthenticatedRequest extends Request {
   user?: {
     role?: string;
     tenantIds?: string[];
+    agentId?: string | null;
   };
 }
 
 @ApiTags(SwaggerTags.Portal)
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('super_admin', 'tenant_admin')
+@Roles('super_admin', 'tenant_admin', 'agent_lead')
 @Controller()
 export class PortalUsersController {
   constructor(private readonly portalUsersService: PortalUsersService) {}
@@ -36,6 +37,9 @@ export class PortalUsersController {
     return {
       isSuperAdmin: role === 'super_admin',
       tenantIds,
+      role,
+      agentId: req?.user?.agentId ?? null,
+      isAgentLead: role === 'agent_lead',
     };
   }
 

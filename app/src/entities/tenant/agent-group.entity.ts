@@ -36,6 +36,16 @@ export class AgentGroupEntity {
   @OneToMany(() => AgentEntity, (agent) => agent.group)
   agents?: AgentEntity[];
 
+  @Column({ name: 'owner_agent_id', type: 'char', length: 36, nullable: true })
+  ownerAgentId?: string | null;
+
+  @ManyToOne(() => AgentEntity, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'owner_agent_id' })
+  ownerAgent?: AgentEntity | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

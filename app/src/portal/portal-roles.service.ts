@@ -19,7 +19,7 @@ interface UpdatePortalRoleDto {
 
 @Injectable()
 export class PortalRolesService implements OnModuleInit {
-  private readonly systemRoleKeys = ['super_admin', 'tenant_admin', 'viewer', 'operator'];
+  private readonly systemRoleKeys = ['super_admin', 'tenant_admin', 'viewer', 'operator', 'agent_lead', 'agent'];
 
   private readonly allPermissions = [
     'view_dashboard',
@@ -40,6 +40,8 @@ export class PortalRolesService implements OnModuleInit {
     'manage_security',
     'manage_billing',
     'manage_agents',
+    'manage_sub_agents',
+    'manage_own_groups',
   ];
 
   private readonly defaultRoleMap: Record<string, Omit<CreatePortalRoleDto, 'key'>> = {
@@ -77,12 +79,32 @@ export class PortalRolesService implements OnModuleInit {
         'manage_extensions',
         'manage_portal_users',
         'manage_agents',
+        'manage_sub_agents',
+        'manage_own_groups',
       ],
     },
     super_admin: {
       name: 'Super Administrator',
       description: 'Toàn quyền quản trị hệ thống và mọi tenant',
       permissions: this.allPermissions,
+    },
+    agent_lead: {
+      name: 'Agent Lead',
+      description: 'Quản lý agent cấp dưới và nhóm nội bộ',
+      permissions: [
+        'view_dashboard',
+        'view_cdr',
+        'view_recordings',
+        'manage_agents',
+        'manage_portal_users',
+        'manage_sub_agents',
+        'manage_own_groups',
+      ],
+    },
+    agent: {
+      name: 'Agent',
+      description: 'Truy cập KPI và CDR cá nhân',
+      permissions: ['view_dashboard', 'view_cdr', 'view_recordings'],
     },
   };
 

@@ -276,7 +276,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   <TableHead>Call UUID</TableHead>
                   {/* <TableHead>Leg</TableHead> */}
                   <TableHead>Chiều</TableHead>
-                  <TableHead>Extension</TableHead>
+                  <TableHead>Số gọi</TableHead>
                   <TableHead>Agent</TableHead>
                   <TableHead>Nhóm</TableHead>
                   <TableHead>Số bị gọi</TableHead>
@@ -314,9 +314,9 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                         {item.agentName ? (
                           <div>
                             <div className="font-medium">{item.agentName}</div>
-                            {item.agentId ? (
+                            {/* {item.agentId ? (
                               <div className="text-xs text-muted-foreground">ID: {item.agentId}</div>
-                            ) : null}
+                            ) : null} */}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>

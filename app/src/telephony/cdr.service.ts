@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
@@ -27,6 +27,14 @@ export interface CdrQuery {
   agentExtension?: string;
   page: number;
   pageSize: number;
+}
+
+interface CdrScope {
+  isSuperAdmin: boolean;
+  tenantIds: string[];
+  role?: string | null;
+  agentId?: string | null;
+  isAgentLead: boolean;
 }
 
 @Injectable()
@@ -78,6 +86,74 @@ export class CdrService {
     this.recordingsDir = this.normalizeDirectory(configService.get<string>('RECORDINGS_DIR', '/recordings'));
   }
 
+  private async resolveAccessibleAgentIds(scope?: CdrScope): Promise<Set<string> | null> {
+    if (!scope || scope.isSuperAdmin) {
+      return null;
+    }
+
+    if (scope.isAgentLead && scope.agentId) {
+      const where: Record<string, any> = {};
+      if (scope.tenantIds.length > 0) {
+        where.tenantId = In(scope.tenantIds);
+      }
+
+      const agents = await this.agentRepo.find({
+        where,
+        select: ['id', 'parentAgentId'],
+      });
+
+      const childrenMap = new Map<string | null, string[]>();
+      for (const agent of agents) {
+        const parentKey = agent.parentAgentId ?? null;
+        if (!childrenMap.has(parentKey)) {
+          childrenMap.set(parentKey, []);
+        }
+        childrenMap.get(parentKey)!.push(agent.id);
+      }
+
+      const accessible = new Set<string>();
+      const queue: string[] = [scope.agentId];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (accessible.has(current)) {
+          continue;
+        }
+        accessible.add(current);
+        const children = childrenMap.get(current) ?? [];
+        for (const child of children) {
+          if (!accessible.has(child)) {
+            queue.push(child);
+          }
+        }
+      }
+
+      return accessible;
+    }
+
+    if (scope.role === 'agent' && scope.agentId) {
+      return new Set<string>([scope.agentId]);
+    }
+
+    return null;
+  }
+
+  private async ensureCdrAccess(record: CdrEntity, scope?: CdrScope): Promise<void> {
+    if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+
+    if (scope.tenantIds.length > 0 && record.tenantId && !scope.tenantIds.includes(record.tenantId)) {
+      throw new ForbiddenException('Không có quyền truy cập bản ghi này');
+    }
+
+    const accessibleAgents = await this.resolveAccessibleAgentIds(scope);
+    if (accessibleAgents) {
+      if (!record.agentId || !accessibleAgents.has(record.agentId)) {
+        throw new ForbiddenException('Không có quyền truy cập bản ghi này');
+      }
+    }
+  }
+
   private readonly tenantLookupCache = new Map<string, { id: string; domain: string }>();
 
   async ingestCdr(payload: any): Promise<void> {
@@ -101,18 +177,47 @@ export class CdrService {
     }
   }
 
-  async listCdrs(query: CdrQuery) {
+  async listCdrs(query: CdrQuery, scope?: CdrScope) {
     const qb = this.cdrRepo.createQueryBuilder('cdr').orderBy('cdr.startTime', 'DESC');
 
     qb.andWhere('cdr.leg = :leg', { leg: 'B' });
 
+    const emptyResult = { items: [] as CdrEntity[], total: 0, page: query.page, pageSize: query.pageSize };
+
+    if (scope && !scope.isSuperAdmin) {
+      if ((scope.role === 'agent' || scope.isAgentLead) && !scope.agentId) {
+        return emptyResult;
+      }
+    }
+
     if (query.tenantId) {
       const tenantKeys = await this.resolveTenantFilterKeys(query.tenantId);
+      if (scope && !scope.isSuperAdmin) {
+        const primaryTenantId = tenantKeys[0];
+        if (!scope.tenantIds.includes(primaryTenantId)) {
+          throw new ForbiddenException('Không có quyền truy cập tenant này');
+        }
+      }
       if (tenantKeys.length > 1) {
         qb.andWhere('cdr.tenantId IN (:...tenantIds)', { tenantIds: tenantKeys });
       } else {
         qb.andWhere('cdr.tenantId = :tenantId', { tenantId: tenantKeys[0] });
       }
+    } else if (scope && !scope.isSuperAdmin) {
+      if (!scope.tenantIds.length) {
+        return emptyResult;
+      }
+      qb.andWhere('cdr.tenantId IN (:...allowedTenantIds)', { allowedTenantIds: scope.tenantIds });
+    }
+
+    const accessibleAgents = await this.resolveAccessibleAgentIds(scope);
+    if (accessibleAgents) {
+      if (!accessibleAgents.size) {
+        return emptyResult;
+      }
+      qb.andWhere('cdr.agentId IN (:...accessibleAgentIds)', {
+        accessibleAgentIds: Array.from(accessibleAgents.values()),
+      });
     }
     if (query.direction) {
       qb.andWhere('cdr.direction = :direction', { direction: query.direction });
@@ -232,11 +337,12 @@ export class CdrService {
     };
   }
 
-  async getById(id: string): Promise<CdrEntity> {
+  async getById(id: string, scope?: CdrScope): Promise<CdrEntity> {
     const entity = await this.cdrRepo.findOne({ where: { id } });
     if (!entity) {
       throw new NotFoundException('CDR not found');
     }
+    await this.ensureCdrAccess(entity, scope);
     const bridgeUuid = this.extractBridgeUuid(entity.rawPayload);
     const hints = await this.fetchRecordingHints(
       [entity.callUuid, bridgeUuid].filter((value): value is string => Boolean(value)),
@@ -245,11 +351,12 @@ export class CdrService {
     return this.withRecordingInfo(entity, fallback);
   }
 
-  async getByCallUuid(callUuid: string): Promise<CdrEntity | null> {
+  async getByCallUuid(callUuid: string, scope?: CdrScope): Promise<CdrEntity | null> {
     const entity = await this.cdrRepo.findOne({ where: { callUuid, leg: 'B' } });
     if (!entity) {
       return null;
     }
+    await this.ensureCdrAccess(entity, scope);
     const bridgeUuid = this.extractBridgeUuid(entity.rawPayload);
     const hints = await this.fetchRecordingHints([callUuid, bridgeUuid].filter((value): value is string => Boolean(value)));
     const fallback = hints.get(callUuid) ?? (bridgeUuid ? hints.get(bridgeUuid) : undefined);

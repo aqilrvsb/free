@@ -116,7 +116,7 @@ export async function middleware(request: NextRequest) {
   if (requiresAdminAccess(pathname)) {
     const user = parsePortalUserCookie(request.cookies.get("portal_user")?.value);
     const role = user?.role === "admin" ? "super_admin" : user?.role;
-    const isPrivileged = role === "super_admin" || role === "tenant_admin";
+    const isPrivileged = role === "super_admin" || role === "tenant_admin" || role === "agent_lead";
     if (!isPrivileged) {
       const redirectUrl = new URL("/", request.url);
       return NextResponse.redirect(redirectUrl);

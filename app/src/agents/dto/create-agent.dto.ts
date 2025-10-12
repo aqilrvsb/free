@@ -23,6 +23,16 @@ export class CreateAgentDto {
   @IsUUID()
   groupId?: string;
 
+  @ApiPropertyOptional({ description: 'Portal user gắn với agent', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  portalUserId?: string;
+
+  @ApiPropertyOptional({ description: 'Agent cấp trên', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  parentAgentId?: string;
+
   @ApiPropertyOptional({ description: 'Bật KPI theo talktime' })
   @IsOptional()
   @IsBoolean()

@@ -18,7 +18,9 @@ export type PermissionKey =
   | "manage_roles"
   | "manage_security"
   | "manage_billing"
-  | "manage_agents";
+  | "manage_agents"
+  | "manage_sub_agents"
+  | "manage_own_groups";
 
 type PermissionSet = Record<PermissionKey, boolean>;
 
@@ -41,6 +43,8 @@ const BASE_PERMISSIONS: PermissionSet = {
   manage_security: false,
   manage_billing: false,
   manage_agents: false,
+  manage_sub_agents: false,
+  manage_own_groups: false,
 };
 
 const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
@@ -66,6 +70,8 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
     manage_security: false,
     manage_billing: true,
     manage_agents: true,
+    manage_sub_agents: true,
+    manage_own_groups: true,
   },
   super_admin: {
     ...Object.keys(BASE_PERMISSIONS).reduce((acc, key) => {
@@ -78,6 +84,16 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
       acc[key as PermissionKey] = true;
       return acc;
     }, {} as PermissionSet),
+  },
+  agent_lead: {
+    ...BASE_PERMISSIONS,
+    manage_agents: true,
+    manage_portal_users: true,
+    manage_sub_agents: true,
+    manage_own_groups: true,
+  },
+  agent: {
+    ...BASE_PERMISSIONS,
   },
 };
 

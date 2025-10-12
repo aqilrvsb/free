@@ -1,7 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
-import { PortalRoleEntity, PortalUserEntity, PortalUserRole, PortalUserTenantEntity, TenantEntity } from '../entities';
+import {
+  AgentEntity,
+  PortalRoleEntity,
+  PortalUserEntity,
+  PortalUserRole,
+  PortalUserTenantEntity,
+  TenantEntity,
+} from '../entities';
 import { hash, compare } from 'bcryptjs';
 
 export interface CreatePortalUserDto {
@@ -23,9 +30,18 @@ export interface UpdatePortalUserDto {
   tenantIds?: string[] | null;
 }
 
+interface PortalUserScope {
+  isSuperAdmin: boolean;
+  tenantIds: string[];
+  role?: string | null;
+  agentId?: string | null;
+  isAgentLead?: boolean;
+}
+
 @Injectable()
 export class PortalUsersService {
-  private readonly tenantAdminAssignableRoles = new Set<PortalUserRole>(['viewer', 'operator', 'tenant_admin']);
+  private readonly tenantAdminAssignableRoles = new Set<PortalUserRole>(['viewer', 'operator', 'tenant_admin', 'agent', 'agent_lead']);
+  private readonly agentLeadAssignableRoles = new Set<PortalUserRole>(['agent']);
 
   constructor(
     @InjectRepository(PortalUserEntity)
@@ -36,16 +52,21 @@ export class PortalUsersService {
     private readonly portalUserTenantRepo: Repository<PortalUserTenantEntity>,
     @InjectRepository(TenantEntity)
     private readonly tenantRepo: Repository<TenantEntity>,
+    @InjectRepository(AgentEntity)
+    private readonly agentRepo: Repository<AgentEntity>,
   ) {}
 
   async listUsers(
     options?: { search?: string | null },
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
+    scope?: PortalUserScope,
   ): Promise<Array<Record<string, any>>> {
     const query = this.portalUserRepo
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.roleDefinition', 'role')
       .leftJoinAndSelect('user.tenantMemberships', 'membership')
+      .leftJoinAndSelect('user.agents', 'agent')
+      .leftJoinAndSelect('agent.group', 'agentGroup')
+      .leftJoinAndSelect('agent.parentAgent', 'agentParent')
       .distinct(true)
       .orderBy('user.createdAt', 'DESC');
 
@@ -61,7 +82,7 @@ export class PortalUsersService {
       );
     }
 
-    this.applyScopeFilter(query, scope);
+    await this.applyScopeFilter(query, scope);
 
     const users = await query.getMany();
     return users.map((user) => this.sanitizeUser(user));
@@ -71,12 +92,15 @@ export class PortalUsersService {
     page: number;
     pageSize: number;
     search?: string | null;
-  }, scope?: { isSuperAdmin: boolean; tenantIds: string[] }): Promise<{ items: Array<Record<string, any>>; total: number; page: number; pageSize: number }> {
+  }, scope?: PortalUserScope): Promise<{ items: Array<Record<string, any>>; total: number; page: number; pageSize: number }> {
     const { page, pageSize, search } = params;
     const query = this.portalUserRepo
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.roleDefinition', 'role')
       .leftJoinAndSelect('user.tenantMemberships', 'membership')
+      .leftJoinAndSelect('user.agents', 'agent')
+      .leftJoinAndSelect('agent.group', 'agentGroup')
+      .leftJoinAndSelect('agent.parentAgent', 'agentParent')
       .distinct(true)
       .orderBy('user.createdAt', 'DESC')
       .skip((page - 1) * pageSize)
@@ -94,7 +118,7 @@ export class PortalUsersService {
       );
     }
 
-    this.applyScopeFilter(query, scope);
+    await this.applyScopeFilter(query, scope);
 
     const [users, total] = await query.getManyAndCount();
     return {
@@ -105,19 +129,16 @@ export class PortalUsersService {
     };
   }
 
-  async getUser(
-    id: string,
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
-  ): Promise<Record<string, any>> {
+  async getUser(id: string, scope?: PortalUserScope): Promise<Record<string, any>> {
     const user = await this.portalUserRepo.findOne({
       where: { id },
-      relations: ['roleDefinition', 'tenantMemberships'],
+      relations: ['roleDefinition', 'tenantMemberships', 'agents', 'agents.group', 'agents.parentAgent'],
     });
     if (!user) {
       throw new NotFoundException('Portal user không tồn tại');
     }
 
-    this.ensureUserInScope(user, scope);
+    await this.ensureUserInScope(user, scope);
     return this.sanitizeUser(user);
   }
 
@@ -181,7 +202,7 @@ export class PortalUsersService {
 
   async createUser(
     dto: CreatePortalUserDto,
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
+    scope?: PortalUserScope,
   ): Promise<Record<string, any>> {
     const email = dto.email?.trim().toLowerCase();
     if (!email || !email.includes('@')) {
@@ -206,6 +227,11 @@ export class PortalUsersService {
 
     this.assertRoleAssignmentAllowed(roleKey, scope);
 
+    let tenantIdsPayload = dto.tenantIds;
+    if (scope?.isAgentLead) {
+      tenantIdsPayload = tenantIdsPayload && tenantIdsPayload.length > 0 ? tenantIdsPayload : [...scope.tenantIds];
+    }
+
     const user = this.portalUserRepo.create({
       email,
       passwordHash,
@@ -217,11 +243,11 @@ export class PortalUsersService {
     });
 
     await this.portalUserRepo.save(user);
-    await this.syncTenantMemberships(user.id, roleKey, dto.tenantIds, scope);
+    await this.syncTenantMemberships(user.id, roleKey, tenantIdsPayload, scope);
 
     const saved = await this.portalUserRepo.findOne({
       where: { id: user.id },
-      relations: ['roleDefinition', 'tenantMemberships'],
+      relations: ['roleDefinition', 'tenantMemberships', 'agents', 'agents.group', 'agents.parentAgent'],
     });
     return this.sanitizeUser(saved!);
   }
@@ -229,17 +255,17 @@ export class PortalUsersService {
   async updateUser(
     id: string,
     dto: UpdatePortalUserDto,
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
+    scope?: PortalUserScope,
   ): Promise<Record<string, any>> {
     const user = await this.portalUserRepo.findOne({
       where: { id },
-      relations: ['roleDefinition', 'tenantMemberships'],
+      relations: ['roleDefinition', 'tenantMemberships', 'agents', 'agents.group', 'agents.parentAgent'],
     });
     if (!user) {
       throw new NotFoundException('Portal user không tồn tại');
     }
 
-    this.ensureUserInScope(user, scope);
+    await this.ensureUserInScope(user, scope);
 
     if (dto.email !== undefined) {
       const email = dto.email.trim().toLowerCase();
@@ -286,45 +312,41 @@ export class PortalUsersService {
 
     const saved = await this.portalUserRepo.findOne({
       where: { id: user.id },
-      relations: ['roleDefinition', 'tenantMemberships'],
+      relations: ['roleDefinition', 'tenantMemberships', 'agents', 'agents.group', 'agents.parentAgent'],
     });
     return this.sanitizeUser(saved!);
   }
 
-  async resetPassword(
-    id: string,
-    password: string,
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
-  ): Promise<Record<string, any>> {
+  async resetPassword(id: string, password: string, scope?: PortalUserScope): Promise<Record<string, any>> {
     if (!password || password.trim().length < 6) {
       throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự');
     }
 
     const user = await this.portalUserRepo.findOne({
       where: { id },
-      relations: ['roleDefinition', 'tenantMemberships'],
+      relations: ['roleDefinition', 'tenantMemberships', 'agents', 'agents.group', 'agents.parentAgent'],
     });
     if (!user) {
       throw new NotFoundException('Portal user không tồn tại');
     }
 
-    this.ensureUserInScope(user, scope);
+    await this.ensureUserInScope(user, scope);
 
     user.passwordHash = await hash(password.trim(), 10);
     await this.portalUserRepo.save(user);
     return this.sanitizeUser(user);
   }
 
-  async deleteUser(id: string, scope?: { isSuperAdmin: boolean; tenantIds: string[] }): Promise<void> {
+  async deleteUser(id: string, scope?: PortalUserScope): Promise<void> {
     if (scope && !scope.isSuperAdmin) {
-      const user = await this.portalUserRepo.findOne({
-        where: { id },
-        relations: ['tenantMemberships'],
-      });
+    const user = await this.portalUserRepo.findOne({
+      where: { id },
+      relations: ['tenantMemberships', 'agents'],
+    });
       if (!user) {
         return;
       }
-      this.ensureUserInScope(user, scope);
+      await this.ensureUserInScope(user, scope);
     }
     await this.portalUserRepo.delete({ id });
   }
@@ -353,6 +375,9 @@ export class PortalUsersService {
           .map((item) => item.tenantId)
           .sort((a, b) => a.localeCompare(b))
       : [];
+    const agentLink = Array.isArray((user as any).agents) && (user as any).agents.length > 0
+      ? ((user as any).agents as AgentEntity[])[0]
+      : null;
     return {
       id: user.id,
       email: user.email,
@@ -364,6 +389,12 @@ export class PortalUsersService {
       isActive: user.isActive,
       permissions,
       tenantIds,
+      agentId: agentLink?.id ?? null,
+      agentTenantId: agentLink?.tenantId ?? null,
+      agentGroupId: agentLink?.groupId ?? null,
+      agentGroupName: agentLink?.group?.name ?? null,
+      parentAgentId: agentLink?.parentAgentId ?? null,
+      parentAgentName: agentLink?.parentAgent?.displayName ?? null,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -387,7 +418,7 @@ export class PortalUsersService {
     userId: string,
     roleKey: string,
     tenantIds: string[] | null | undefined,
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
+    scope?: PortalUserScope,
   ): Promise<void> {
     const allowedTenantIds = scope?.isSuperAdmin ? null : Array.from(new Set(scope?.tenantIds ?? []));
 
@@ -467,10 +498,54 @@ export class PortalUsersService {
     return Array.from(normalized.values()).sort((a, b) => a.localeCompare(b));
   }
 
-  private applyScopeFilter(
+  private async resolveAccessibleAgentIds(scope?: PortalUserScope): Promise<Set<string> | null> {
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+      return null;
+    }
+
+    const where: Record<string, any> = {};
+    if (scope.tenantIds.length > 0) {
+      where.tenantId = In(scope.tenantIds);
+    }
+
+    const agents = await this.agentRepo.find({
+      where,
+      select: ['id', 'parentAgentId'],
+    });
+
+    const childrenMap = new Map<string | null, string[]>();
+    for (const agent of agents) {
+      const parentKey = agent.parentAgentId ?? null;
+      if (!childrenMap.has(parentKey)) {
+        childrenMap.set(parentKey, []);
+      }
+      childrenMap.get(parentKey)!.push(agent.id);
+    }
+
+    const accessible = new Set<string>();
+    const queue: string[] = [scope.agentId];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (accessible.has(current)) {
+        continue;
+      }
+      accessible.add(current);
+      const children = childrenMap.get(current) ?? [];
+      for (const child of children) {
+        if (!accessible.has(child)) {
+          queue.push(child);
+        }
+      }
+    }
+
+    return accessible;
+  }
+
+  private async applyScopeFilter(
     query: SelectQueryBuilder<PortalUserEntity>,
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
-  ): void {
+    scope?: PortalUserScope,
+  ): Promise<void> {
     if (!scope || scope.isSuperAdmin) {
       return;
     }
@@ -490,12 +565,25 @@ export class PortalUsersService {
       'NOT EXISTS (SELECT 1 FROM portal_user_tenants put_block WHERE put_block.portal_user_id = user.id AND put_block.tenant_id NOT IN (:...allowedTenantIds))',
       { allowedTenantIds },
     );
+
+    if (scope.isAgentLead && scope.agentId) {
+      const accessible = await this.resolveAccessibleAgentIds(scope);
+      if (!accessible || accessible.size === 0) {
+        query.andWhere('1 = 0');
+        return;
+      }
+      query.leftJoin('user.agents', 'scopeAgent');
+      query.andWhere(
+        '(scopeAgent.id IN (:...accessibleAgentIds) OR (scopeAgent.id IS NULL AND user.roleKey = :agentRoleKey))',
+        {
+          accessibleAgentIds: Array.from(accessible.values()),
+          agentRoleKey: 'agent',
+        },
+      );
+    }
   }
 
-  private ensureUserInScope(
-    user: PortalUserEntity,
-    scope?: { isSuperAdmin: boolean; tenantIds: string[] },
-  ): void {
+  private async ensureUserInScope(user: PortalUserEntity, scope?: PortalUserScope): Promise<void> {
     if (!scope || scope.isSuperAdmin) {
       return;
     }
@@ -513,15 +601,42 @@ export class PortalUsersService {
     if (outside.length > 0) {
       throw new ForbiddenException('Không có quyền thao tác với tài khoản ngoài phạm vi tenant');
     }
+
+    if (scope.isAgentLead && scope.agentId) {
+      const agentLinks = Array.isArray((user as any).agents)
+        ? ((user as any).agents as AgentEntity[])
+        : await this.agentRepo.find({ where: { portalUserId: user.id } });
+      if (!agentLinks.length) {
+        if (user.roleKey === 'agent') {
+          return;
+        }
+        throw new ForbiddenException('Không có quyền thao tác với tài khoản ngoài phạm vi agent');
+      }
+      const accessible = await this.resolveAccessibleAgentIds(scope);
+      if (!accessible || accessible.size === 0) {
+        throw new ForbiddenException('Không có quyền thao tác với tài khoản ngoài phạm vi agent');
+      }
+      const matched = agentLinks.some((agent) => accessible.has(agent.id));
+      if (!matched) {
+        throw new ForbiddenException('Không có quyền thao tác với tài khoản ngoài phạm vi agent');
+      }
+    }
   }
 
-  private assertRoleAssignmentAllowed(roleKey: string, scope?: { isSuperAdmin: boolean; tenantIds: string[] }): void {
+  private assertRoleAssignmentAllowed(roleKey: string, scope?: PortalUserScope): void {
     if (scope?.isSuperAdmin) {
       return;
     }
 
     if (roleKey === 'super_admin') {
       throw new ForbiddenException('Không thể gán quyền super admin');
+    }
+
+    if (scope?.isAgentLead) {
+      if (!this.agentLeadAssignableRoles.has(roleKey)) {
+        throw new ForbiddenException('Không thể gán quyền nằm ngoài phạm vi cho phép');
+      }
+      return;
     }
 
     if (!this.tenantAdminAssignableRoles.has(roleKey)) {

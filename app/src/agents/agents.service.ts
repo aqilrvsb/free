@@ -1,11 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
-import { AgentEntity, AgentGroupEntity, CdrEntity, TenantEntity, UserEntity } from '../entities';
+import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
+import { AgentEntity, AgentGroupEntity, CdrEntity, PortalUserEntity, TenantEntity, UserEntity } from '../entities';
 
 interface AgentScope {
   isSuperAdmin: boolean;
   tenantIds: string[];
+  role: string | null;
+  agentId?: string | null;
+  isAgentLead: boolean;
 }
 
 interface ListAgentsParams {
@@ -35,6 +38,7 @@ export class AgentsService {
   constructor(
     @InjectRepository(AgentEntity) private readonly agentRepo: Repository<AgentEntity>,
     @InjectRepository(AgentGroupEntity) private readonly groupRepo: Repository<AgentGroupEntity>,
+    @InjectRepository(PortalUserEntity) private readonly portalUserRepo: Repository<PortalUserEntity>,
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(CdrEntity) private readonly cdrRepo: Repository<CdrEntity>,
@@ -60,12 +64,149 @@ export class AgentsService {
     query.andWhere(`${column} IN (:...tenantIds)`, { tenantIds: scope.tenantIds });
   }
 
+  private async resolveAccessibleAgentIds(scope?: AgentScope): Promise<Set<string> | null> {
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+      return null;
+    }
+
+    const where: Record<string, any> = {};
+    if (scope.tenantIds.length > 0) {
+      where.tenantId = In(scope.tenantIds);
+    }
+
+    const agents = await this.agentRepo.find({
+      where,
+      select: ['id', 'parentAgentId'],
+    });
+
+    const childrenMap = new Map<string | null, string[]>();
+    for (const agent of agents) {
+      const parentKey = agent.parentAgentId ?? null;
+      if (!childrenMap.has(parentKey)) {
+        childrenMap.set(parentKey, []);
+      }
+      childrenMap.get(parentKey)!.push(agent.id);
+    }
+
+    const accessible = new Set<string>();
+    const queue: string[] = [scope.agentId];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (accessible.has(current)) {
+        continue;
+      }
+      accessible.add(current);
+      const children = childrenMap.get(current) ?? [];
+      for (const child of children) {
+        if (!accessible.has(child)) {
+          queue.push(child);
+        }
+      }
+    }
+
+    return accessible;
+  }
+
+  private async applyAgentHierarchyScope(
+    query: SelectQueryBuilder<AgentEntity>,
+    scope?: AgentScope,
+  ): Promise<void> {
+    const accessible = await this.resolveAccessibleAgentIds(scope);
+    if (!accessible) {
+      return;
+    }
+    if (accessible.size === 0) {
+      query.andWhere('1 = 0');
+      return;
+    }
+    query.andWhere('agent.id IN (:...accessibleAgentIds)', { accessibleAgentIds: Array.from(accessible.values()) });
+  }
+
+  private async ensureAgentAccess(agent: AgentEntity, scope?: AgentScope): Promise<void> {
+    this.ensureTenantAccess(scope, agent.tenantId);
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+      return;
+    }
+    const accessible = await this.resolveAccessibleAgentIds(scope);
+    if (accessible && !accessible.has(agent.id)) {
+      throw new ForbiddenException('Không có quyền thao tác với agent này');
+    }
+  }
+
+  private async collectDescendantAgentIds(agentId: string, tenantId?: string): Promise<Set<string>> {
+    const where: Record<string, any> = {};
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+
+    const agents = await this.agentRepo.find({
+      where,
+      select: ['id', 'parentAgentId'],
+    });
+
+    const childrenMap = new Map<string | null, string[]>();
+    for (const agent of agents) {
+      const parentKey = agent.parentAgentId ?? null;
+      if (!childrenMap.has(parentKey)) {
+        childrenMap.set(parentKey, []);
+      }
+      childrenMap.get(parentKey)!.push(agent.id);
+    }
+
+    const descendants = new Set<string>();
+    const queue = [...(childrenMap.get(agentId) ?? [])];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (descendants.has(current)) {
+        continue;
+      }
+      descendants.add(current);
+      const children = childrenMap.get(current) ?? [];
+      queue.push(...children);
+    }
+    return descendants;
+  }
+
+  private async applyGroupOwnershipScope(
+    query: SelectQueryBuilder<AgentGroupEntity>,
+    scope?: AgentScope,
+  ): Promise<void> {
+    const accessible = await this.resolveAccessibleAgentIds(scope);
+    if (!accessible) {
+      return;
+    }
+    if (accessible.size === 0) {
+      query.andWhere('1 = 0');
+      return;
+    }
+    query.andWhere('(group.ownerAgentId IS NULL OR group.ownerAgentId IN (:...accessibleOwnerIds))', {
+      accessibleOwnerIds: Array.from(accessible.values()),
+    });
+  }
+
+  private async ensureGroupAccess(group: AgentGroupEntity, scope?: AgentScope): Promise<void> {
+    this.ensureTenantAccess(scope, group.tenantId);
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+      return;
+    }
+    if (!group.ownerAgentId) {
+      throw new ForbiddenException('Không có quyền thao tác với nhóm này');
+    }
+    const accessible = await this.resolveAccessibleAgentIds(scope);
+    if (accessible && !accessible.has(group.ownerAgentId)) {
+      throw new ForbiddenException('Không có quyền thao tác với nhóm này');
+    }
+  }
+
   async listAgents(params: ListAgentsParams = {}, scope?: AgentScope) {
     const query = this.agentRepo
       .createQueryBuilder('agent')
       .leftJoinAndSelect('agent.group', 'group')
       .leftJoinAndSelect('agent.tenant', 'tenant')
       .leftJoinAndSelect('agent.extension', 'extension')
+      .leftJoinAndSelect('agent.portalUser', 'portalUser')
+      .leftJoinAndSelect('agent.parentAgent', 'parentAgent')
       .orderBy('agent.createdAt', 'DESC');
 
     if (params.tenantId) {
@@ -92,6 +233,8 @@ export class AgentsService {
       );
     }
 
+    await this.applyAgentHierarchyScope(query, scope);
+
     const page = params.page && params.page > 0 ? params.page : 0;
     const pageSize = params.pageSize && params.pageSize > 0 ? params.pageSize : 0;
 
@@ -115,12 +258,12 @@ export class AgentsService {
   async getAgent(id: string, scope?: AgentScope) {
     const agent = await this.agentRepo.findOne({
       where: { id },
-      relations: ['group', 'tenant', 'extension'],
+      relations: ['group', 'tenant', 'extension', 'portalUser', 'parentAgent'],
     });
     if (!agent) {
       throw new NotFoundException('Agent không tồn tại');
     }
-    this.ensureTenantAccess(scope, agent.tenantId);
+    await this.ensureAgentAccess(agent, scope);
     return this.sanitizeAgent(agent);
   }
 
@@ -130,6 +273,8 @@ export class AgentsService {
       displayName: string;
       extensionId?: string | null;
       groupId?: string | null;
+      portalUserId?: string | null;
+      parentAgentId?: string | null;
       kpiTalktimeEnabled?: boolean;
       kpiTalktimeTargetSeconds?: number | null;
     },
@@ -173,6 +318,59 @@ export class AgentsService {
       }
     }
 
+    let portalUserId = dto.portalUserId?.trim() || null;
+    if (portalUserId === '') {
+      portalUserId = null;
+    }
+    let portalUser: PortalUserEntity | null = null;
+    if (portalUserId) {
+      portalUser = await this.portalUserRepo.findOne({
+        where: { id: portalUserId },
+        relations: ['tenantMemberships', 'agents'],
+      });
+      if (!portalUser) {
+        throw new BadRequestException('Portal user không tồn tại');
+      }
+      if (!portalUser.isActive) {
+        throw new BadRequestException('Portal user đang bị vô hiệu hoá');
+      }
+      const memberships = Array.isArray(portalUser.tenantMemberships)
+        ? portalUser.tenantMemberships.map((item) => item.tenantId)
+        : [];
+      if (!memberships.includes(tenantId) && !scope?.isSuperAdmin) {
+        throw new BadRequestException('Portal user không thuộc tenant này');
+      }
+      const existingAgent = await this.agentRepo.findOne({ where: { portalUserId } });
+      if (existingAgent) {
+        throw new BadRequestException('Portal user đã được gán cho agent khác');
+      }
+      if (!['agent', 'agent_lead'].includes(portalUser.roleKey)) {
+        throw new BadRequestException('Portal user phải thuộc role agent hoặc agent lead');
+      }
+    }
+
+    let parentAgentId = dto.parentAgentId?.trim() || null;
+    if (scope?.isAgentLead) {
+      if (!scope.agentId) {
+        throw new ForbiddenException('Tài khoản agent không hợp lệ');
+      }
+      parentAgentId = scope.agentId;
+    }
+    let parentAgent: AgentEntity | null = null;
+    if (parentAgentId) {
+      parentAgent = await this.agentRepo.findOne({
+        where: { id: parentAgentId },
+        relations: ['tenant'],
+      });
+      if (!parentAgent) {
+        throw new BadRequestException('Agent cấp trên không tồn tại');
+      }
+      await this.ensureAgentAccess(parentAgent, scope);
+      if (parentAgent.tenantId !== tenantId) {
+        throw new BadRequestException('Agent cấp trên không thuộc tenant này');
+      }
+    }
+
     const targetSeconds =
       dto.kpiTalktimeTargetSeconds === null || dto.kpiTalktimeTargetSeconds === undefined
         ? null
@@ -188,6 +386,8 @@ export class AgentsService {
       displayName,
       extensionId,
       groupId,
+      portalUserId,
+      parentAgentId,
       kpiTalktimeEnabled: Boolean(dto.kpiTalktimeEnabled),
       kpiTalktimeTargetSeconds: targetSeconds,
     });
@@ -201,6 +401,8 @@ export class AgentsService {
       displayName?: string | null;
       extensionId?: string | null;
       groupId?: string | null;
+      portalUserId?: string | null;
+      parentAgentId?: string | null;
       kpiTalktimeEnabled?: boolean;
       kpiTalktimeTargetSeconds?: number | null;
     },
@@ -208,12 +410,12 @@ export class AgentsService {
   ) {
     const agent = await this.agentRepo.findOne({
       where: { id },
-      relations: ['group', 'extension', 'tenant'],
+      relations: ['group', 'extension', 'tenant', 'portalUser', 'parentAgent'],
     });
     if (!agent) {
       throw new NotFoundException('Agent không tồn tại');
     }
-    this.ensureTenantAccess(scope, agent.tenantId);
+    await this.ensureAgentAccess(agent, scope);
 
     if (dto.displayName !== undefined) {
       const displayName = dto.displayName?.trim();
@@ -253,6 +455,81 @@ export class AgentsService {
       }
     }
 
+    if (dto.portalUserId !== undefined) {
+      let newPortalUserId = dto.portalUserId?.trim() || null;
+      if (newPortalUserId === '') {
+        newPortalUserId = null;
+      }
+      if (newPortalUserId) {
+        const portalUser = await this.portalUserRepo.findOne({
+          where: { id: newPortalUserId },
+          relations: ['tenantMemberships'],
+        });
+        if (!portalUser) {
+          throw new BadRequestException('Portal user không tồn tại');
+        }
+        if (!portalUser.isActive) {
+          throw new BadRequestException('Portal user đang bị vô hiệu hoá');
+        }
+        const memberships = Array.isArray(portalUser.tenantMemberships)
+          ? portalUser.tenantMemberships.map((item) => item.tenantId)
+          : [];
+        if (!memberships.includes(agent.tenantId) && !scope?.isSuperAdmin) {
+          throw new BadRequestException('Portal user không thuộc tenant này');
+        }
+        if (newPortalUserId !== agent.portalUserId) {
+          const duplicate = await this.agentRepo.findOne({ where: { portalUserId: newPortalUserId } });
+          if (duplicate && duplicate.id !== agent.id) {
+            throw new BadRequestException('Portal user đã được gán cho agent khác');
+          }
+        }
+        if (!['agent', 'agent_lead'].includes(portalUser.roleKey)) {
+          throw new BadRequestException('Portal user phải thuộc role agent hoặc agent lead');
+        }
+        agent.portalUserId = newPortalUserId;
+      } else {
+        agent.portalUserId = null;
+      }
+    }
+
+    if (dto.parentAgentId !== undefined || (scope?.isAgentLead && agent.id !== scope.agentId)) {
+      let newParentAgentId = dto.parentAgentId !== undefined ? dto.parentAgentId?.trim() || null : agent.parentAgentId ?? null;
+
+      if (scope?.isAgentLead) {
+        if (!scope.agentId) {
+          throw new ForbiddenException('Tài khoản agent không hợp lệ');
+        }
+        if (agent.id === scope.agentId) {
+          if (dto.parentAgentId !== undefined && dto.parentAgentId && dto.parentAgentId !== scope.agentId) {
+            throw new ForbiddenException('Không thể thay đổi cấp trên của chính mình');
+          }
+        } else {
+          newParentAgentId = scope.agentId;
+        }
+      }
+
+      if (newParentAgentId) {
+        if (newParentAgentId === agent.id) {
+          throw new BadRequestException('Agent không thể là cấp trên của chính mình');
+        }
+        const parentAgent = await this.agentRepo.findOne({ where: { id: newParentAgentId } });
+        if (!parentAgent) {
+          throw new BadRequestException('Agent cấp trên không tồn tại');
+        }
+        await this.ensureAgentAccess(parentAgent, scope);
+        if (parentAgent.tenantId !== agent.tenantId) {
+          throw new BadRequestException('Agent cấp trên không thuộc tenant này');
+        }
+        const descendants = await this.collectDescendantAgentIds(agent.id, agent.tenantId);
+        if (descendants.has(newParentAgentId)) {
+          throw new BadRequestException('Không thể gán agent cấp dưới làm cấp trên');
+        }
+        agent.parentAgentId = newParentAgentId;
+      } else {
+        agent.parentAgentId = null;
+      }
+    }
+
     if (dto.kpiTalktimeEnabled !== undefined) {
       agent.kpiTalktimeEnabled = Boolean(dto.kpiTalktimeEnabled);
     }
@@ -278,7 +555,11 @@ export class AgentsService {
     if (!agent) {
       throw new NotFoundException('Agent không tồn tại');
     }
-    this.ensureTenantAccess(scope, agent.tenantId);
+    await this.ensureAgentAccess(agent, scope);
+    const childCount = await this.agentRepo.count({ where: { parentAgentId: id } });
+    if (childCount > 0) {
+      throw new BadRequestException('Không thể xoá agent đang quản lý cấp dưới');
+    }
     await this.agentRepo.delete({ id });
     return { success: true };
   }
@@ -287,6 +568,7 @@ export class AgentsService {
     const query = this.groupRepo
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.tenant', 'tenant')
+      .leftJoinAndSelect('group.ownerAgent', 'ownerAgent')
       .orderBy('group.createdAt', 'DESC');
 
     if (params.tenantId) {
@@ -305,6 +587,8 @@ export class AgentsService {
         }),
       );
     }
+
+    await this.applyGroupOwnershipScope(query, scope);
 
     const page = params.page && params.page > 0 ? params.page : 0;
     const pageSize = params.pageSize && params.pageSize > 0 ? params.pageSize : 0;
@@ -327,7 +611,7 @@ export class AgentsService {
   }
 
   async createGroup(
-    dto: { tenantId: string; name: string; description?: string | null },
+    dto: { tenantId: string; name: string; description?: string | null; ownerAgentId?: string | null },
     scope?: AgentScope,
   ) {
     const tenantId = dto.tenantId?.trim();
@@ -352,18 +636,42 @@ export class AgentsService {
       throw new BadRequestException('Tên nhóm đã tồn tại');
     }
 
+    let ownerAgentId = dto.ownerAgentId?.trim() || null;
+    if (scope?.isAgentLead) {
+      if (!scope.agentId) {
+        throw new ForbiddenException('Tài khoản agent không hợp lệ');
+      }
+      ownerAgentId = scope.agentId;
+    }
+
+    if (ownerAgentId) {
+      const ownerAgent = await this.agentRepo.findOne({ where: { id: ownerAgentId } });
+      if (!ownerAgent) {
+        throw new BadRequestException('Agent sở hữu nhóm không tồn tại');
+      }
+      await this.ensureAgentAccess(ownerAgent, scope);
+      if (ownerAgent.tenantId !== tenantId) {
+        throw new BadRequestException('Agent sở hữu nhóm không thuộc tenant này');
+      }
+    }
+
     const group = this.groupRepo.create({
       tenantId,
       name,
       description: dto.description?.trim() || null,
+      ownerAgentId,
     });
     const saved = await this.groupRepo.save(group);
-    return this.sanitizeGroup(saved);
+    const reloaded = await this.groupRepo.findOne({
+      where: { id: saved.id },
+      relations: ['tenant', 'ownerAgent'],
+    });
+    return this.sanitizeGroup(reloaded ?? saved);
   }
 
   async updateGroup(
     id: string,
-    dto: { name?: string | null; description?: string | null },
+    dto: { name?: string | null; description?: string | null; ownerAgentId?: string | null },
     scope?: AgentScope,
   ) {
     const group = await this.groupRepo.findOne({
@@ -373,7 +681,7 @@ export class AgentsService {
     if (!group) {
       throw new NotFoundException('Nhóm quản lý không tồn tại');
     }
-    this.ensureTenantAccess(scope, group.tenantId);
+    await this.ensureGroupAccess(group, scope);
 
     if (dto.name !== undefined) {
       const name = dto.name?.trim();
@@ -393,8 +701,41 @@ export class AgentsService {
       group.description = dto.description?.trim() || null;
     }
 
-    await this.groupRepo.save(group);
-    return this.sanitizeGroup(group);
+    if (dto.ownerAgentId !== undefined) {
+      let newOwnerAgentId = dto.ownerAgentId?.trim() || null;
+      if (scope?.isAgentLead) {
+        if (!scope.agentId) {
+          throw new ForbiddenException('Tài khoản agent không hợp lệ');
+        }
+        if (group.ownerAgentId && group.ownerAgentId !== scope.agentId && newOwnerAgentId !== scope.agentId) {
+          throw new ForbiddenException('Không thể chuyển quyền sở hữu nhóm sang agent khác');
+        }
+        if (!newOwnerAgentId) {
+          newOwnerAgentId = scope.agentId;
+        }
+      }
+
+      if (newOwnerAgentId) {
+        const ownerAgent = await this.agentRepo.findOne({ where: { id: newOwnerAgentId } });
+        if (!ownerAgent) {
+          throw new BadRequestException('Agent sở hữu nhóm không tồn tại');
+        }
+        await this.ensureAgentAccess(ownerAgent, scope);
+        if (ownerAgent.tenantId !== group.tenantId) {
+          throw new BadRequestException('Agent sở hữu nhóm không thuộc tenant này');
+        }
+        group.ownerAgentId = newOwnerAgentId;
+      } else {
+        group.ownerAgentId = null;
+      }
+    }
+
+    const saved = await this.groupRepo.save(group);
+    const reloaded = await this.groupRepo.findOne({
+      where: { id: saved.id },
+      relations: ['tenant', 'ownerAgent'],
+    });
+    return this.sanitizeGroup(reloaded ?? saved);
   }
 
   async deleteGroup(id: string, scope?: AgentScope): Promise<{ success: boolean }> {
@@ -402,7 +743,7 @@ export class AgentsService {
     if (!group) {
       throw new NotFoundException('Nhóm quản lý không tồn tại');
     }
-    this.ensureTenantAccess(scope, group.tenantId);
+    await this.ensureGroupAccess(group, scope);
     await this.groupRepo.delete({ id });
     return { success: true };
   }
@@ -435,6 +776,14 @@ export class AgentsService {
       agentQuery.andWhere('agent.groupId = :groupId', { groupId });
     }
 
+    const accessibleAgents = await this.resolveAccessibleAgentIds(scope);
+    if (accessibleAgents) {
+      if (accessibleAgents.size === 0) {
+        return { items: [], total: 0, summary: { totalTalktimeSeconds: 0, totalTalktimeMinutes: 0 } };
+      }
+      agentQuery.andWhere('agent.id IN (:...accessibleAgentIds)', { accessibleAgentIds: Array.from(accessibleAgents.values()) });
+    }
+
     const agents = await agentQuery.getMany();
     const agentIds = agents.map((agent) => agent.id);
 
@@ -455,6 +804,12 @@ export class AgentsService {
 
     if (groupId) {
       talktimeQuery.andWhere('cdr.agentGroupId = :groupId', { groupId });
+    }
+
+    if (accessibleAgents) {
+      talktimeQuery.andWhere('cdr.agentId IN (:...accessibleAgentIds)', {
+        accessibleAgentIds: Array.from(accessibleAgents.values()),
+      });
     }
 
     if (params.fromDate instanceof Date && !Number.isNaN(params.fromDate.getTime())) {
@@ -550,7 +905,15 @@ export class AgentsService {
     };
   }
 
-  private sanitizeAgent(agent: AgentEntity & { tenant?: TenantEntity | null; group?: AgentGroupEntity | null; extension?: UserEntity | null }) {
+  private sanitizeAgent(
+    agent: AgentEntity & {
+      tenant?: TenantEntity | null;
+      group?: AgentGroupEntity | null;
+      extension?: UserEntity | null;
+      portalUser?: PortalUserEntity | null;
+      parentAgent?: AgentEntity | null;
+    },
+  ) {
     return {
       id: agent.id,
       tenantId: agent.tenantId,
@@ -560,6 +923,10 @@ export class AgentsService {
       extensionDisplayName: agent.extension?.displayName ?? null,
       groupId: agent.groupId ?? null,
       groupName: agent.group?.name ?? null,
+      portalUserId: agent.portalUserId ?? null,
+      portalUserEmail: agent.portalUser?.email ?? null,
+      parentAgentId: agent.parentAgentId ?? null,
+      parentAgentName: agent.parentAgent?.displayName ?? null,
       kpiTalktimeEnabled: agent.kpiTalktimeEnabled ?? false,
       kpiTalktimeTargetSeconds: agent.kpiTalktimeTargetSeconds ?? null,
       createdAt: agent.createdAt,
@@ -567,13 +934,15 @@ export class AgentsService {
     };
   }
 
-  private sanitizeGroup(group: AgentGroupEntity & { tenant?: TenantEntity | null }) {
+  private sanitizeGroup(group: AgentGroupEntity & { tenant?: TenantEntity | null; ownerAgent?: AgentEntity | null }) {
     return {
       id: group.id,
       tenantId: group.tenantId,
       tenantName: group.tenant?.name ?? null,
       name: group.name,
       description: group.description ?? null,
+      ownerAgentId: group.ownerAgentId ?? null,
+      ownerAgentName: group.ownerAgent?.displayName ?? null,
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };

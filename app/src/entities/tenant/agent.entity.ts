@@ -5,15 +5,18 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { TenantEntity } from './tenant.entity';
 import { AgentGroupEntity } from './agent-group.entity';
 import { UserEntity } from './user.entity';
+import { PortalUserEntity } from '../portal/portal-user.entity';
 
 @Entity({ name: 'agents' })
 @Index(['tenantId', 'extensionId'], { unique: true, where: 'extension_id IS NOT NULL' })
+@Index(['tenantId', 'portalUserId'], { unique: true, where: 'portal_user_id IS NOT NULL' })
 export class AgentEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -46,6 +49,29 @@ export class AgentEntity {
   })
   @JoinColumn({ name: 'group_id' })
   group?: AgentGroupEntity | null;
+
+  @Column({ name: 'portal_user_id', type: 'char', length: 36, nullable: true })
+  portalUserId?: string | null;
+
+  @ManyToOne(() => PortalUserEntity, (user) => user.agents, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'portal_user_id' })
+  portalUser?: PortalUserEntity | null;
+
+  @Column({ name: 'parent_agent_id', type: 'char', length: 36, nullable: true })
+  parentAgentId?: string | null;
+
+  @ManyToOne(() => AgentEntity, (agent) => agent.childAgents, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'parent_agent_id' })
+  parentAgent?: AgentEntity | null;
+
+  @OneToMany(() => AgentEntity, (agent) => agent.parentAgent)
+  childAgents?: AgentEntity[];
 
   @Column({ name: 'kpi_talktime_enabled', type: 'boolean', default: false })
   kpiTalktimeEnabled!: boolean;

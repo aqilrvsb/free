@@ -219,6 +219,8 @@ export interface AgentGroupSummary {
   tenantName?: string | null;
   name: string;
   description?: string | null;
+  ownerAgentId?: string | null;
+  ownerAgentName?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -232,6 +234,10 @@ export interface AgentSummary {
   extensionDisplayName?: string | null;
   groupId?: string | null;
   groupName?: string | null;
+  portalUserId?: string | null;
+  portalUserEmail?: string | null;
+  parentAgentId?: string | null;
+  parentAgentName?: string | null;
   kpiTalktimeEnabled: boolean;
   kpiTalktimeTargetSeconds?: number | null;
   createdAt?: string;
@@ -489,6 +495,12 @@ export interface PortalUserSummary {
   permissions?: string[];
   tenantIds?: string[];
   isActive: boolean;
+  agentId?: string | null;
+  agentTenantId?: string | null;
+  agentGroupId?: string | null;
+  agentGroupName?: string | null;
+  parentAgentId?: string | null;
+  parentAgentName?: string | null;
   lastLoginAt?: string | null;
   createdAt?: string;
   updatedAt?: string;

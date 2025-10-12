@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { PortalRoleEntity } from './portal-role.entity';
 import { PortalUserTenantEntity } from './portal-user-tenant.entity';
+import { AgentEntity } from '../tenant/agent.entity';
 
 export type PortalUserRole = string;
 
@@ -59,4 +60,7 @@ export class PortalUserEntity {
 
   @OneToMany(() => PortalUserTenantEntity, (link) => link.portalUser)
   tenantMemberships?: PortalUserTenantEntity[];
+
+  @OneToMany(() => AgentEntity, (agent) => agent.portalUser)
+  agents?: AgentEntity[];
 }

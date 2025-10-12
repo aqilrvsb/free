@@ -40,6 +40,7 @@ interface AgentFormState {
   tenantId: string;
   extensionId: string;
   groupId: string;
+  portalUserId: string;
   kpiEnabled: boolean;
   kpiTarget: string;
 }
@@ -180,6 +181,7 @@ export function AgentManager({
     tenantId: normalizeTenantId(initialTenantId),
     extensionId: "",
     groupId: "",
+    portalUserId: "",
     kpiEnabled: false,
     kpiTarget: "",
   }));
@@ -405,6 +407,7 @@ export function AgentManager({
       tenantId: normalizeTenantId(isSuperAdmin ? tenantFilter === "all" ? initialTenantId : tenantFilter : initialTenantId),
       extensionId: "",
       groupId: "",
+      portalUserId: "",
       kpiEnabled: false,
       kpiTarget: "",
     });
@@ -419,6 +422,7 @@ export function AgentManager({
       tenantId: normalizeTenantId(agent.tenantId),
       extensionId: agent.extensionId ?? "",
       groupId: agent.groupId ?? "",
+      portalUserId: agent.portalUserId ?? "",
       kpiEnabled: agent.kpiTalktimeEnabled,
       kpiTarget: agent.kpiTalktimeTargetSeconds != null ? String(agent.kpiTalktimeTargetSeconds) : "",
     });
@@ -464,6 +468,7 @@ export function AgentManager({
         displayName: agentForm.displayName.trim(),
         extensionId: agentForm.extensionId.trim() || undefined,
         groupId: agentForm.groupId.trim() || undefined,
+        portalUserId: agentForm.portalUserId.trim() || undefined,
         kpiTalktimeEnabled: agentForm.kpiEnabled,
         kpiTalktimeTargetSeconds: agentForm.kpiEnabled ? targetSeconds ?? 0 : null,
       };
@@ -1115,6 +1120,19 @@ export function AgentManager({
               ) : (
                 <p className="text-xs text-muted-foreground">Để trống nếu chưa muốn gán extension.</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="agent-portal-user">Portal user ID</Label>
+              <Input
+                id="agent-portal-user"
+                placeholder="Nhập ID portal user (tuỳ chọn)"
+                value={agentForm.portalUserId}
+                onChange={(event) => setAgentForm((prev) => ({ ...prev, portalUserId: event.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Gắn agent với tài khoản đăng nhập tương ứng. Để trống nếu chưa tạo portal user.
+              </p>
             </div>
 
             <div className="space-y-2">

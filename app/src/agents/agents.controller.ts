@@ -22,23 +22,28 @@ interface AuthenticatedRequest extends Request {
   user?: {
     role?: string;
     tenantIds?: string[];
+    agentId?: string | null;
   };
 }
 
 @ApiTags(SwaggerTags.Agents)
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('super_admin', 'tenant_admin')
+@Roles('super_admin', 'tenant_admin', 'agent_lead')
 @Controller()
 export class AgentsController {
   constructor(private readonly agentsService: AgentsService) {}
 
   private resolveScope(req?: AuthenticatedRequest) {
-    const role = req?.user?.role ?? null;
+    const rawRole = req?.user?.role ?? null;
+    const role = rawRole === 'admin' ? 'super_admin' : rawRole;
     const tenantIds = Array.isArray(req?.user?.tenantIds) ? req!.user!.tenantIds : [];
     return {
       isSuperAdmin: role === 'super_admin',
       tenantIds,
+      role,
+      agentId: req?.user?.agentId ?? null,
+      isAgentLead: role === 'agent_lead',
     };
   }
 
@@ -55,7 +60,7 @@ export class AgentsController {
     return this.agentsService.listAgents(params, scope);
   }
 
-  @Roles('super_admin', 'tenant_admin', 'operator')
+  @Roles('super_admin', 'tenant_admin', 'operator', 'agent_lead')
   @Get('/agents/talktime')
   async talktimeStats(@Query() query: TalktimeQueryDto, @Req() req: AuthenticatedRequest) {
     const fromDate = query.from ? new Date(query.from) : undefined;

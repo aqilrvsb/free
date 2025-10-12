@@ -19,6 +19,16 @@ export class UpdateAgentDto {
   @IsUUID()
   groupId?: string | null;
 
+  @ApiPropertyOptional({ description: 'Portal user gắn với agent', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  portalUserId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Agent cấp trên', nullable: true })
+  @IsOptional()
+  @IsUUID()
+  parentAgentId?: string | null;
+
   @ApiPropertyOptional({ description: 'Bật KPI talktime' })
   @IsOptional()
   @IsBoolean()
