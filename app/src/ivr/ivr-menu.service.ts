@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { IvrMenuEntity, IvrMenuOptionEntity, TenantEntity } from '../entities';
 
 const SUPPORTED_ACTION_TYPES = ['extension', 'sip_uri', 'voicemail', 'hangup'] as const;
@@ -32,6 +32,11 @@ export interface CreateIvrMenuDto {
 
 export type UpdateIvrMenuDto = Partial<CreateIvrMenuDto>;
 
+interface RoutingScope {
+  isSuperAdmin: boolean;
+  tenantIds: string[];
+}
+
 @Injectable()
 export class IvrMenuService {
   constructor(
@@ -40,25 +45,47 @@ export class IvrMenuService {
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
   ) {}
 
-  async listMenus(tenantId?: string) {
-    const where = tenantId ? { tenantId } : {};
+  async listMenus(tenantId?: string, scope?: RoutingScope) {
+    const normalizedTenantId = tenantId?.trim();
+    let where: any = {};
+
+    if (!scope || scope.isSuperAdmin) {
+      where = normalizedTenantId ? { tenantId: normalizedTenantId } : {};
+    } else {
+      const allowed = Array.from(new Set(scope.tenantIds));
+      if (normalizedTenantId) {
+        if (!allowed.includes(normalizedTenantId)) {
+          return [];
+        }
+        where = { tenantId: normalizedTenantId };
+      } else {
+        if (!allowed.length) {
+          return [];
+        }
+        where = { tenantId: In(allowed) };
+      }
+    }
+
     const menus = await this.menuRepo.find({ where, relations: ['tenant', 'options'], order: { createdAt: 'ASC' } });
     return menus.map((menu) => this.sanitize(menu));
   }
 
-  async getMenu(id: string) {
+  async getMenu(id: string, scope?: RoutingScope) {
     const menu = await this.menuRepo.findOne({ where: { id }, relations: ['tenant', 'options'] });
     if (!menu) {
       throw new NotFoundException('IVR menu không tồn tại');
     }
+    this.ensureTenantAccess(scope, menu.tenantId);
     return this.sanitize(menu);
   }
 
-  async createMenu(dto: CreateIvrMenuDto) {
+  async createMenu(dto: CreateIvrMenuDto, scope?: RoutingScope) {
     const tenant = await this.tenantRepo.findOne({ where: { id: dto.tenantId.trim() } });
     if (!tenant) {
       throw new BadRequestException('Tenant không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, tenant.id);
 
     const options = this.prepareOptions(dto.options);
     const invalidAction = this.normalizeMenuAction(dto.invalidActionType, dto.invalidActionValue);
@@ -80,20 +107,23 @@ export class IvrMenuService {
     });
 
     const saved = await this.menuRepo.save(menu);
-    return this.getMenu(saved.id);
+    return this.getMenu(saved.id, scope);
   }
 
-  async updateMenu(id: string, dto: UpdateIvrMenuDto) {
+  async updateMenu(id: string, dto: UpdateIvrMenuDto, scope?: RoutingScope) {
     const menu = await this.menuRepo.findOne({ where: { id } });
     if (!menu) {
       throw new NotFoundException('IVR menu không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, menu.tenantId);
 
     if (dto.tenantId && dto.tenantId !== menu.tenantId) {
       const tenant = await this.tenantRepo.findOne({ where: { id: dto.tenantId } });
       if (!tenant) {
         throw new BadRequestException('Tenant không tồn tại');
       }
+      this.ensureTenantAccess(scope, tenant.id);
       menu.tenantId = tenant.id;
     }
 
@@ -133,14 +163,15 @@ export class IvrMenuService {
     }
 
     await this.menuRepo.save(menu);
-    return this.getMenu(menu.id);
+    return this.getMenu(menu.id, scope);
   }
 
-  async deleteMenu(id: string): Promise<void> {
+  async deleteMenu(id: string, scope?: RoutingScope): Promise<void> {
     const menu = await this.menuRepo.findOne({ where: { id } });
     if (!menu) {
       throw new NotFoundException('IVR menu không tồn tại');
     }
+    this.ensureTenantAccess(scope, menu.tenantId);
     await this.menuRepo.delete({ id });
   }
 
@@ -254,5 +285,14 @@ export class IvrMenuService {
     }
     const parsed = Math.max(1, Math.floor(Number(value)));
     return parsed;
+  }
+
+  private ensureTenantAccess(scope: RoutingScope | undefined, tenantId: string): void {
+    if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+    if (!scope.tenantIds.includes(tenantId)) {
+      throw new ForbiddenException('Không có quyền thao tác trên tenant này');
+    }
   }
 }

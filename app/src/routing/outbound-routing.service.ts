@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { OutboundRuleEntity, GatewayEntity, TenantEntity } from '../entities';
 
 export interface CreateOutboundRouteDto {
@@ -22,6 +22,11 @@ export interface CreateOutboundRouteDto {
 
 export type UpdateOutboundRouteDto = Partial<CreateOutboundRouteDto>;
 
+interface RoutingScope {
+  isSuperAdmin: boolean;
+  tenantIds: string[];
+}
+
 @Injectable()
 export class OutboundRoutingService {
   constructor(
@@ -30,8 +35,26 @@ export class OutboundRoutingService {
     @InjectRepository(GatewayEntity) private readonly gatewayRepo: Repository<GatewayEntity>,
   ) {}
 
-  async listRoutes(tenantId?: string) {
-    const where = tenantId ? { tenantId } : {};
+  async listRoutes(tenantId?: string, scope?: RoutingScope) {
+    const normalizedTenantId = tenantId?.trim();
+    let where: any = {};
+
+    if (!scope || scope.isSuperAdmin) {
+      where = normalizedTenantId ? { tenantId: normalizedTenantId } : {};
+    } else {
+      const allowed = Array.from(new Set(scope.tenantIds));
+      if (normalizedTenantId) {
+        if (!allowed.includes(normalizedTenantId)) {
+          return [];
+        }
+        where = { tenantId: normalizedTenantId };
+      } else {
+        if (!allowed.length) {
+          return [];
+        }
+        where = { tenantId: In(allowed) };
+      }
+    }
     const routes = await this.ruleRepo.find({
       where,
       order: { priority: 'ASC', createdAt: 'ASC' },
@@ -40,11 +63,13 @@ export class OutboundRoutingService {
     return routes.map((route) => this.sanitize(route));
   }
 
-  async createRoute(dto: CreateOutboundRouteDto) {
+  async createRoute(dto: CreateOutboundRouteDto, scope?: RoutingScope) {
     const tenant = await this.tenantRepo.findOne({ where: { id: dto.tenantId.trim() } });
     if (!tenant) {
       throw new BadRequestException('Tenant không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, tenant.id);
 
     let gateway: GatewayEntity | null = null;
     if (dto.gatewayId) {
@@ -82,17 +107,20 @@ export class OutboundRoutingService {
     return this.sanitize(saved!);
   }
 
-  async updateRoute(id: string, dto: UpdateOutboundRouteDto) {
+  async updateRoute(id: string, dto: UpdateOutboundRouteDto, scope?: RoutingScope) {
     const rule = await this.ruleRepo.findOne({ where: { id } });
     if (!rule) {
       throw new NotFoundException('Outbound rule không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, rule.tenantId);
 
     if (dto.tenantId && dto.tenantId !== rule.tenantId) {
       const tenant = await this.tenantRepo.findOne({ where: { id: dto.tenantId } });
       if (!tenant) {
         throw new BadRequestException('Tenant không tồn tại');
       }
+      this.ensureTenantAccess(scope, tenant.id);
       rule.tenantId = tenant.id;
     }
 
@@ -154,11 +182,12 @@ export class OutboundRoutingService {
     return this.sanitize(updated!);
   }
 
-  async deleteRoute(id: string): Promise<void> {
+  async deleteRoute(id: string, scope?: RoutingScope): Promise<void> {
     const rule = await this.ruleRepo.findOne({ where: { id } });
     if (!rule) {
       throw new NotFoundException('Outbound rule không tồn tại');
     }
+    this.ensureTenantAccess(scope, rule.tenantId);
     await this.ruleRepo.delete({ id });
   }
 
@@ -226,6 +255,15 @@ export class OutboundRoutingService {
       new RegExp(pattern);
     } catch (error) {
       throw new BadRequestException(`Biểu thức regex không hợp lệ: ${(error as Error).message}`);
+    }
+  }
+
+  private ensureTenantAccess(scope: RoutingScope | undefined, tenantId: string): void {
+    if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+    if (!scope.tenantIds.includes(tenantId)) {
+      throw new ForbiddenException('Không có quyền thao tác trên tenant này');
     }
   }
 }

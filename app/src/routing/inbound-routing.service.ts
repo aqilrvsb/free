@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { InboundRouteEntity, TenantEntity, UserEntity, IvrMenuEntity } from '../entities';
@@ -16,6 +16,11 @@ export interface CreateInboundRouteDto {
 
 export type UpdateInboundRouteDto = Partial<CreateInboundRouteDto>;
 
+interface RoutingScope {
+  isSuperAdmin: boolean;
+  tenantIds: string[];
+}
+
 @Injectable()
 export class InboundRoutingService {
   constructor(
@@ -25,8 +30,27 @@ export class InboundRoutingService {
     @InjectRepository(IvrMenuEntity) private readonly ivrMenuRepo: Repository<IvrMenuEntity>,
   ) {}
 
-  async listRoutes(tenantId?: string) {
-    const where = tenantId ? { tenantId } : {};
+  async listRoutes(tenantId?: string, scope?: RoutingScope) {
+    const normalizedTenantId = tenantId?.trim();
+    let where: any = {};
+
+    if (!scope || scope.isSuperAdmin) {
+      where = normalizedTenantId ? { tenantId: normalizedTenantId } : {};
+    } else {
+      const allowed = Array.from(new Set(scope.tenantIds));
+      if (normalizedTenantId) {
+        if (!allowed.includes(normalizedTenantId)) {
+          return [];
+        }
+        where = { tenantId: normalizedTenantId };
+      } else {
+        if (!allowed.length) {
+          return [];
+        }
+        where = { tenantId: In(allowed) };
+      }
+    }
+
     const routes = await this.routeRepo.find({
       where,
       order: { priority: 'ASC', createdAt: 'ASC' },
@@ -52,11 +76,13 @@ export class InboundRoutingService {
     return routes.map((route) => this.sanitize(route, { menuMap, extensionMap }));
   }
 
-  async createRoute(dto: CreateInboundRouteDto) {
+  async createRoute(dto: CreateInboundRouteDto, scope?: RoutingScope) {
     const tenant = await this.tenantRepo.findOne({ where: { id: dto.tenantId.trim() } });
     if (!tenant) {
       throw new BadRequestException('Tenant không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, tenant.id);
 
     const didNumber = this.normalizeDid(dto.didNumber);
     await this.ensureDidUnique(tenant.id, didNumber);
@@ -80,17 +106,20 @@ export class InboundRoutingService {
     return this.sanitize(saved!, { menuMap: await this.loadMenuMap([route.destinationValue]), extensionMap: await this.loadExtensionMap([route.destinationValue]) });
   }
 
-  async updateRoute(id: string, dto: UpdateInboundRouteDto) {
+  async updateRoute(id: string, dto: UpdateInboundRouteDto, scope?: RoutingScope) {
     const route = await this.routeRepo.findOne({ where: { id } });
     if (!route) {
       throw new NotFoundException('Inbound route không tồn tại');
     }
+
+    this.ensureTenantAccess(scope, route.tenantId);
 
     if (dto.tenantId && dto.tenantId !== route.tenantId) {
       const tenant = await this.tenantRepo.findOne({ where: { id: dto.tenantId } });
       if (!tenant) {
         throw new BadRequestException('Tenant không tồn tại');
       }
+      this.ensureTenantAccess(scope, tenant.id);
       route.tenantId = tenant.id;
     }
 
@@ -133,11 +162,12 @@ export class InboundRoutingService {
     });
   }
 
-  async deleteRoute(id: string): Promise<void> {
+  async deleteRoute(id: string, scope?: RoutingScope): Promise<void> {
     const exists = await this.routeRepo.findOne({ where: { id } });
     if (!exists) {
       throw new NotFoundException('Inbound route không tồn tại');
     }
+    this.ensureTenantAccess(scope, exists.tenantId);
     await this.routeRepo.delete({ id });
   }
 
@@ -263,5 +293,14 @@ export class InboundRoutingService {
     }
     const users = await this.userRepo.find({ where: { id: In(uniqueIds) } });
     return new Map(users.map((user) => [user.id, user]));
+  }
+
+  private ensureTenantAccess(scope: RoutingScope | undefined, tenantId: string): void {
+    if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+    if (!scope.tenantIds.includes(tenantId)) {
+      throw new ForbiddenException('Không có quyền thao tác trên tenant này');
+    }
   }
 }
