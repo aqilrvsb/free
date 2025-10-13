@@ -19,6 +19,8 @@ interface AuthenticatedRequest extends Request {
     role?: string;
     tenantIds?: string[];
     agentId?: string | null;
+    permissions?: string[];
+    rolePermissions?: string[];
   };
 }
 
@@ -34,12 +36,28 @@ export class PortalUsersController {
     const rawRole = req?.user?.role || null;
     const role = rawRole === 'admin' ? 'super_admin' : rawRole;
     const tenantIds = Array.isArray(req?.user?.tenantIds) ? req!.user!.tenantIds : [];
+    const permissionSources: string[] = [];
+    if (Array.isArray(req?.user?.permissions)) {
+      permissionSources.push(...req!.user!.permissions);
+    }
+    if (Array.isArray(req?.user?.rolePermissions)) {
+      permissionSources.push(...req!.user!.rolePermissions);
+    }
+    const allowedPermissions = Array.from(
+      new Set(
+        permissionSources
+          .filter((perm): perm is string => typeof perm === 'string')
+          .map((perm) => perm.trim())
+          .filter((perm) => perm.length > 0),
+      ),
+    );
     return {
       isSuperAdmin: role === 'super_admin',
       tenantIds,
       role,
       agentId: req?.user?.agentId ?? null,
       isAgentLead: role === 'agent_lead',
+      allowedPermissions,
     };
   }
 

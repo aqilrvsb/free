@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { PortalRoleEntity, PortalUserEntity } from '../entities';
+import { PORTAL_PERMISSIONS, PORTAL_PERMISSION_SET } from './portal-permissions';
 
 interface CreatePortalRoleDto {
   key: string;
@@ -21,29 +22,7 @@ interface UpdatePortalRoleDto {
 export class PortalRolesService implements OnModuleInit {
   private readonly systemRoleKeys = ['super_admin', 'tenant_admin', 'viewer', 'operator', 'agent_lead', 'agent'];
 
-  private readonly allPermissions = [
-    'view_dashboard',
-    'view_cdr',
-    'view_recordings',
-    'view_channels',
-    'manage_gateways',
-    'manage_tenants',
-    'manage_dialplan',
-    'manage_inbound',
-    'manage_outbound',
-    'manage_ivr',
-    'manage_settings',
-    'manage_recordings',
-    'manage_extensions',
-    'manage_portal_users',
-    'manage_roles',
-    'manage_security',
-    'view_billing',
-    'manage_billing',
-    'manage_agents',
-    'manage_sub_agents',
-    'manage_own_groups',
-  ];
+  private readonly allPermissions = PORTAL_PERMISSIONS;
 
   private readonly defaultRoleMap: Record<string, Omit<CreatePortalRoleDto, 'key'>> = {
     viewer: {
@@ -244,9 +223,14 @@ export class PortalRolesService implements OnModuleInit {
     }
     const normalized = new Set<string>();
     list.forEach((item) => {
-      if (typeof item === 'string' && item.trim()) {
-        normalized.add(item.trim());
+      if (typeof item !== 'string') {
+        return;
       }
+      const value = item.trim();
+      if (!value || !PORTAL_PERMISSION_SET.has(value)) {
+        return;
+      }
+      normalized.add(value);
     });
     return Array.from(normalized.values());
   }

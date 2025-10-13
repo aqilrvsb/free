@@ -68,6 +68,31 @@ const defaultPasswordForm: PasswordFormState = {
   confirmPassword: "",
 };
 
+function clampPermissionsToScope(
+  permissions: PermissionKey[] | undefined,
+  allowed: Set<PermissionKey> | null,
+): PermissionKey[] {
+  if (!Array.isArray(permissions)) {
+    return [];
+  }
+  const unique = new Set<PermissionKey>();
+  permissions.forEach((perm) => {
+    if (PERMISSION_KEYS.has(perm)) {
+      unique.add(perm);
+    }
+  });
+  if (!allowed) {
+    return Array.from(unique.values());
+  }
+  const filtered: PermissionKey[] = [];
+  unique.forEach((perm) => {
+    if (allowed.has(perm)) {
+      filtered.push(perm);
+    }
+  });
+  return filtered;
+}
+
 function getDefaultPermissionsForRole(
   role: PortalUserRole,
   roleMap: Map<string, PortalRoleSummary>,
@@ -213,6 +238,39 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
     const iterator = roleMap.keys().next();
     return (iterator.value ?? 'viewer') as PortalUserRole;
   }, [roleMap]);
+  const allowedPermissionSet = useMemo<Set<PermissionKey> | null>(() => {
+    if (isSuperAdminUser) {
+      return null;
+    }
+    const aggregate = new Set<PermissionKey>();
+    const append = (values?: string[] | null) => {
+      if (!Array.isArray(values)) {
+        return;
+      }
+      values.forEach((value) => {
+        if (typeof value !== "string") {
+          return;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || !PERMISSION_KEYS.has(trimmed as PermissionKey)) {
+          return;
+        }
+        aggregate.add(trimmed as PermissionKey);
+      });
+    };
+    append(currentUserMeta?.rolePermissions);
+    append(currentUserMeta?.permissions);
+    return aggregate;
+  }, [currentUserMeta?.permissions, currentUserMeta?.rolePermissions, isSuperAdminUser]);
+  const availablePermissionOptions = useMemo(() => {
+    if (!allowedPermissionSet) {
+      return PERMISSION_OPTIONS;
+    }
+    if (allowedPermissionSet.size === 0) {
+      return [] as PermissionOption[];
+    }
+    return PERMISSION_OPTIONS.filter((option) => allowedPermissionSet.has(option.key));
+  }, [allowedPermissionSet]);
   const [data, setData] = useState<PaginatedResult<PortalUserSummary>>(initialUsers);
   const [search, setSearch] = useState<string>("");
   const [page, setPage] = useState<number>(initialUsers.page || 1);
@@ -226,8 +284,17 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
   const [formState, setFormState] = useState<PortalUserFormState>(() => ({
     ...defaultFormState,
     role: defaultRoleKey,
-    permissions: getDefaultPermissionsForRole(defaultRoleKey, roleMap),
+    permissions: clampPermissionsToScope(
+      getDefaultPermissionsForRole(defaultRoleKey, roleMap),
+      allowedPermissionSet,
+    ),
   }));
+  useEffect(() => {
+    setFormState((prev) => ({
+      ...prev,
+      permissions: clampPermissionsToScope(prev.permissions, allowedPermissionSet),
+    }));
+  }, [allowedPermissionSet]);
   const [activeUser, setActiveUser] = useState<PortalUserSummary | null>(null);
   const [saving, setSaving] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -347,13 +414,16 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         role,
         isActive: true,
         password: "",
-        permissions: getDefaultPermissionsForRole(role, roleMap),
+        permissions: clampPermissionsToScope(
+          getDefaultPermissionsForRole(role, roleMap),
+          allowedPermissionSet,
+        ),
         tenantIds: [],
       });
       setActiveUser(null);
       setDialogMode("create");
     },
-    [defaultRoleKey, roleMap],
+    [allowedPermissionSet, defaultRoleKey, roleMap],
   );
 
   const handleOpenCreate = () => {
@@ -368,16 +438,17 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
     const existingPermissions = Array.isArray(user.permissions)
       ? user.permissions.filter((perm): perm is PermissionKey => PERMISSION_KEYS.has(perm as PermissionKey))
       : [];
+    const effectivePermissions =
+      existingPermissions.length > 0
+        ? clampPermissionsToScope(existingPermissions, allowedPermissionSet)
+        : clampPermissionsToScope(getDefaultPermissionsForRole(roleKey, roleMap), allowedPermissionSet);
     setFormState({
       email: user.email,
       displayName: user.displayName || "",
       role: roleKey,
       isActive: user.isActive,
       password: "",
-      permissions:
-        existingPermissions.length > 0
-          ? existingPermissions
-          : getDefaultPermissionsForRole(roleKey, roleMap),
+      permissions: effectivePermissions,
       tenantIds: Array.isArray(user.tenantIds) ? [...user.tenantIds] : [],
     });
     setDialogMode("edit");
@@ -385,7 +456,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
   };
   const permissionGroups = useMemo(() => {
     const map = new Map<string, PermissionOption[]>();
-    PERMISSION_OPTIONS.forEach((option) => {
+    availablePermissionOptions.forEach((option) => {
       const list = map.get(option.group);
       if (list) {
         list.push(option);
@@ -394,20 +465,26 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
       }
     });
     return Array.from(map.entries()).map(([group, options]) => ({ group, options }));
-  }, []);
+  }, [availablePermissionOptions]);
 
-  const handlePermissionToggle = useCallback((permission: PermissionKey) => {
-    setFormState((prev) => {
-      const exists = prev.permissions.includes(permission);
-      const nextPermissions = exists
-        ? prev.permissions.filter((item) => item !== permission)
-        : [...prev.permissions, permission];
-      return {
-        ...prev,
-        permissions: nextPermissions,
-      };
-    });
-  }, []);
+  const handlePermissionToggle = useCallback(
+    (permission: PermissionKey) => {
+      if (allowedPermissionSet && !allowedPermissionSet.has(permission)) {
+        return;
+      }
+      setFormState((prev) => {
+        const exists = prev.permissions.includes(permission);
+        const nextPermissions = exists
+          ? prev.permissions.filter((item) => item !== permission)
+          : [...prev.permissions, permission];
+        return {
+          ...prev,
+          permissions: clampPermissionsToScope(nextPermissions, allowedPermissionSet),
+        };
+      });
+    },
+    [allowedPermissionSet],
+  );
 
   const handleTenantToggle = useCallback((tenantId: string) => {
     setFormState((prev) => {
@@ -428,19 +505,25 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
       setFormState((prev) => ({
         ...prev,
         role,
-        permissions: dialogMode === "create" ? getDefaultPermissionsForRole(role, roleMap) : prev.permissions,
+        permissions:
+          dialogMode === "create"
+            ? clampPermissionsToScope(getDefaultPermissionsForRole(role, roleMap), allowedPermissionSet)
+            : clampPermissionsToScope(prev.permissions, allowedPermissionSet),
         tenantIds: prev.tenantIds,
       }));
     },
-    [dialogMode, roleMap],
+    [allowedPermissionSet, dialogMode, roleMap],
   );
 
   const applyRoleDefaults = useCallback(() => {
     setFormState((prev) => ({
       ...prev,
-      permissions: getDefaultPermissionsForRole(prev.role, roleMap),
+      permissions: clampPermissionsToScope(
+        getDefaultPermissionsForRole(prev.role, roleMap),
+        allowedPermissionSet,
+      ),
     }));
-  }, [roleMap]);
+  }, [allowedPermissionSet, roleMap]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -448,7 +531,10 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
       return;
     }
 
-    const normalizedPermissions = filterValidPermissions(formState.permissions);
+    const normalizedPermissions = clampPermissionsToScope(
+      filterValidPermissions(formState.permissions),
+      allowedPermissionSet,
+    );
 
     const payload: Record<string, unknown> = {
       email: formState.email.trim().toLowerCase(),
@@ -962,38 +1048,44 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
                 </Button>
               </div>
               <div className="space-y-3">
-                {permissionGroups.map(({ group, options }) => (
-                  <div key={group} className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
-                    <h4 className="text-sm font-semibold text-foreground">{group}</h4>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {options.map((option) => {
-                        const checked = formState.permissions.includes(option.key);
-                        return (
-                          <label
-                            key={option.key}
-                            className={cn(
-                              "flex cursor-pointer items-start gap-2 rounded-lg border bg-background/60 p-3 text-sm transition",
-                              checked ? "border-primary/60" : "border-border/60 hover:border-primary/40",
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              className="mt-1 h-4 w-4"
-                              checked={checked}
-                              onChange={() => handlePermissionToggle(option.key)}
-                            />
-                            <span className="flex flex-col">
-                              <span className="font-medium text-foreground">{option.label}</span>
-                              {option.description ? (
-                                <span className="text-xs text-muted-foreground">{option.description}</span>
-                              ) : null}
-                            </span>
-                          </label>
-                        );
-                      })}
+                {permissionGroups.length === 0 ? (
+                  <p className="rounded-xl border border-border/60 bg-card/40 p-3 text-sm text-muted-foreground">
+                    Bạn không thể gán thêm quyền ngoài phạm vi hiện tại.
+                  </p>
+                ) : (
+                  permissionGroups.map(({ group, options }) => (
+                    <div key={group} className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
+                      <h4 className="text-sm font-semibold text-foreground">{group}</h4>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {options.map((option) => {
+                          const checked = formState.permissions.includes(option.key);
+                          return (
+                            <label
+                              key={option.key}
+                              className={cn(
+                                "flex cursor-pointer items-start gap-2 rounded-lg border bg-background/60 p-3 text-sm transition",
+                                checked ? "border-primary/60" : "border-border/60 hover:border-primary/40",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4"
+                                checked={checked}
+                                onChange={() => handlePermissionToggle(option.key)}
+                              />
+                              <span className="flex flex-col">
+                                <span className="font-medium text-foreground">{option.label}</span>
+                                {option.description ? (
+                                  <span className="text-xs text-muted-foreground">{option.description}</span>
+                                ) : null}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 

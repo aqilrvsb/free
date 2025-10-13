@@ -10,6 +10,7 @@ import {
   TenantEntity,
 } from '../entities';
 import { hash, compare } from 'bcryptjs';
+import { PORTAL_PERMISSION_SET } from './portal-permissions';
 
 export interface CreatePortalUserDto {
   email: string;
@@ -36,6 +37,7 @@ interface PortalUserScope {
   role?: string | null;
   agentId?: string | null;
   isAgentLead?: boolean;
+  allowedPermissions?: string[];
 }
 
 @Injectable()
@@ -263,7 +265,7 @@ export class PortalUsersService {
       roleKey,
       roleDefinition,
       isActive: dto.isActive !== undefined ? Boolean(dto.isActive) : true,
-      permissions: this.normalizePermissions(dto.permissions),
+      permissions: this.normalizePermissions(dto.permissions, scope),
     });
 
     await this.portalUserRepo.save(user);
@@ -323,7 +325,7 @@ export class PortalUsersService {
     }
 
     if (dto.permissions !== undefined) {
-      user.permissions = this.normalizePermissions(dto.permissions);
+      user.permissions = this.normalizePermissions(dto.permissions, scope);
     }
 
     await this.portalUserRepo.save(user);
@@ -425,16 +427,25 @@ export class PortalUsersService {
     };
   }
 
-  private normalizePermissions(list: string[] | undefined): string[] {
+  private normalizePermissions(list: string[] | undefined, scope?: PortalUserScope): string[] {
     if (!Array.isArray(list)) {
       return [];
     }
     const normalized = new Set<string>();
-    list.forEach((item) => {
-      if (typeof item === 'string' && item.trim()) {
-        normalized.add(item.trim());
+    const scopePermissions = this.resolveAllowedPermissionSet(scope);
+    for (const raw of list) {
+      if (typeof raw !== 'string') {
+        continue;
       }
-    });
+      const value = raw.trim();
+      if (!value || !PORTAL_PERMISSION_SET.has(value)) {
+        continue;
+      }
+      if (scopePermissions && !scopePermissions.has(value)) {
+        throw new ForbiddenException('Không thể gán quyền nằm ngoài phạm vi cho phép');
+      }
+      normalized.add(value);
+    }
     return Array.from(normalized.values());
   }
 
@@ -666,5 +677,24 @@ export class PortalUsersService {
     if (!this.tenantAdminAssignableRoles.has(roleKey)) {
       throw new ForbiddenException('Không thể gán quyền nằm ngoài phạm vi cho phép');
     }
+  }
+
+  private resolveAllowedPermissionSet(scope?: PortalUserScope): Set<string> | null {
+    if (!scope || scope.isSuperAdmin) {
+      return null;
+    }
+    const allowed = new Set<string>();
+    const input = Array.isArray(scope.allowedPermissions) ? scope.allowedPermissions : [];
+    for (const raw of input) {
+      if (typeof raw !== 'string') {
+        continue;
+      }
+      const value = raw.trim();
+      if (!value || !PORTAL_PERMISSION_SET.has(value)) {
+        continue;
+      }
+      allowed.add(value);
+    }
+    return allowed;
   }
 }
