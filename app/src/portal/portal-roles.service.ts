@@ -22,7 +22,7 @@ interface UpdatePortalRoleDto {
 export class PortalRolesService implements OnModuleInit {
   private readonly systemRoleKeys = ['super_admin', 'tenant_admin', 'viewer', 'operator', 'agent_lead', 'agent'];
 
-  private readonly allPermissions = PORTAL_PERMISSIONS;
+  private readonly allPermissions = Array.from(PORTAL_PERMISSIONS);
 
   private readonly defaultRoleMap: Record<string, Omit<CreatePortalRoleDto, 'key'>> = {
     viewer: {
@@ -252,7 +252,7 @@ export class PortalRolesService implements OnModuleInit {
             key: 'super_admin',
             name: 'Super Administrator',
             description: 'Toàn quyền quản trị hệ thống và mọi tenant',
-            permissions: this.normalizePermissions(this.allPermissions),
+      permissions: this.normalizePermissions(this.allPermissions),
             isSystem: true,
           })
           .where('key = :key', { key: 'admin' })
