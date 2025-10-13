@@ -9,3 +9,7 @@ export * from './create-outbound-route.dto';
 export * from './update-outbound-route.dto';
 export * from './outbound-route-id-param.dto';
 export * from './tenant-filter-query.dto';
+export * from './create-outbound-caller-id.dto';
+export * from './update-outbound-caller-id.dto';
+export * from './outbound-caller-id-id-param.dto';
+export * from './list-outbound-caller-ids-query.dto';

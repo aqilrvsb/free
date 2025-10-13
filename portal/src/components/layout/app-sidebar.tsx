@@ -211,6 +211,14 @@ const NAV_SECTIONS: Array<{
           permission: "manage_outbound",
         },
         {
+          title: "Caller ID Pool",
+          description: "Quản lý Caller ID quay ra",
+          href: "/fs/outbound/caller-ids",
+          icon: PhoneCall,
+          roles: ["super_admin", "tenant_admin"],
+          permission: "manage_outbound",
+        },
+        {
           title: "Billing",
           description: "Cước gọi và cấu hình billing",
           href: "/fs/billing",

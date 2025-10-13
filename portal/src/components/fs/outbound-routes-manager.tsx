@@ -41,6 +41,7 @@ type RouteFormState = {
   stripDigits: string;
   prepend: string;
   enabled: boolean;
+  randomizeCallerId: boolean;
   billingEnabled: boolean;
   billingRatePerMinute: string;
   billingIncrementSeconds: string;
@@ -59,6 +60,7 @@ const defaultForm: RouteFormState = {
   stripDigits: "0",
   prepend: "",
   enabled: true,
+  randomizeCallerId: false,
   billingEnabled: false,
   billingRatePerMinute: "0",
   billingIncrementSeconds: "60",
@@ -163,6 +165,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
       stripDigits: route.stripDigits !== undefined ? String(route.stripDigits) : "0",
       prepend: route.prepend || "",
       enabled: route.enabled,
+      randomizeCallerId: route.randomizeCallerId ?? false,
       billingEnabled: route.billingEnabled ?? false,
       billingRatePerMinute:
         route.billingRatePerMinute !== undefined ? String(route.billingRatePerMinute) : defaultForm.billingRatePerMinute,
@@ -210,6 +213,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
       prepend: form.prepend.trim() || undefined,
       enabled: Boolean(form.enabled),
       billingEnabled: Boolean(form.billingEnabled),
+      randomizeCallerId: Boolean(form.randomizeCallerId),
     };
 
     if (form.priority.trim()) {
@@ -344,6 +348,10 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
                 <div>
                   <span className="text-muted-foreground">Gateway</span>
                   <p className="font-medium">{route.gatewayName || 'Mặc định tenant'}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Caller ID</span>
+                  <p className="font-medium">{route.randomizeCallerId ? 'Random từ pool' : 'Theo gateway/preset'}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Strip digits</span>
@@ -541,6 +549,19 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
                   placeholder="Route quốc tế qua Telco A"
                 />
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-sm">
+              <input
+                id="route-randomize-callerid"
+                type="checkbox"
+                className="h-4 w-4"
+                checked={form.randomizeCallerId}
+                onChange={(event) => handleInput("randomizeCallerId", event.target.checked)}
+              />
+              <Label htmlFor="route-randomize-callerid" className="cursor-pointer">
+                Random Caller ID từ pool khi gọi ra
+              </Label>
             </div>
 
             <div className="space-y-3 rounded-md border border-border/70 bg-muted/5 p-3">

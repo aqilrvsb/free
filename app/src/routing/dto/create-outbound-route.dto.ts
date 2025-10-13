@@ -32,6 +32,9 @@ export class CreateOutboundRouteDto {
   @ApiPropertyOptional({ description: 'Bật billing cho route này', default: false })
   billingEnabled?: boolean;
 
+  @ApiPropertyOptional({ description: 'Tự động random Caller ID khi quay ra', default: false })
+  randomizeCallerId?: boolean;
+
   @ApiPropertyOptional({ description: 'Đơn giá mỗi phút', example: 150.0 })
   billingRatePerMinute?: number;
 

@@ -24,6 +24,7 @@ import {
   SettingEntity,
   TenantEntity,
   UserEntity,
+  OutboundCallerIdEntity,
   InboundRouteEntity,
   IvrMenuEntity,
   IvrMenuOptionEntity,
@@ -47,6 +48,7 @@ import { GatewayManagementController } from './telephony/gateway-management.cont
 import { GatewayManagementService } from './telephony/gateway-management.service';
 import { OutboundRoutingService } from './routing/outbound-routing.service';
 import { OutboundRoutingController } from './routing/outbound-routing.controller';
+import { OutboundCallerIdController } from './routing/outbound-caller-id.controller';
 import { SettingsService } from './telephony/settings.service';
 import { SettingsController } from './telephony/settings.controller';
 import { DialplanConfigController } from './routing/dialplan-config.controller';
@@ -77,6 +79,7 @@ import { BillingService } from './billing/billing.service';
 import { AgentsController } from './agents/agents.controller';
 import { AgentsService } from './agents/agents.service';
 import { AutoDialerModule } from './autodialer/auto-dialer.module';
+import { OutboundCallerIdService } from './routing/outbound-caller-id.service';
 
 @Module({
   imports: [
@@ -103,6 +106,7 @@ import { AutoDialerModule } from './autodialer/auto-dialer.module';
           SettingEntity,
           DialplanRuleEntity,
           DialplanActionEntity,
+          OutboundCallerIdEntity,
           InboundRouteEntity,
           IvrMenuEntity,
           IvrMenuOptionEntity,
@@ -138,6 +142,7 @@ import { AutoDialerModule } from './autodialer/auto-dialer.module';
       SettingEntity,
       DialplanRuleEntity,
       DialplanActionEntity,
+      OutboundCallerIdEntity,
       InboundRouteEntity,
       IvrMenuEntity,
       IvrMenuOptionEntity,
@@ -187,6 +192,7 @@ import { AutoDialerModule } from './autodialer/auto-dialer.module';
     SecurityController,
     BillingController,
     AgentsController,
+    OutboundCallerIdController,
   ],
   providers: [
     FsService,
@@ -214,6 +220,7 @@ import { AutoDialerModule } from './autodialer/auto-dialer.module';
     SecurityService,
     BillingService,
     AgentsService,
+    OutboundCallerIdService,
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpLoggingInterceptor,

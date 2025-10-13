@@ -70,6 +70,9 @@ export class OutboundRuleEntity {
   @Column({ name: 'billing_cid', type: 'varchar', length: 120, nullable: true })
   billingCid?: string | null;
 
+  @Column({ name: 'randomize_caller_id', type: 'boolean', default: false })
+  randomizeCallerId!: boolean;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt!: Date;
 

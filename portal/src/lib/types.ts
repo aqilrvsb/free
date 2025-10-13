@@ -410,6 +410,22 @@ export interface OutboundRouteSummary {
   billingIncrementMode?: 'full_block' | 'block_plus_one';
   billingSetupFee?: number;
   billingCid?: string;
+  randomizeCallerId?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OutboundCallerIdSummary {
+  id: string;
+  tenantId: string;
+  tenantName?: string | null;
+  gatewayId?: string | null;
+  gatewayName?: string | null;
+  callerIdNumber: string;
+  callerIdName?: string | null;
+  label?: string | null;
+  weight: number;
+  active: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

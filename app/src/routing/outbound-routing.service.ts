@@ -19,6 +19,7 @@ export interface CreateOutboundRouteDto {
   prepend?: string;
   enabled?: boolean;
   billingEnabled?: boolean;
+  randomizeCallerId?: boolean;
   billingRatePerMinute?: number | string;
   billingIncrementSeconds?: number;
   billingIncrementMode?: BillingIncrementMode;
@@ -107,6 +108,7 @@ export class OutboundRoutingService {
       billingIncrementMode: this.normalizeIncrementMode(dto.billingIncrementMode),
       billingSetupFee: this.normalizeDecimal(dto.billingSetupFee, 4),
       billingCid: dto.billingCid?.trim() || null,
+      randomizeCallerId: Boolean(dto.randomizeCallerId),
     });
 
     await this.ruleRepo.save(rule);
@@ -186,6 +188,9 @@ export class OutboundRoutingService {
     if (dto.billingCid !== undefined) {
       rule.billingCid = dto.billingCid?.trim() || null;
     }
+    if (dto.randomizeCallerId !== undefined) {
+      rule.randomizeCallerId = Boolean(dto.randomizeCallerId);
+    }
 
     await this.ruleRepo.save(rule);
     const updated = await this.ruleRepo.findOne({ where: { id: rule.id }, relations: ['tenant', 'gateway'] });
@@ -233,6 +238,7 @@ export class OutboundRoutingService {
       billingIncrementMode: (rule.billingIncrementMode as BillingIncrementMode | undefined) ?? DEFAULT_BILLING_INCREMENT_MODE,
       billingSetupFee: Number(rule.billingSetupFee ?? 0),
       billingCid: rule.billingCid ?? undefined,
+      randomizeCallerId: rule.randomizeCallerId,
       createdAt: rule.createdAt,
       updatedAt: rule.updatedAt,
     };

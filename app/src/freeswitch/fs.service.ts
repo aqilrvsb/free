@@ -15,6 +15,7 @@ import {
   BillingConfigEntity,
 } from '../entities';
 import { DialplanConfigService } from '../routing/dialplan-config.service';
+import { OutboundCallerIdService } from '../routing/outbound-caller-id.service';
 
 interface DialplanParams {
   context?: string;
@@ -49,6 +50,7 @@ export class FsService {
     @InjectRepository(IvrMenuEntity) private readonly ivrMenuRepo: Repository<IvrMenuEntity>,
     @InjectRepository(BillingConfigEntity) private readonly billingRepo: Repository<BillingConfigEntity>,
     private readonly dialplanConfig: DialplanConfigService,
+    private readonly callerIdService: OutboundCallerIdService,
   ) {}
 
   async dialplanXML(params: DialplanParams): Promise<string> {
@@ -272,8 +274,35 @@ export class FsService {
         actions.push({ app: 'export', data: `billing_balance_start=${balanceAmount.toFixed(4)}` });
       }
       if (isGatewayBridge) {
-        const callerNumberExpr = appliedOutboundRule?.gateway?.callerIdNumber?.trim() || '${effective_caller_id_number}';
-        const callerNameExpr = appliedOutboundRule?.gateway?.callerIdName?.trim() || '${effective_caller_id_name}';
+        let callerNumberExpr = appliedOutboundRule?.gateway?.callerIdNumber?.trim() || '';
+        let callerNameExpr = appliedOutboundRule?.gateway?.callerIdName?.trim() || '';
+
+        if (appliedOutboundRule?.randomizeCallerId) {
+          try {
+            const randomCallerId = await this.callerIdService.pickRandomCallerId(tenantId, {
+              gatewayId: appliedOutboundRule?.gatewayId ?? null,
+            });
+            if (randomCallerId) {
+              callerNumberExpr = randomCallerId.callerIdNumber || callerNumberExpr;
+              if (randomCallerId.callerIdName) {
+                callerNameExpr = randomCallerId.callerIdName;
+              }
+            }
+          } catch (error) {
+            this.logger.warn(
+              `Không thể chọn Caller ID ngẫu nhiên cho tenant ${tenantId}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }
+
+        if (!callerNumberExpr) {
+          callerNumberExpr = '${effective_caller_id_number}';
+        }
+        if (!callerNameExpr) {
+          callerNameExpr = '${effective_caller_id_name}';
+        }
 
         actions.push({ app: 'export', data: 'internal_caller_extension=${caller_id_number}' });
         actions.push({ app: 'set', data: `origination_caller_id_number=${callerNumberExpr}` });

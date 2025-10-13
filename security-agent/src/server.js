@@ -17,6 +17,7 @@ const FIREWALL_FAMILY = process.env.NFT_FAMILY || 'inet';
 const FIREWALL_TABLE = process.env.NFT_TABLE || 'filter';
 const FIREWALL_CHAIN = process.env.NFT_CHAIN || 'input';
 const FIREWALL_HOOK = process.env.NFT_CHAIN_HOOK || 'input';
+const F2B_SYNC_INTERVAL_MS = Number(process.env.F2B_SYNC_INTERVAL_MS || 15000);
 const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
 const IPV4_REGEX = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 const F2B_JAIL_CONFIG_PATH = process.env.F2B_JAIL_CONFIG_PATH || '/etc/fail2ban/jail.d/portal.local';
@@ -796,12 +797,14 @@ function serializeValue(value) {
   return str.length > 0 ? str : undefined;
 }
 
-async function ensureBanFirewallRule(ip, banKey) {
+async function ensureBanFirewallRule(ip, banKey, options = {}) {
   if (!ip) {
-    return;
+    return false;
   }
+  const { remediateIfNew = false } = options;
   const ruleId = `ban-${banKey}`;
   const existing = state.firewallRules.find((item) => item.id === ruleId);
+  const createdAt = existing?.createdAt || new Date().toISOString();
   const rulePayload = {
     id: ruleId,
     action: 'drop',
@@ -810,7 +813,7 @@ async function ensureBanFirewallRule(ip, banKey) {
     protocol: null,
     port: null,
     description: `[ban] ${ip}`,
-    createdAt: new Date().toISOString(),
+    createdAt,
     managedBy: 'ban',
     banKey,
   };
@@ -824,9 +827,14 @@ async function ensureBanFirewallRule(ip, banKey) {
       state.firewallRules.unshift(rulePayload);
     }
     await saveState();
+    if (remediateIfNew && !existing) {
+      await remediateBlockedIp(ip);
+    }
+    return !existing;
   } catch (error) {
     console.error('[agent] unable to create ban firewall rule', error.message);
   }
+  return false;
 }
 
 async function removeBanFirewallRule(banKey) {
@@ -857,13 +865,15 @@ async function removeBanFirewallRule(banKey) {
   await saveState();
 }
 
-async function syncBanFirewallRules(bans) {
+async function syncBanFirewallRules(bans, options = {}) {
+  const remediateNew = options?.remediateNew === true;
   const activeKeys = new Map();
   for (const ban of bans) {
     const key = ban?.id || (ban?.jail && ban?.ip ? `${ban.jail}:${ban.ip}` : null);
     if (key) {
-      activeKeys.set(key, extractSingleIp(ban.ip));
-      await ensureBanFirewallRule(extractSingleIp(ban.ip), key);
+      const ip = extractSingleIp(ban.ip);
+      activeKeys.set(key, ip);
+      await ensureBanFirewallRule(ip, key, { remediateIfNew: remediateNew });
     }
   }
 
@@ -916,6 +926,17 @@ async function syncFirewallState() {
     }
   }
   await saveState();
+}
+
+async function refreshFail2banState(options = {}) {
+  try {
+    const bans = await listBans();
+    await syncBanFirewallRules(bans, { remediateNew: options.remediateNew === true });
+  } catch (error) {
+    if (LOG_LEVEL === 'debug') {
+      console.warn('[agent] fail2ban sync failed', error.message);
+    }
+  }
 }
 
 function authenticate(req, res, next) {
@@ -979,7 +1000,7 @@ app.put('/fail2ban/config', async (req, res) => {
     await updateFail2banConfig(req.body);
     const config = await loadFail2banConfig();
     const bans = await listBans();
-    await syncBanFirewallRules(bans);
+    await syncBanFirewallRules(bans, { remediateNew: true });
     res.json(config);
   } catch (error) {
     console.error('[agent] update fail2ban config failed', error.message);
@@ -990,7 +1011,7 @@ app.put('/fail2ban/config', async (req, res) => {
 
 app.get('/bans', async (_req, res) => {
   const bans = await listBans();
-  await syncBanFirewallRules(bans);
+  await syncBanFirewallRules(bans, { remediateNew: true });
   res.json(bans);
 });
 
@@ -1001,8 +1022,7 @@ app.post('/bans', async (req, res) => {
   }
   try {
     const result = await createBan({ ip, jail, durationSeconds, reason });
-    await ensureBanFirewallRule(result.ip, result.id);
-    await remediateBlockedIp(result.ip);
+    await ensureBanFirewallRule(result.ip, result.id, { remediateIfNew: true });
     res.json(result);
   } catch (error) {
     console.error('[agent] create ban failed', error.message);
@@ -1109,6 +1129,16 @@ app.use((err, _req, res, _next) => {
 (async () => {
   await loadState();
   await syncFirewallState();
+  await refreshFail2banState({ remediateNew: true });
+  if (Number.isFinite(F2B_SYNC_INTERVAL_MS) && F2B_SYNC_INTERVAL_MS > 0) {
+    setInterval(() => {
+      refreshFail2banState().catch((error) => {
+        if (LOG_LEVEL === 'debug') {
+          console.warn('[agent] periodic fail2ban sync error', error.message);
+        }
+      });
+    }, F2B_SYNC_INTERVAL_MS);
+  }
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[agent] listening on port ${PORT}`);
   });

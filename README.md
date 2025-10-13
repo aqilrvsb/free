@@ -19,6 +19,11 @@ docker compose -f docker-compose.yml -f docker-compose.local-db.yml up --build
 
 > On macOS Docker Desktop, you can enable **host networking** in Settings (Docker Desktop ≥ 4.34). If it is unavailable, edit `docker-compose.yml` to replace the FreeSWITCH `network_mode: host` setting with explicit port mappings.
 
+## Environment notes
+- Các biến môi trường nhạy cảm phải được lưu trong file local (`.env`, `portal/.env`) và **không** commit lên git. Repo đã cấu hình `.gitignore` để bỏ qua mọi file `.env`; nếu đã lỡ track, hãy chạy `git rm --cached .env portal/.env` rồi commit lại.
+- Sử dụng các file mẫu an toàn: `cp env.example .env` cho backend và `cp portal/.env.example portal/.env` cho portal, sau đó cập nhật giá trị thực tế trên máy bạn hoặc thông qua secret manager.
+- Khi triển khai CI/CD, inject biến môi trường thông qua hệ thống secrets thay vì commit trực tiếp vào repo.
+
 ## What’s included
 - **MySQL 8** datastore managed via TypeORM (tenants, users, routing, CDR records); reuse an external instance or add the bundled container when needed.
 - **FreeSWITCH** with `mod_xml_curl`, `mod_xml_cdr`, `mod_sofia`, `mod_lua`, `mod_opus`.
@@ -27,6 +32,7 @@ docker compose -f docker-compose.yml -f docker-compose.local-db.yml up --build
   - `section=directory` → dynamic SIP users per tenant
 - **CDR ingest**: FreeSWITCH posts JSON CDRs to `/fs/cdr` (shared-secret header), stored in MySQL.
 - **CDR/Recording APIs**: retrieve call records via `/cdr` and download recordings via `/recordings`.
+- **Caller ID pool**: quản lý tập Caller ID quay ra theo tenant/gateway và (khi bật trên outbound rule/chiến dịch) random khi bridge outbound.
 - **Demo data seeding**: optional bootstrap (`SEED_DEMO_DATA=true`) populates sample tenants/users/routing on first run.
 - **Compose setup**: FreeSWITCH runs with host networking by default; adapt the service definition if you need standard port mappings.
 
@@ -105,6 +111,7 @@ docker compose -f docker-compose.yml -f docker-compose.local-db.yml up --build
 - **FreeSWITCH image tooling**: Use `scripts/build-freeswitch-image.sh` locally to publish multi-arch FreeSWITCH images (for example to `registry.gitlab.com/<group>/<project>/freeswitch`) when you need a manual rebuild.
 - **CDR security**: set `CDR_HTTP_HEADERS` in `.env` if you need FreeSWITCH to send extra HTTP headers (for example `Authorization: Basic ...`) with each CDR webhook.
 - **FreeSWITCH management**: set `FS_ESL_HOST`, `FS_ESL_PORT`, and `FS_ESL_PASSWORD` so the Nest app can reach the FreeSWITCH Event Socket; recordings directory is mapped via `RECORDINGS_DIR`.
+- **Outbound Caller ID randomization**: quản lý pool Caller ID tại `/fs/outbound-caller-ids`; bật/tắt random per outbound rule (checkbox "Random Caller ID") hoặc đặt metadata chiến dịch `useCallerIdPool=true` để hệ thống chọn ngẫu nhiên (theo weight) trước khi bridge PSTN.
 - **API security**: lock down `/fs/xml` and `/fs/cdr` (network ACL, reverse proxy auth, or mTLS) before exposing publicly.
 - **Mac dev**: Docker Desktop may not support host networking; adjust `docker-compose.yml` to expose the needed UDP/TCP ports if you're not on Linux.
 

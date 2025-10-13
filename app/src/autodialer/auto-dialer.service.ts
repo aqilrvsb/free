@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
@@ -24,6 +24,7 @@ import { ListAutoDialerCdrQueryDto } from './dto/list-cdr-query.dto';
 import { ScheduleJobsDto } from './dto/schedule-jobs.dto';
 import { StartJobDto } from './dto/start-job.dto';
 import { FsManagementService } from '../freeswitch/fs-management.service';
+import { OutboundCallerIdService } from '../routing/outbound-caller-id.service';
 
 interface TenantScope {
   isSuperAdmin: boolean;
@@ -39,6 +40,7 @@ function normalizeTenantIds(scope: TenantScope | undefined): string[] {
 
 @Injectable()
 export class AutoDialerService {
+  private readonly logger = new Logger(AutoDialerService.name);
   constructor(
     @InjectRepository(AutoDialerCampaignEntity)
     private readonly campaignRepo: Repository<AutoDialerCampaignEntity>,
@@ -55,6 +57,7 @@ export class AutoDialerService {
     @InjectRepository(BillingConfigEntity)
     private readonly billingConfigRepo: Repository<BillingConfigEntity>,
     private readonly fsManagementService: FsManagementService,
+    private readonly callerIdService: OutboundCallerIdService,
   ) {}
 
   private ensureTenantAccess(scope: TenantScope | undefined, tenantId: string): void {
@@ -416,9 +419,39 @@ export class AutoDialerService {
     const gateway = dto && typeof dto === 'object' && dto.gateway
       ? String(dto.gateway).trim()
       : campaignMetadata.gateway || 'pstn';
-    const callerIdNumber = dto && typeof dto === 'object' && dto.callerIdNumber
+    let callerIdNumber = dto && typeof dto === 'object' && dto.callerIdNumber
       ? String(dto.callerIdNumber).trim()
       : campaignMetadata.callerId || '';
+    const metadataCallerIdName =
+      typeof campaignMetadata.callerIdName === 'string' ? String(campaignMetadata.callerIdName).trim() : '';
+    let callerIdName = metadataCallerIdName || '';
+    const metadataUseCallerIdPool =
+      typeof campaignMetadata.useCallerIdPool === 'string'
+        ? campaignMetadata.useCallerIdPool.toLowerCase() === 'true'
+        : campaignMetadata.useCallerIdPool === true;
+    const useCallerIdPool = Boolean(dto?.useCallerIdPool) || metadataUseCallerIdPool;
+
+    if (!callerIdNumber && useCallerIdPool) {
+      try {
+        const randomCallerId = await this.callerIdService.pickRandomCallerId(hydrated.campaign.tenantId, {});
+        if (randomCallerId) {
+          callerIdNumber = randomCallerId.callerIdNumber;
+          if (randomCallerId.callerIdName) {
+            callerIdName = randomCallerId.callerIdName;
+          }
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Không thể chọn Caller ID ngẫu nhiên cho tenant ${hydrated.campaign.tenantId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    if (!callerIdName && callerIdNumber) {
+      callerIdName = callerIdNumber;
+    }
 
     const playbackFile = hydrated.campaign.audioUrl?.trim() || 'silence_stream://60000';
     const ivrMenu = hydrated.campaign.ivrMenuId ?? '';
@@ -439,6 +472,10 @@ export class AutoDialerService {
     if (callerIdNumber) {
       vars.effective_caller_id_number = callerIdNumber;
       vars.outbound_caller_id_number = callerIdNumber;
+    }
+    if (callerIdName) {
+      vars.effective_caller_id_name = callerIdName;
+      vars.outbound_caller_id_name = callerIdName;
     }
 
     const varString = Object.entries(vars)

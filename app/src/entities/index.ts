@@ -19,6 +19,7 @@ export * from './routing/dialplan-rule.entity';
 export * from './routing/dialplan-action.entity';
 export * from './routing/inbound-route.entity';
 export * from './routing/outbound-rule.entity';
+export * from './routing/outbound-caller-id.entity';
 
 export * from './ivr/ivr-menu.entity';
 export * from './ivr/ivr-menu-option.entity';
