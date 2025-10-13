@@ -1,7 +1,8 @@
 import { apiFetch } from "@/lib/api";
 import type { GatewaySummary, OutboundCallerIdSummary, TenantSummary } from "@/lib/types";
 import { PageHeader } from "@/components/common/page-header";
-import { OutboundCallerIdManager, normalizeCallerId, type RawCallerId } from "@/components/fs/outbound-caller-id-manager";
+import { OutboundCallerIdManager } from "@/components/fs/outbound-caller-id-manager";
+import { normalizeCallerId, type RawCallerId } from "@/lib/caller-id";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,14 @@ export default async function OutboundCallerIdsPage() {
     }),
   ]);
 
-  const callerIds: OutboundCallerIdSummary[] = (callerIdsRaw ?? []).map((item) => normalizeCallerId(item));
+  const callerIds: OutboundCallerIdSummary[] = [];
+  for (const raw of callerIdsRaw ?? []) {
+    try {
+      callerIds.push(normalizeCallerId(raw));
+    } catch (error) {
+      console.warn("[caller-id] Bỏ qua bản ghi không hợp lệ", raw, error);
+    }
+  }
 
   return (
     <div className="space-y-6">

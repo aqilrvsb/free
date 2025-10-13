@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { GatewaySummary } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -47,11 +47,6 @@ export function GatewayManager({ initialGateways }: GatewayManagerProps) {
   const [form, setForm] = useState({ ...defaultForm });
   const [editing, setEditing] = useState<GatewaySummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
-
-  const apiBase = useMemo(
-    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
-    [],
-  );
 
   const openCreate = () => {
     setDialogMode("create");
@@ -121,25 +116,21 @@ export function GatewayManager({ initialGateways }: GatewayManagerProps) {
 
   const submitGateway = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase) return;
-
     const payload = buildPayload();
-    const url = dialogMode === "create"
-      ? `${apiBase}/fs/gateways`
-      : `${apiBase}/fs/gateways/${editing?.id}`;
+    const endpoint = dialogMode === "create"
+      ? `/fs/gateways`
+      : `/fs/gateways/${editing?.id}`;
     const method = dialogMode === "create" ? "POST" : "PUT";
 
     setLoading(method);
     try {
-      const response = await fetch(url, {
+      const gateway = await apiFetch<GatewaySummary>(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const gateway = (await response.json()) as GatewaySummary;
       if (dialogMode === "create") {
         setGateways((prev) => [...prev, gateway]);
       } else if (editing) {
@@ -157,19 +148,17 @@ export function GatewayManager({ initialGateways }: GatewayManagerProps) {
   };
 
   const deleteGateway = async (gateway: GatewaySummary) => {
-    if (!apiBase) return;
     if (!confirm(`Xóa gateway ${gateway.name}?`)) {
       return;
     }
     setLoading(`delete-${gateway.id}`);
     try {
-      const response = await fetch(`${apiBase}/fs/gateways/${gateway.id}`, {
+      await apiFetch<{ success: boolean }>(`/fs/gateways/${gateway.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
       setGateways((prev) => prev.filter((item) => item.id !== gateway.id));
     } catch (error) {
       console.error("Failed to delete gateway", error);

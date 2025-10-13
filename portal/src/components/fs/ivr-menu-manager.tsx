@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { buildAuthHeaders } from "@/lib/client-auth";
 
 interface IvrMenuManagerProps {
   tenants: TenantSummary[];
@@ -303,7 +304,7 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
     try {
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: buildAuthHeaders(true),
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
@@ -331,7 +332,10 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
     }
     setLoading(`delete-${menu.id}`);
     try {
-      const response = await fetch(`${apiBase}/fs/ivr-menus/${menu.id}`, { method: "DELETE" });
+      const response = await fetch(`${apiBase}/fs/ivr-menus/${menu.id}`, {
+        method: "DELETE",
+        headers: buildAuthHeaders(),
+      });
       if (!response.ok) {
         throw new Error(await response.text());
       }

@@ -8,6 +8,7 @@ import { BillingTopupForm } from "@/components/fs/billing-topup-form";
 import { BillingChargesManager } from "@/components/fs/billing-charges-manager";
 import { BillingTopupHistory } from "@/components/fs/billing-topup-history";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 
 interface BillingTenantPanelProps {
   tenantId: string;
@@ -61,13 +62,11 @@ export function BillingTenantPanel({
       return;
     }
     try {
-      const response = await fetch(`${apiBase}/billing/topups?tenantId=${tenantId}`, {
+      const records = await apiFetch<BillingTopupRecord[]>(`/billing/topups?tenantId=${tenantId}`, {
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const records = (await response.json()) as BillingTopupRecord[];
       setTopups(records);
     } catch (error) {
       console.error("[BillingTenantPanel] Không thể tải lại lịch sử nạp quỹ", error);

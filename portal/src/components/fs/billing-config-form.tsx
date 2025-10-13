@@ -5,7 +5,7 @@ import type { BillingConfig } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 import {
   Select,
   SelectContent,
@@ -24,7 +24,6 @@ interface BillingConfigFormProps {
 }
 
 export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, onCurrencyChange, readOnly = false }: BillingConfigFormProps) {
-  const apiBase = resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
   const [currency, setCurrency] = useState(config.currency);
   const [defaultRate, setDefaultRate] = useState(String(config.defaultRatePerMinute ?? 0));
   const [increment, setIncrement] = useState(String(config.defaultIncrementSeconds ?? 60));
@@ -63,7 +62,7 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase || readOnly) return;
+    if (readOnly) return;
     setLoading(true);
     setStatus(null);
     try {
@@ -77,15 +76,13 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
         prepaidEnabled,
         defaultIncrementMode: incrementMode,
       };
-      const response = await fetch(`${apiBase}/billing/config/${tenantId}`, {
+      const updated = await apiFetch<BillingConfig>(`/billing/config/${tenantId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const updated = await response.json();
       if (updated?.currency) {
         setCurrency(updated.currency);
         onCurrencyChange?.(updated.currency);

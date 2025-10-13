@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { buildAuthHeaders } from "@/lib/client-auth";
 
 interface SystemRecordingsManagerProps {
   initialRecordings: SystemRecordingSummary[];
@@ -77,6 +78,7 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
       const response = await fetch(`${apiBase}/fs/system-recordings`, {
         method: "POST",
         body: formData,
+        headers: buildAuthHeaders(),
       });
       if (!response.ok) {
         throw new Error(await response.text());
@@ -98,7 +100,10 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
       return;
     }
     try {
-      const response = await fetch(`${apiBase}/fs/system-recordings/${recording.id}`, { method: "DELETE" });
+      const response = await fetch(`${apiBase}/fs/system-recordings/${recording.id}`, {
+        method: "DELETE",
+        headers: buildAuthHeaders(),
+      });
       if (!response.ok) {
         throw new Error(await response.text());
       }

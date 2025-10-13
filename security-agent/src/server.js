@@ -519,7 +519,7 @@ function buildNftArgs(rule) {
     commentParts.push(rule.description);
   }
   const commentRaw = commentParts.join(' ');
-  const sanitizedComment = commentRaw.replace(/[^a-zA-Z0-9_:\-\s]/g, ' ').trim() || `portal-${rule.id}`;
+  const sanitizedComment = commentRaw.replace(/[^a-zA-Z0-9_:\-.\s]/g, ' ').trim() || `portal-${rule.id}`;
   args.push('comment', `"${sanitizedComment}"`);
 
   return args;
@@ -549,6 +549,9 @@ async function findRuleHandle(id) {
 
 async function addFirewallRule(rule, reapply = false) {
   const args = buildNftArgs(rule);
+  if (LOG_LEVEL === 'debug') {
+    console.log('[agent] nft cmd', args.join(' '));
+  }
   try {
     await runCommand('nft', args);
   } catch (error) {
@@ -804,6 +807,9 @@ async function ensureBanFirewallRule(ip, banKey, options = {}) {
   const { remediateIfNew = false } = options;
   const ruleId = `ban-${banKey}`;
   const existing = state.firewallRules.find((item) => item.id === ruleId);
+  if (LOG_LEVEL === 'debug') {
+    console.log(`[agent] ensure ban rule ${ip} (${banKey})${existing ? ' [existing]' : ''}`);
+  }
   const createdAt = existing?.createdAt || new Date().toISOString();
   const rulePayload = {
     id: ruleId,
@@ -819,7 +825,21 @@ async function ensureBanFirewallRule(ip, banKey, options = {}) {
   };
 
   try {
+    const currentHandle = await findRuleHandle(ruleId);
+    if (currentHandle) {
+      rulePayload.handle = currentHandle;
+      if (existing) {
+        Object.assign(existing, rulePayload);
+      } else {
+        state.firewallRules.unshift(rulePayload);
+      }
+      await saveState();
+      return false;
+    }
     await addFirewallRule(rulePayload);
+    if (LOG_LEVEL === 'debug') {
+      console.log(`[agent] nft rule added for ${ip} (${banKey})`);
+    }
     rulePayload.handle = await findRuleHandle(ruleId);
     if (existing) {
       Object.assign(existing, rulePayload);

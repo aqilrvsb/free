@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RecordingStorageConfig } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 
 interface RecordingStorageSettingsProps {
   initialConfig: RecordingStorageConfig;
@@ -14,10 +14,6 @@ interface RecordingStorageSettingsProps {
 
 export function RecordingStorageSettings({ initialConfig }: RecordingStorageSettingsProps) {
   const router = useRouter();
-  const apiBase = useMemo(
-    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
-    [],
-  );
   const [mode, setMode] = useState<"local" | "cdn">(initialConfig.mode);
   const [cdnBaseUrl, setCdnBaseUrl] = useState(
     initialConfig.cdnBaseUrl || initialConfig.aws?.cdnEndpoint || "",
@@ -46,7 +42,6 @@ export function RecordingStorageSettings({ initialConfig }: RecordingStorageSett
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase) return;
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -80,25 +75,13 @@ export function RecordingStorageSettings({ initialConfig }: RecordingStorageSett
         }
       }
 
-      const response = await fetch(`${apiBase}/settings/recordings-storage`, {
+      const result = await apiFetch<RecordingStorageConfig>("/settings/recordings-storage", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
+        cache: "no-store",
       });
-      if (!response.ok) {
-        const raw = await response.text();
-        let message = raw || "Không thể lưu cấu hình.";
-        try {
-          const parsed = JSON.parse(raw) as { message?: string | string[] };
-          message = Array.isArray(parsed.message)
-            ? parsed.message.join(", ")
-            : parsed.message ?? message;
-        } catch {
-          // bỏ qua lỗi parse, giữ nguyên thông báo gốc
-        }
-        throw new Error(message);
-      }
-      const result = (await response.json()) as RecordingStorageConfig;
 
       setMode(result.mode);
       setCdnBaseUrl(result.cdnBaseUrl ?? result.aws?.cdnEndpoint ?? "");

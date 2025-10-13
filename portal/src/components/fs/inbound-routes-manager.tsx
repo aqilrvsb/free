@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 
 interface InboundRoutesManagerProps {
   tenants: TenantSummary[];
@@ -57,11 +57,6 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
   const [form, setForm] = useState<FormState>({ ...defaultForm });
   const [editing, setEditing] = useState<InboundRouteSummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
-
-  const apiBase = useMemo(
-    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
-    [],
-  );
 
   const filteredRoutes = useMemo(() => {
     if (selectedTenant === "all") {
@@ -139,7 +134,6 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
 
   const submitRoute = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase) return;
     if (!form.tenantId.trim()) {
       alert("Vui lòng chọn tenant");
       return;
@@ -154,20 +148,18 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
     }
 
     const payload = buildPayload();
-    const url = dialogMode === "create" ? `${apiBase}/fs/inbound-routes` : `${apiBase}/fs/inbound-routes/${editing?.id}`;
+    const endpoint = dialogMode === "create" ? `/fs/inbound-routes` : `/fs/inbound-routes/${editing?.id}`;
     const method = dialogMode === "create" ? "POST" : "PUT";
 
     setLoading(method);
     try {
-      const response = await fetch(url, {
+      const route = await apiFetch<InboundRouteSummary>(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const route = (await response.json()) as InboundRouteSummary;
       if (dialogMode === "create") {
         setRoutes((prev) => [...prev, route].sort((a, b) => a.priority - b.priority));
       } else if (editing) {
@@ -183,16 +175,16 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
   };
 
   const deleteRoute = async (route: InboundRouteSummary) => {
-    if (!apiBase) return;
     if (!confirm(`Xóa inbound route ${route.name}?`)) {
       return;
     }
     setLoading(`delete-${route.id}`);
     try {
-      const response = await fetch(`${apiBase}/fs/inbound-routes/${route.id}`, { method: "DELETE" });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+      await apiFetch<{ success: boolean }>(`/fs/inbound-routes/${route.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        cache: "no-store",
+      });
       setRoutes((prev) => prev.filter((item) => item.id !== route.id));
     } catch (error) {
       console.error("Failed to delete inbound route", error);

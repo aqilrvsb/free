@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 
 interface BillingTopupFormProps {
   tenantId: string;
@@ -14,7 +14,6 @@ interface BillingTopupFormProps {
 }
 
 export function BillingTopupForm({ tenantId, currency, disabled = false, onSuccess }: BillingTopupFormProps) {
-  const apiBase = resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
   const [amount, setAmount] = useState("0");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +32,7 @@ export function BillingTopupForm({ tenantId, currency, disabled = false, onSucce
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase || disabled) return;
+    if (disabled) return;
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setStatus("Số tiền nạp phải lớn hơn 0");
@@ -42,15 +41,13 @@ export function BillingTopupForm({ tenantId, currency, disabled = false, onSucce
     setLoading(true);
     setStatus(null);
     try {
-      const response = await fetch(`${apiBase}/billing/topup`, {
+      const payload = await apiFetch<{ balanceAmount?: number }>("/billing/topup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ tenantId, amount: numericAmount }),
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const payload = await response.json();
       if (onSuccess) {
         onSuccess(payload.balanceAmount ?? 0);
       }

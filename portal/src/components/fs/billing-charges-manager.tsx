@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 import type { BillingChargeRecord } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
@@ -39,7 +39,6 @@ export function BillingChargesManager({
   onBalanceChange,
   onChangeCharges,
 }: BillingChargesManagerProps) {
-  const apiBase = resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
   const [charges, setCharges] = useState<BillingChargeRecord[]>(initialCharges);
   const [amount, setAmount] = useState("0");
   const [description, setDescription] = useState("");
@@ -62,7 +61,7 @@ export function BillingChargesManager({
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase || disabled) return;
+    if (disabled) return;
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setStatus("Số tiền phải lớn hơn 0");
@@ -71,17 +70,15 @@ export function BillingChargesManager({
     setLoading(true);
     setStatus(null);
     try {
-      const response = await fetch(`${apiBase}/billing/charges`, {
+      const { balanceAmount, ...created } = (await apiFetch<BillingChargeRecord & {
+        balanceAmount?: number;
+      }>("/billing/charges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ tenantId, amount: numericAmount, description }),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const { balanceAmount, ...created } = (await response.json()) as BillingChargeRecord & {
-        balanceAmount?: number;
-      };
+        cache: "no-store",
+      })) as BillingChargeRecord & { balanceAmount?: number };
       setCharges((prev) => {
         const next = [created, ...prev];
         onChangeCharges?.(next);
@@ -118,7 +115,7 @@ export function BillingChargesManager({
 
   const handleUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editingId || !apiBase || disabled) return;
+    if (!editingId || disabled) return;
     const numericAmount = Number(editingAmount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setStatus("Số tiền phải lớn hơn 0");
@@ -127,17 +124,15 @@ export function BillingChargesManager({
     setLoading(true);
     setStatus(null);
     try {
-      const response = await fetch(`${apiBase}/billing/charges/${editingId}`, {
+      const { balanceAmount, ...updated } = (await apiFetch<BillingChargeRecord & {
+        balanceAmount?: number;
+      }>(`/billing/charges/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ amount: numericAmount, description: editingDescription }),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const { balanceAmount, ...updated } = (await response.json()) as BillingChargeRecord & {
-        balanceAmount?: number;
-      };
+        cache: "no-store",
+      })) as BillingChargeRecord & { balanceAmount?: number };
       setCharges((prev) => {
         const next = prev.map((charge) => (charge.id === updated.id ? updated : charge));
         onChangeCharges?.(next);
@@ -157,21 +152,19 @@ export function BillingChargesManager({
   };
 
   const handleDelete = async (id: string) => {
-    if (!apiBase || disabled) return;
+    if (disabled) return;
     if (!confirm("Xoá phí phát sinh này?")) {
       return;
     }
     setLoading(true);
     setStatus(null);
     try {
-      const response = await fetch(`${apiBase}/billing/charges/${id}`, {
+      const payload = await apiFetch<{ success: boolean; balanceAmount?: number }>(`/billing/charges/${id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const payload = (await response.json()) as { success: boolean; balanceAmount?: number };
       setCharges((prev) => {
         const next = prev.filter((charge) => charge.id !== id);
         onChangeCharges?.(next);

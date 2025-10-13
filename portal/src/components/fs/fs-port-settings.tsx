@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { buildAuthHeaders } from "@/lib/client-auth";
 
 interface FsPortSettingsProps {
   initialConfig: FsPortConfig;
@@ -123,7 +124,7 @@ export function FsPortSettings({ initialConfig }: FsPortSettingsProps) {
       const payload = parsePayload();
       const response = await fetch(`${apiBase}/settings/fs-ports`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: buildAuthHeaders(true),
         body: JSON.stringify(payload),
       });
 

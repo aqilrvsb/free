@@ -5,11 +5,12 @@ import { io, type Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { CallEvent, FsChannel } from "@/lib/types";
+import type { CallEvent, CommandResult, FsChannel, FsChannelList } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { extractChannelCount, extractChannelRows } from "@/lib/channels";
 import { Loader2, PhoneCall, PhoneOff } from "lucide-react";
 import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 
 interface CallsRealtimeProps {
   initialChannels: FsChannel[];
@@ -114,14 +115,12 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
   }, [apiBase, wsBase]);
 
   const fetchSnapshot = useCallback(async () => {
-    if (!apiBase) return;
     setIsRefreshing(true);
     try {
-      const response = await fetch(`${apiBase}/fs/channels`, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch channels (${response.status})`);
-      }
-      const data = await response.json();
+      const data = await apiFetch<CommandResult<FsChannelList>>("/fs/channels", {
+        cache: "no-store",
+        credentials: "include",
+      });
       const parsed = extractChannelRows(data?.parsed);
       setChannels(parsed);
       setChannelCount(extractChannelCount(data?.parsed ?? parsed));
@@ -130,7 +129,7 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [apiBase]);
+  }, []);
 
   const scheduleSnapshotRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
@@ -157,16 +156,13 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
 
   const handleHangup = useCallback(
     async (uuid: string) => {
-      if (!apiBase) return;
       setHangupUuid(uuid);
       try {
-        const response = await fetch(`${apiBase}/fs/channels/${uuid}/hangup`, {
+        await apiFetch<{ success: boolean }>(`/fs/channels/${uuid}/hangup`, {
           method: "POST",
           cache: "no-store",
+          credentials: "include",
         });
-        if (!response.ok) {
-          throw new Error(`Hangup failed with status ${response.status}`);
-        }
         await fetchSnapshot();
       } catch (error) {
         console.error("Failed to hangup call", error);
@@ -174,7 +170,7 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
         setHangupUuid(null);
       }
     },
-    [apiBase, fetchSnapshot],
+    [fetchSnapshot],
   );
 
   useEffect(() => {

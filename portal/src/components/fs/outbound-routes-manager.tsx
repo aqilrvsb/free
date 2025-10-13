@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { buildAuthHeaders } from "@/lib/client-auth";
 import {
   Select,
   SelectContent,
@@ -259,7 +260,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
     try {
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: buildAuthHeaders(true),
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
@@ -292,7 +293,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
     try {
       const response = await fetch(`${apiBase}/fs/outbound-routes/${route.id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: buildAuthHeaders(),
       });
       if (!response.ok) {
         throw new Error(await response.text());

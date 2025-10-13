@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { GatewaySummary, OutboundCallerIdSummary, TenantSummary } from "@/lib/types";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
+import { normalizeCallerId, type RawCallerId } from "@/lib/caller-id";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,38 +56,6 @@ const defaultForm: CallerIdFormState = {
   active: true,
 };
 
-export type RawCallerId = Partial<OutboundCallerIdSummary> & {
-  tenant?: { name?: string | null };
-  gateway?: { id?: string; name?: string | null };
-  weight?: number | string;
-};
-
-export function normalizeCallerId(raw: RawCallerId): OutboundCallerIdSummary {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Invalid Caller ID payload");
-  }
-  const id = typeof raw.id === "string" ? raw.id : "";
-  const tenantId = typeof raw.tenantId === "string" ? raw.tenantId : "";
-  const callerIdNumber = typeof raw.callerIdNumber === "string" ? raw.callerIdNumber : "";
-  if (!id || !tenantId || !callerIdNumber) {
-    throw new Error("Caller ID payload thiếu trường bắt buộc");
-  }
-  return {
-    id,
-    tenantId,
-    tenantName: raw.tenantName ?? raw.tenant?.name ?? null,
-    gatewayId: raw.gatewayId ?? raw.gateway?.id ?? null,
-    gatewayName: raw.gatewayName ?? raw.gateway?.name ?? null,
-    callerIdNumber,
-    callerIdName: raw.callerIdName ?? null,
-    label: raw.label ?? null,
-    weight: typeof raw.weight === "number" ? raw.weight : Number.parseInt(String(raw.weight ?? 1), 10) || 1,
-    active: raw.active ?? true,
-    createdAt: raw.createdAt ?? undefined,
-    updatedAt: raw.updatedAt ?? undefined,
-  };
-}
-
 export function OutboundCallerIdManager({
   tenants,
   gateways,
@@ -99,11 +68,6 @@ export function OutboundCallerIdManager({
   const [form, setForm] = useState<CallerIdFormState>({ ...defaultForm });
   const [editing, setEditing] = useState<OutboundCallerIdSummary | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
-
-  const apiBase = useMemo(
-    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
-    [],
-  );
 
   const filteredCallerIds = useMemo(() => {
     if (selectedTenant === "all") {
@@ -175,27 +139,22 @@ export function OutboundCallerIdManager({
   };
 
   const upsertCallerId = async () => {
-    if (!apiBase) return;
     try {
       const payload = buildPayload();
       const method = dialogMode === "create" ? "POST" : "PUT";
       const endpoint =
         dialogMode === "create"
-          ? `${apiBase}/fs/outbound-caller-ids`
-          : `${apiBase}/fs/outbound-caller-ids/${editing?.id}`;
+          ? `/fs/outbound-caller-ids`
+          : `/fs/outbound-caller-ids/${editing?.id}`;
 
       setLoading(method);
-      const response = await fetch(endpoint, {
+      const normalized = await apiFetch<RawCallerId>(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const raw = await response.json();
-      const normalized = normalizeCallerId(raw);
+        cache: "no-store",
+      }).then((raw) => normalizeCallerId(raw));
       if (dialogMode === "create") {
         setCallerIds((prev) => [...prev, normalized]);
       } else if (editing) {
@@ -213,20 +172,17 @@ export function OutboundCallerIdManager({
   };
 
   const deleteCallerId = async (item: OutboundCallerIdSummary) => {
-    if (!apiBase) return;
     if (!confirm(`Xóa Caller ID ${item.callerIdNumber}?`)) {
       return;
     }
     setLoading(`delete-${item.id}`);
     try {
-      const response = await fetch(`${apiBase}/fs/outbound-caller-ids/${item.id}`, {
+      await apiFetch<{ success: boolean }>(`/fs/outbound-caller-ids/${item.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
       setCallerIds((prev) => prev.filter((entry) => entry.id !== item.id));
     } catch (error) {
       console.error("Không thể xóa Caller ID", error);
@@ -237,20 +193,15 @@ export function OutboundCallerIdManager({
   };
 
   const toggleActive = async (item: OutboundCallerIdSummary, next: boolean) => {
-    if (!apiBase) return;
     setLoading(`toggle-${item.id}`);
     try {
-      const response = await fetch(`${apiBase}/fs/outbound-caller-ids/${item.id}`, {
+      const normalized = await apiFetch<RawCallerId>(`/fs/outbound-caller-ids/${item.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ active: next }),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const raw = await response.json();
-      const normalized = normalizeCallerId(raw);
+        cache: "no-store",
+      }).then((raw) => normalizeCallerId(raw));
       setCallerIds((prev) => prev.map((entry) => (entry.id === item.id ? normalized : entry)));
     } catch (error) {
       console.error("Không thể cập nhật trạng thái Caller ID", error);

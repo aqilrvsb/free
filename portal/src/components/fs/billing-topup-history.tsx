@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiFetch } from "@/lib/api";
 
 interface BillingTopupHistoryProps {
   tenantId: string;
@@ -110,17 +111,13 @@ export function BillingTopupHistory({
         amount: numericAmount,
         note: editNote.trim() ? editNote.trim() : null,
       };
-      const response = await fetch(`${apiBase}/billing/topup/${tenantId}`, {
+      const result = await apiFetch<{ balanceAmount?: number }>(`/billing/topup/${tenantId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const result = (await response.json()) as {
-        balanceAmount?: number;
-      };
       if (typeof result.balanceAmount === "number") {
         onBalanceChange?.(result.balanceAmount);
       }
@@ -151,14 +148,12 @@ export function BillingTopupHistory({
     setLoading(true);
     setStatus(null);
     try {
-      const response = await fetch(`${apiBase}/billing/topup/${tenantId}`, {
+      const result = await apiFetch<{ success: boolean; balanceAmount?: number }>(`/billing/topup/${tenantId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const result = (await response.json()) as { success: boolean; balanceAmount?: number };
       if (typeof result.balanceAmount === "number") {
         onBalanceChange?.(result.balanceAmount);
       }

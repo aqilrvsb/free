@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { resolveClientBaseUrl } from "@/lib/browser";
+import { apiFetch } from "@/lib/api";
 
 interface DialplanRulesManagerProps {
   tenants: TenantSummary[];
@@ -131,10 +131,6 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
 
-  const apiBase = useMemo(
-    () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
-    [],
-  );
   const activeTemplate = selectedTemplate
     ? ruleTemplates.find((template) => template.id === selectedTemplate)
     : undefined;
@@ -277,10 +273,6 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
 
   const submitRule = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!apiBase) {
-      alert("Không xác định được API base URL");
-      return;
-    }
     if (!form.tenantId.trim()) {
       alert("Vui lòng chọn tenant");
       return;
@@ -295,22 +287,20 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
     }
 
     const payload = buildPayload();
-    const url = dialogMode === "create"
-      ? `${apiBase}/fs/dialplan/rules`
-      : `${apiBase}/fs/dialplan/rules/${editing?.id}`;
+    const endpoint = dialogMode === "create"
+      ? `/fs/dialplan/rules`
+      : `/fs/dialplan/rules/${editing?.id}`;
     const method = dialogMode === "create" ? "POST" : "PUT";
 
     setLoading(method);
     try {
-      const response = await fetch(url, {
+      const rule = await apiFetch<DialplanRuleConfig>(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const rule = (await response.json()) as DialplanRuleConfig;
       if (dialogMode === "create") {
         setRules((prev) => [...prev, rule]);
       } else if (editing) {
@@ -328,22 +318,17 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
   };
 
   const deleteRule = async (rule: DialplanRuleConfig) => {
-    if (!apiBase) {
-      alert("Không xác định được API base URL");
-      return;
-    }
     if (!confirm(`Xóa dialplan rule ${rule.name}?`)) {
       return;
     }
     setLoading(`delete-${rule.id}`);
     try {
-      const response = await fetch(`${apiBase}/fs/dialplan/rules/${rule.id}`, {
+      await apiFetch<{ success: boolean }>(`/fs/dialplan/rules/${rule.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
       setRules((prev) => prev.filter((item) => item.id !== rule.id));
     } catch (error) {
       console.error("Failed to delete dialplan rule", error);

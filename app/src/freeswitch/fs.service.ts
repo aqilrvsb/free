@@ -206,6 +206,9 @@ export class FsService {
 
       if (matched) {
         let dialNumber = dest;
+        this.logger.debug(
+          `[dialplan] matched outbound rule ${matched.id} for tenant ${tenantId} dest ${dest} (gateway=${matched.gateway?.name ?? 'null'})`,
+        );
 
         if (matched.stripDigits && matched.stripDigits > 0) {
           if (matched.stripDigits >= dialNumber.length) {
@@ -223,6 +226,13 @@ export class FsService {
         if (gwName && dialNumber) {
           extBridge = `sofia/gateway/${gwName}/${dialNumber}`;
           appliedOutboundRule = matched;
+          this.logger.debug(
+            `[dialplan] routing via gateway ${gwName} number ${dialNumber} for tenant ${tenantId} rule ${matched.id}`,
+          );
+        } else {
+          this.logger.warn(
+            `[dialplan] outbound rule ${matched.id} matched but missing gateway name or dial number (gateway=${gwName ?? 'null'}, dialNumber=${dialNumber})`,
+          );
         }
       }
     }
@@ -298,10 +308,10 @@ export class FsService {
         }
 
         if (!callerNumberExpr) {
-          callerNumberExpr = '${effective_caller_id_number}';
+          callerNumberExpr = '${caller_id_number}';
         }
         if (!callerNameExpr) {
-          callerNameExpr = '${effective_caller_id_name}';
+          callerNameExpr = '${caller_id_name}';
         }
 
         actions.push({ app: 'export', data: 'internal_caller_extension=${caller_id_number}' });

@@ -26,6 +26,7 @@ import {
 } from "@/lib/registrations";
 import { Loader2, RefreshCw, Signal, Wifi } from "lucide-react";
 import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
+import { buildAuthHeaders } from "@/lib/client-auth";
 
 interface RegistrationsRealtimeProps {
   profile: string;
@@ -180,7 +181,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
       }
       const query = params.toString();
       const url = `${apiBase}/fs/sofia/${profile}/registrations${query ? `?${query}` : ''}`;
-      const response = await fetch(url, { cache: "no-store" });
+      const response = await fetch(url, { cache: "no-store", headers: buildAuthHeaders() });
       if (!response.ok) {
         throw new Error(`Failed to fetch registrations (status ${response.status})`);
       }
