@@ -237,7 +237,14 @@ export function CdrFilter({
   };
 
   return (
-    <form onSubmit={handleSubmit} className={cn("grid gap-4 md:grid-cols-2 lg:grid-cols-6", className)}>
+    <form
+      onSubmit={handleSubmit}
+      className={cn(
+        "grid gap-4 rounded-3xl border border-border/60 bg-background/70 p-6 shadow-sm backdrop-blur",
+        "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(5,minmax(0,1fr))]",
+        className,
+      )}
+    >
       <div className="space-y-2">
         <Label htmlFor="callUuid">Call UUID</Label>
         <Input
@@ -280,7 +287,7 @@ export function CdrFilter({
           <SelectTrigger id="cdr-agent">
             <SelectValue placeholder="Tất cả agent" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-64">
             <SelectItem value="__all__">Tất cả</SelectItem>
             {agentOptions.map((agent) => (
               <SelectItem key={agent.id} value={agent.id}>
@@ -298,7 +305,7 @@ export function CdrFilter({
           <SelectTrigger id="cdr-agent-group">
             <SelectValue placeholder="Tất cả nhóm" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-64">
             <SelectItem value="__all__">Tất cả</SelectItem>
             {agentGroupOptions.map((group) => (
               <SelectItem key={group.id} value={group.id}>
@@ -335,7 +342,7 @@ export function CdrFilter({
           <SelectTrigger id="status">
             <SelectValue placeholder="Tất cả" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-64">
             {STATUS_OPTIONS.map((option) => (
               <SelectItem key={option.value || "__all__"} value={toSelectValue(option.value)}>
                 {option.label}
@@ -352,7 +359,7 @@ export function CdrFilter({
             <SelectTrigger id="tenantId">
               <SelectValue placeholder="Tất cả domain" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-64">
               <SelectItem value="__all__">Tất cả</SelectItem>
               {tenantOptions.map((tenant) => (
                 <SelectItem key={tenant.id} value={tenant.domain || tenant.id}>
@@ -365,90 +372,81 @@ export function CdrFilter({
       ) : null}
 
       <div className="space-y-2">
-        <Label>Từ thời điểm</Label>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "h-11 flex-1 justify-start rounded-xl border-border/60 bg-background/80 font-normal",
-                    !fromDate && "text-muted-foreground",
-                  )}
-                  id="cdr-from-date"
-                >
-                  <CalendarIcon className="mr-2 size-4" />
-                  {fromDate ? format(fromDate, "dd/MM/yyyy") : "Chọn ngày"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto rounded-3xl border border-border/60 bg-card/95 p-3 shadow-lg">
-                <Calendar mode="single" selected={fromDate} onSelect={setFromDate} initialFocus />
-              </PopoverContent>
-            </Popover>
-            <Select value={fromTime} onValueChange={setFromTime}>
-              <SelectTrigger className="h-11 w-[120px] rounded-xl border-border/60 bg-background/80">
-                <SelectValue placeholder="Giờ" />
-              </SelectTrigger>
-              <SelectContent className="max-h-64">
-                {fromTimeOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <Label>Khoảng thời gian</Label>
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/50 bg-background/60 p-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "h-11 min-w-[180px] justify-start rounded-xl border-border/60 bg-background/80 font-normal",
+                  !fromDate && "text-muted-foreground",
+                )}
+                id="cdr-from-date"
+              >
+                <CalendarIcon className="mr-2 size-4" />
+                {fromDate ? format(fromDate, "dd/MM/yyyy") : "Từ ngày"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto rounded-3xl border border-border/60 bg-card/95 p-3 shadow-lg">
+              <Calendar mode="single" selected={fromDate} onSelect={setFromDate} initialFocus />
+            </PopoverContent>
+          </Popover>
+          <Select value={fromTime} onValueChange={setFromTime}>
+            <SelectTrigger className="h-11 w-[110px] rounded-xl border-border/60 bg-background/80">
+              <SelectValue placeholder="Giờ" />
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              {fromTimeOptions.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Clock className="size-3.5" />
-            <span>{fromDate ? `${format(fromDate, "dd/MM/yyyy")} ${fromTime}` : "Chưa chọn thời điểm"}</span>
+            <span>{fromDate ? `${format(fromDate, "dd/MM/yyyy")} ${fromTime}` : "Chưa chọn"}</span>
+          </div>
+          <span className="text-muted-foreground">→</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "h-11 min-w-[180px] justify-start rounded-xl border-border/60 bg-background/80 font-normal",
+                  !toDate && "text-muted-foreground",
+                )}
+                id="cdr-to-date"
+              >
+                <CalendarIcon className="mr-2 size-4" />
+                {toDate ? format(toDate, "dd/MM/yyyy") : "Đến ngày"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto rounded-3xl border border-border/60 bg-card/95 p-3 shadow-lg">
+              <Calendar mode="single" selected={toDate} onSelect={setToDate} initialFocus />
+            </PopoverContent>
+          </Popover>
+          <Select value={toTime} onValueChange={setToTime}>
+            <SelectTrigger className="h-11 w-[110px] rounded-xl border-border/60 bg-background/80">
+              <SelectValue placeholder="Giờ" />
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              {toTimeOptions.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="size-3.5" />
+            <span>{toDate ? `${format(toDate, "dd/MM/yyyy")} ${toTime}` : "Chưa chọn"}</span>
           </div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Đến thời điểm</Label>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "h-11 flex-1 justify-start rounded-xl border-border/60 bg-background/80 font-normal",
-                    !toDate && "text-muted-foreground",
-                  )}
-                  id="cdr-to-date"
-                >
-                  <CalendarIcon className="mr-2 size-4" />
-                  {toDate ? format(toDate, "dd/MM/yyyy") : "Chọn ngày"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto rounded-3xl border border-border/60 bg-card/95 p-3 shadow-lg">
-                <Calendar mode="single" selected={toDate} onSelect={setToDate} initialFocus />
-              </PopoverContent>
-            </Popover>
-            <Select value={toTime} onValueChange={setToTime}>
-              <SelectTrigger className="h-11 w-[120px] rounded-xl border-border/60 bg-background/80">
-                <SelectValue placeholder="Giờ" />
-              </SelectTrigger>
-              <SelectContent className="max-h-64">
-                {toTimeOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Clock className="size-3.5" />
-            <span>{toDate ? `${format(toDate, "dd/MM/yyyy")} ${toTime}` : "Chưa chọn thời điểm"}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-end gap-2 md:col-span-2 lg:col-span-1">
+      <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-1">
         <Button type="submit" disabled={isPending}>
           Lọc
         </Button>

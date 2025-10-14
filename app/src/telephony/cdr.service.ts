@@ -52,14 +52,13 @@ export class CdrService {
   private readonly busyCauses = new Set([
     'USER_BUSY',
     'CALL_REJECTED',
-    'RECOVERY_ON_TIMER_EXPIRE',
     'DESTINATION_OUT_OF_ORDER',
     'NO_CIRCUIT_AVAILABLE',
     'NORMAL_CIRCUIT_CONGESTION',
     'SWITCH_CONGESTION',
   ]);
   private readonly cancelCauses = new Set(['ORIGINATOR_CANCEL', 'LOSE_RACE', 'BEARERCAPABILITY_NOTAUTH']);
-  private readonly noAnswerCauses = new Set(['NO_ANSWER', 'ALLOTTED_TIMEOUT']);
+  private readonly noAnswerCauses = new Set(['NO_ANSWER', 'ALLOTTED_TIMEOUT', 'RECOVERY_ON_TIMER_EXPIRE']);
   private readonly failedCauses = new Set([
     'UNALLOCATED_NUMBER',
     'NO_ROUTE_TRANSIT_NET',
@@ -369,9 +368,10 @@ export class CdrService {
 
   private async mapPayload(payload: any, rawPayload: string): Promise<Partial<CdrEntity>> {
     const variables = payload?.variables ?? {};
-    const callflow = this.pickFirst(payload?.callflow);
+    const rawCallflow = this.resolveCallflowNode(payload);
+    const callflow = this.pickFirst(rawCallflow);
     const callerProfile = this.pickFirst(callflow?.caller_profile);
-    const originatorExtension = this.extractLikelyExtensionFromCallflow(payload?.callflow);
+    const originatorExtension = this.extractLikelyExtensionFromCallflow(rawCallflow);
     const callUuid = payload?.call_uuid || variables.uuid || variables.bridge_uuid || callerProfile?.uuid || randomUUID();
 
     const leg = this.resolveLeg(variables, payload);
@@ -449,16 +449,26 @@ export class CdrService {
     ]);
     let fromNumber = externalCallerId ?? initialFromNumber ?? agentExtension ?? null;
 
-    const toNumber = this.pickBestNumber([
+    const sipOutgoing = variables?.sip_outgoing_contact_uri ?? null;
+    const toNumberCandidates = [
       variables.sip_to_user,
       this.extractUser(variables.sip_to_uri),
+      this.extractUser(variables.sip_req_uri),
+      this.extractUser(variables.sip_destination_url),
       variables.destination_number,
       variables.originate_called_number,
       variables.dialed_user,
+      sipOutgoing ? this.extractUser(sipOutgoing?.sip_req_uri) : null,
+      sipOutgoing ? this.extractUser(sipOutgoing?.sip_destination_url) : null,
+      sipOutgoing ? (sipOutgoing as Record<string, any>).destination_number : null,
       callerProfile?.destination_number,
       callerProfile?.callee_id_number,
       callerProfile?.dialed_user,
-    ]);
+    ];
+    const toNumber =
+      this.pickBestNumber(
+        toNumberCandidates.filter((value) => value && !this.isLikelyExtension(value)) as Array<string | null | undefined>,
+      ) ?? this.pickBestNumber(toNumberCandidates);
     const startTime = this.parseEpoch({ primary: variables.start_epoch, fallback: variables.start_stamp_epoch });
     const answerTime = this.parseEpoch({ primary: variables.answer_epoch, fallback: variables.answer_stamp_epoch });
     const endTime = this.parseEpoch({ primary: variables.end_epoch, fallback: variables.end_stamp_epoch });
@@ -475,6 +485,10 @@ export class CdrService {
       variables.outbound_route_id,
     );
     const billingCid = this.coalesceString(variables.billing_cid, variables.billing_customer_id, variables.cid);
+
+    if (billingCid && (!fromNumber || this.isLikelyExtension(fromNumber))) {
+      fromNumber = billingCid;
+    }
 
     const billingCallerCandidatesRaw = [
       variables.billing_cid,
@@ -518,7 +532,7 @@ export class CdrService {
     const direction = this.resolveCallDirection({
       variables,
       payloadDirection: payload?.call_direction,
-      callflow: payload?.callflow,
+      callflow: rawCallflow,
       fromNumber: agentExtension ?? fromNumber,
       toNumber,
     });
@@ -724,6 +738,33 @@ export class CdrService {
       return value[0];
     }
     return value;
+  }
+
+  private resolveCallflowNode(source: any): any {
+    if (!source || typeof source !== 'object') {
+      return null;
+    }
+
+    const root = source as Record<string, any>;
+    const variables = root?.variables;
+    const sipOutgoing =
+      variables && typeof variables === 'object' ? (variables as Record<string, any>)?.sip_outgoing_contact_uri : null;
+
+    const candidates = [
+      root?.callflow,
+      root?.cdr?.callflow,
+      variables && typeof variables === 'object' ? (variables as Record<string, any>).callflow : null,
+      sipOutgoing && typeof sipOutgoing === 'object' ? (sipOutgoing as Record<string, any>).callflow : null,
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      return candidate;
+    }
+
+    return null;
   }
 
   private coalesceString(...values: Array<string | null | undefined>): string | null {
@@ -1466,7 +1507,10 @@ export class CdrService {
   } {
     const parsed = this.parseNormalizedCdr(record.rawPayload);
     const variables: Record<string, any> = parsed?.variables ?? {};
-    const originatorExtension = this.extractLikelyExtensionFromCallflow(parsed?.callflow);
+    const rawCallflow = this.resolveCallflowNode(parsed);
+    const callflow = this.pickFirst(rawCallflow);
+    const callerProfile = this.pickFirst(callflow?.caller_profile);
+    const originatorExtension = this.extractLikelyExtensionFromCallflow(rawCallflow);
     const internalExtension = variables.internal_caller_extension ?? null;
 
     const rawFromCandidates: Array<string | null | undefined> = [
@@ -1481,6 +1525,12 @@ export class CdrService {
       this.extractUser(variables.sip_from_uri),
       variables.caller_id_number,
       variables.sip_from_user,
+      callerProfile?.originator_caller_id_number,
+      callerProfile?.origination_caller_id_number,
+      callerProfile?.originatee_caller_id_number,
+      callerProfile?.caller_id_number,
+      callerProfile?.username,
+      callerProfile?.ani,
       variables.ani,
       variables.caller_id_name,
       record.agentName,
@@ -1488,6 +1538,7 @@ export class CdrService {
 
     const extensionNumber = this.pickLikelyExtension(rawFromCandidates);
     const externalCallerId =
+      record.billingCid ??
       record.fromNumber ??
       this.pickBestNumber(rawFromCandidates.filter((value) => !this.isLikelyExtension(value ?? undefined))) ??
       null;
@@ -1497,7 +1548,15 @@ export class CdrService {
         variables.destination_number,
         variables.sip_to_user,
         this.extractUser(variables.sip_to_uri),
+        this.extractUser(variables.sip_req_uri),
+        this.extractUser(variables.sip_destination_url),
+        this.extractUser(variables?.sip_outgoing_contact_uri?.sip_req_uri),
+        this.extractUser(variables?.sip_outgoing_contact_uri?.sip_destination_url),
         variables.originate_called_number,
+        variables?.sip_outgoing_contact_uri?.destination_number,
+        callerProfile?.destination_number,
+        callerProfile?.callee_id_number,
+        callerProfile?.dialed_user,
       ]) ??
       null;
     const gatewayName = this.extractGatewayName(variables);

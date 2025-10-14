@@ -242,6 +242,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
   const currentPageSize = cdr.pageSize ?? fallbackCdr.pageSize;
   const timezoneValue = timezone;
   const now = new Date();
+  const showGatewayColumn = isSuperAdmin;
 
   return (
     <div className="space-y-6">
@@ -281,10 +282,9 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   <TableHead>Số bị gọi</TableHead>
                   <TableHead>Agent</TableHead>
                   <TableHead>Nhóm</TableHead>
-                  <TableHead>Gateway</TableHead>
+                  {showGatewayColumn && <TableHead>Gateway</TableHead>}
                   <TableHead>Thời lượng</TableHead>
                   <TableHead>Chi phí</TableHead>
-                  <TableHead>CID billing</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Bắt đầu</TableHead>
                   <TableHead>Kết thúc</TableHead>
@@ -298,6 +298,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   const extensionNumber = item.extensionNumber ?? item.legs?.internal?.extension ?? null;
                   const callerId =
                     item.externalCallerId ??
+                    item.billingCid ??
                     item.legs?.external?.callerId ??
                     item.fromNumber ??
                     item.legs?.internal?.callerIdName ??
@@ -352,7 +353,9 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                         )}
                       </TableCell>
                       <TableCell>{item.agentGroupName ?? <span className="text-muted-foreground">-</span>}</TableCell>
-                      <TableCell>{gatewayName ?? <span className="text-muted-foreground">-</span>}</TableCell>
+                      {showGatewayColumn ? (
+                        <TableCell>{gatewayName ?? <span className="text-muted-foreground">-</span>}</TableCell>
+                      ) : null}
                       <TableCell>
                         {item.durationSeconds}s
                         {item.billSeconds ? (
@@ -369,7 +372,6 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                           ) : null}
                         </div>
                       </TableCell>
-                      <TableCell>{item.billingCid ?? "-"}</TableCell>
                       <TableCell>
                         <Badge variant={resolveStatusVariant(item.finalStatus)}>{item.finalStatusLabel}</Badge>
                       </TableCell>
@@ -418,7 +420,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                 })}
                 {cdrItems.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center text-muted-foreground">
+                    <TableCell colSpan={showGatewayColumn ? 14 : 13} className="text-center text-muted-foreground">
                       Không có dữ liệu.
                     </TableCell>
                   </TableRow>
