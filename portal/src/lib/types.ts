@@ -27,6 +27,22 @@ export interface CdrRecord {
   agentName?: string | null;
   agentGroupId?: string | null;
   agentGroupName?: string | null;
+  extensionNumber?: string | null;
+  externalCallerId?: string | null;
+  destinationNumber?: string | null;
+  gatewayName?: string | null;
+  legs?: {
+    internal?: {
+      extension?: string | null;
+      gateway?: string | null;
+      callerIdName?: string | null;
+    };
+    external?: {
+      callerId?: string | null;
+      destination?: string | null;
+      gateway?: string | null;
+    };
+  };
 }
 
 export interface PaginatedCdrResponse {

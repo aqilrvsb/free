@@ -319,6 +319,7 @@ export class FsService {
         actions.push({ app: 'set', data: `origination_caller_id_name=${callerNameExpr}` });
         actions.push({ app: 'set', data: `effective_caller_id_number=${callerNumberExpr}` });
         actions.push({ app: 'set', data: `effective_caller_id_name=${callerNameExpr}` });
+        actions.push({ app: 'export', data: `billing_cid=${callerNumberExpr}` });
         actions.push({ app: 'set', data: `sip_from_user=${callerNumberExpr}` });
         actions.push({ app: 'set', data: `sip_from_display=${callerNameExpr}` });
         actions.push({ app: 'set', data: `sip_contact_user=${callerNumberExpr}` });

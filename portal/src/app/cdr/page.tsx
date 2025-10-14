@@ -276,13 +276,15 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   <TableHead>Call UUID</TableHead>
                   {/* <TableHead>Leg</TableHead> */}
                   <TableHead>Chiều</TableHead>
-                  <TableHead>Số gọi</TableHead>
+                  <TableHead>Extension</TableHead>
+                  <TableHead>Caller ID</TableHead>
+                  <TableHead>Số bị gọi</TableHead>
                   <TableHead>Agent</TableHead>
                   <TableHead>Nhóm</TableHead>
-                  <TableHead>Số bị gọi</TableHead>
+                  <TableHead>Gateway</TableHead>
                   <TableHead>Thời lượng</TableHead>
                   <TableHead>Chi phí</TableHead>
-                  <TableHead>CID gọi ra</TableHead>
+                  <TableHead>CID billing</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Bắt đầu</TableHead>
                   <TableHead>Kết thúc</TableHead>
@@ -293,6 +295,17 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                 {cdrItems.map((item) => {
                   const startMeta = buildTimeDisplay(item.startTime, timezoneValue, now);
                   const endMeta = buildTimeDisplay(item.endTime, timezoneValue, now);
+                  const extensionNumber = item.extensionNumber ?? item.legs?.internal?.extension ?? null;
+                  const callerId =
+                    item.externalCallerId ??
+                    item.legs?.external?.callerId ??
+                    item.fromNumber ??
+                    item.legs?.internal?.callerIdName ??
+                    null;
+                  const destinationNumber =
+                    item.destinationNumber ?? item.legs?.external?.destination ?? item.toNumber ?? null;
+                  const gatewayName =
+                    item.gatewayName ?? item.legs?.external?.gateway ?? item.legs?.internal?.gateway ?? null;
                   return (
                     <TableRow key={item.id}>
                       <TableCell className="truncate max-w-[70px] cursor-pointer">
@@ -309,7 +322,23 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                         <Badge variant={item.leg === "A" ? "default" : "secondary"}>{item.leg ?? "-"}</Badge>
                       </TableCell> */}
                       <TableCell>{formatDirectionLabel(item.direction)}</TableCell>
-                      <TableCell>{item.fromNumber ?? "-"}</TableCell>
+                      <TableCell>{extensionNumber ?? <span className="text-muted-foreground">-</span>}</TableCell>
+                      <TableCell>
+                        {callerId ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-default">{callerId}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {extensionNumber ? `Từ extension ${extensionNumber}` : 'Caller ID'} →{' '}
+                              {destinationNumber ?? '-'}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{destinationNumber ?? <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell>
                         {item.agentName ? (
                           <div>
@@ -323,7 +352,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                         )}
                       </TableCell>
                       <TableCell>{item.agentGroupName ?? <span className="text-muted-foreground">-</span>}</TableCell>
-                      <TableCell>{item.toNumber ?? "-"}</TableCell>
+                      <TableCell>{gatewayName ?? <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell>
                         {item.durationSeconds}s
                         {item.billSeconds ? (
@@ -389,7 +418,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                 })}
                 {cdrItems.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center text-muted-foreground">
+                    <TableCell colSpan={15} className="text-center text-muted-foreground">
                       Không có dữ liệu.
                     </TableCell>
                   </TableRow>

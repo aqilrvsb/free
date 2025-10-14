@@ -327,7 +327,8 @@ export class CdrService {
       const direct = item.callUuid ? recordingHints.get(item.callUuid) : undefined;
       const bridgeUuid = bridgeUuidMap.get(item.id) ?? this.extractBridgeUuid(item.rawPayload ?? undefined);
       const fallback = direct ?? (bridgeUuid ? recordingHints.get(bridgeUuid) : undefined);
-      return this.withRecordingInfo(item, fallback);
+      const enriched = this.withRecordingInfo(item, fallback);
+      return this.decorateCdrRecord(enriched);
     });
 
     return {
@@ -349,7 +350,8 @@ export class CdrService {
       [entity.callUuid, bridgeUuid].filter((value): value is string => Boolean(value)),
     );
     const fallback = (entity.callUuid && hints.get(entity.callUuid)) || (bridgeUuid ? hints.get(bridgeUuid) : undefined);
-    return this.withRecordingInfo(entity, fallback);
+    const enriched = this.withRecordingInfo(entity, fallback);
+    return this.decorateCdrRecord(enriched);
   }
 
   async getByCallUuid(callUuid: string, scope?: CdrScope): Promise<CdrEntity | null> {
@@ -361,7 +363,8 @@ export class CdrService {
     const bridgeUuid = this.extractBridgeUuid(entity.rawPayload);
     const hints = await this.fetchRecordingHints([callUuid, bridgeUuid].filter((value): value is string => Boolean(value)));
     const fallback = hints.get(callUuid) ?? (bridgeUuid ? hints.get(bridgeUuid) : undefined);
-    return this.withRecordingInfo(entity, fallback);
+    const enriched = this.withRecordingInfo(entity, fallback);
+    return this.decorateCdrRecord(enriched);
   }
 
   private async mapPayload(payload: any, rawPayload: string): Promise<Partial<CdrEntity>> {
@@ -395,7 +398,7 @@ export class CdrService {
       null;
 
     const internalExtension = variables.internal_caller_extension;
-    let fromNumber = this.pickBestNumber([
+    const rawFromCandidates: Array<string | null | undefined> = [
       internalExtension,
       originatorExtension,
       variables.originator_caller_id_number,
@@ -415,12 +418,36 @@ export class CdrService {
       callerProfile?.ani,
       variables.ani,
       variables.caller_id_name,
+    ];
+    const initialFromNumber = this.pickBestNumber(rawFromCandidates);
+    const nonExtensionCandidates = rawFromCandidates
+      .map((value) => {
+        if (value === undefined || value === null) {
+          return null;
+        }
+        const trimmed = String(value).trim();
+        return trimmed || null;
+      })
+      .filter((value): value is string => Boolean(value && !this.isLikelyExtension(value)));
+    const externalCallerId = this.pickBestNumber(nonExtensionCandidates);
+    const agentExtension = this.pickLikelyExtension([
+      internalExtension,
+      originatorExtension,
+      variables.internal_caller_extension,
+      variables.originator_caller_id_number,
+      variables.origination_caller_id_number,
+      variables.originatee_caller_id_number,
+      variables.user_name,
+      variables.sip_auth_user,
+      variables.sip_auth_username,
+      callerProfile?.originator_caller_id_number,
+      callerProfile?.origination_caller_id_number,
+      callerProfile?.originatee_caller_id_number,
+      callerProfile?.caller_id_number,
+      callerProfile?.username,
+      initialFromNumber,
     ]);
-    if (this.isLikelyExtension(internalExtension)) {
-      fromNumber = internalExtension;
-    } else if (!this.isLikelyExtension(fromNumber) && this.isLikelyExtension(originatorExtension)) {
-      fromNumber = originatorExtension ?? fromNumber;
-    }
+    let fromNumber = externalCallerId ?? initialFromNumber ?? agentExtension ?? null;
 
     const toNumber = this.pickBestNumber([
       variables.sip_to_user,
@@ -492,14 +519,14 @@ export class CdrService {
       variables,
       payloadDirection: payload?.call_direction,
       callflow: payload?.callflow,
-      fromNumber,
+      fromNumber: agentExtension ?? fromNumber,
       toNumber,
     });
 
     const agentContext = await this.resolveAgentContext({
       tenantId: resolvedTenantId,
       direction,
-      fromNumber,
+      fromNumber: agentExtension ?? fromNumber,
       toNumber,
       variables,
     });
@@ -509,7 +536,7 @@ export class CdrService {
       leg,
       direction,
       tenantId: resolvedTenantId,
-      fromNumber,
+      fromNumber: fromNumber ?? null,
       toNumber,
       durationSeconds,
       billSeconds,
@@ -518,7 +545,7 @@ export class CdrService {
       answerTime: answerTime ?? null,
       endTime: endTime ?? null,
       billingRouteId: billing.routeId ?? null,
-      billingCid: billing.cid ?? null,
+      billingCid: billing.cid ?? billingCaller ?? externalCallerId ?? null,
       billingCurrency: billing.currency,
       billingCost: billing.cost,
       billingRateApplied: billing.rateApplied,
@@ -618,6 +645,59 @@ export class CdrService {
     );
   }
 
+  private parseNormalizedCdr(rawPayload?: string | null): any | null {
+    if (!rawPayload) {
+      return null;
+    }
+    const trimmed = rawPayload.trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        return JSON.parse(trimmed);
+      }
+      const parsed = this.xmlParser.parse(this.sanitizeXml(trimmed)) as { cdr?: any; CDR?: any };
+      const cdr = parsed?.cdr ?? parsed?.CDR;
+      if (!cdr) {
+        return null;
+      }
+      return this.normalizeCdr(cdr);
+    } catch (error) {
+      this.logger.warn(
+        `[cdr] Không thể parse raw payload: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private extractGatewayName(variables: Record<string, any>): string | null {
+    const candidateStrings = [
+      variables.sip_gateway_name,
+      variables.gateway_name,
+      variables.originatee_gateway,
+      variables.bridge_channel,
+      variables.last_bridge_proto,
+      variables.last_arg,
+      variables.last_bridge_string,
+    ];
+
+    for (const rawCandidate of candidateStrings) {
+      const value = this.coalesceString(rawCandidate);
+      if (!value) {
+        continue;
+      }
+      const match = value.match(/sofia\/gateway\/([^\/]*)/i);
+      if (match) {
+        return match[1];
+      }
+      if (!value.includes('/')) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   private resolveLeg(variables: Record<string, string>, payload: any): string | null {
     const explicit = payload?.leg || variables.cdr_leg;
     if (explicit) {
@@ -686,6 +766,22 @@ export class CdrService {
     }
     candidates.sort((a, b) => b.length - a.length);
     return candidates[0];
+  }
+
+  private pickLikelyExtension(values: Array<string | null | undefined>): string | null {
+    for (const value of values) {
+      if (value === undefined || value === null) {
+        continue;
+      }
+      const trimmed = String(value).trim();
+      if (!trimmed) {
+        continue;
+      }
+      if (this.isLikelyExtension(trimmed)) {
+        return trimmed;
+      }
+    }
+    return null;
   }
 
   private normalizeBoolean(value: unknown): boolean | null {
@@ -1346,6 +1442,88 @@ export class CdrService {
       recordingUrl: `/recordings/${encoded}`,
       finalStatus: code,
       finalStatusLabel: label,
+    };
+  }
+
+  private decorateCdrRecord<
+    T extends CdrEntity & {
+      recordingFilename?: string | null;
+      recordingUrl?: string | null;
+      finalStatus: string;
+      finalStatusLabel: string;
+    },
+  >(
+    record: T,
+  ): T & {
+    extensionNumber: string | null;
+    externalCallerId: string | null;
+    destinationNumber: string | null;
+    gatewayName: string | null;
+    legs: {
+      internal?: { extension?: string | null; gateway?: string | null; callerIdName?: string | null };
+      external: { callerId?: string | null; destination?: string | null; gateway?: string | null };
+    };
+  } {
+    const parsed = this.parseNormalizedCdr(record.rawPayload);
+    const variables: Record<string, any> = parsed?.variables ?? {};
+    const originatorExtension = this.extractLikelyExtensionFromCallflow(parsed?.callflow);
+    const internalExtension = variables.internal_caller_extension ?? null;
+
+    const rawFromCandidates: Array<string | null | undefined> = [
+      internalExtension,
+      originatorExtension,
+      variables.originator_caller_id_number,
+      variables.origination_caller_id_number,
+      variables.originatee_caller_id_number,
+      variables.user_name,
+      variables.sip_auth_username,
+      variables.sip_auth_user,
+      this.extractUser(variables.sip_from_uri),
+      variables.caller_id_number,
+      variables.sip_from_user,
+      variables.ani,
+      variables.caller_id_name,
+      record.agentName,
+    ];
+
+    const extensionNumber = this.pickLikelyExtension(rawFromCandidates);
+    const externalCallerId =
+      record.fromNumber ??
+      this.pickBestNumber(rawFromCandidates.filter((value) => !this.isLikelyExtension(value ?? undefined))) ??
+      null;
+    const destinationNumber =
+      record.toNumber ??
+      this.pickBestNumber([
+        variables.destination_number,
+        variables.sip_to_user,
+        this.extractUser(variables.sip_to_uri),
+        variables.originate_called_number,
+      ]) ??
+      null;
+    const gatewayName = this.extractGatewayName(variables);
+
+    const legs = {
+      internal: extensionNumber
+        ? {
+            extension: extensionNumber,
+            gateway: gatewayName,
+            callerIdName: variables.caller_id_name ?? null,
+          }
+        : undefined,
+      external: {
+        callerId: externalCallerId,
+        destination: destinationNumber,
+        gateway: gatewayName,
+      },
+    };
+
+    return {
+      ...record,
+      extensionNumber: extensionNumber ?? null,
+      externalCallerId,
+      destinationNumber,
+      gatewayName,
+      legs,
     };
   }
 
