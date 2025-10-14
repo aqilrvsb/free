@@ -19,6 +19,14 @@ export function resolveSecureFlag(request: NextRequest): boolean {
     return true;
   }
 
+  const protocol = request.nextUrl.protocol.toLowerCase();
+  if (protocol === "https:" || protocol === "wss:") {
+    return true;
+  }
+  if (protocol === "http:" || protocol === "ws:") {
+    return false;
+  }
+
   return process.env.NODE_ENV === "production";
 }
 
