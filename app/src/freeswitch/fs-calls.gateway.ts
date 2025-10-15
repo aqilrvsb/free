@@ -1,4 +1,4 @@
-import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { Logger, OnModuleDestroy, UseGuards } from '@nestjs/common';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -12,6 +12,7 @@ import { Server, Socket } from 'socket.io';
 import { Subscription } from 'rxjs';
 import { FsEventsService, CallEvent } from './fs-events.service';
 import { FsManagementService } from './fs-management.service';
+import { WsJwtGuard } from '../auth/ws-jwt.guard';
 
 interface ActiveChannelsSnapshot {
   channels: any[];
@@ -21,6 +22,7 @@ interface ActiveChannelsSnapshot {
 }
 
 @WebSocketGateway({ namespace: 'calls', cors: { origin: true, credentials: true } })
+@UseGuards(WsJwtGuard)
 export class FsCallsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer()
   server!: Server;

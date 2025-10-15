@@ -6,6 +6,7 @@ import type { ReactNode } from "react"
 import { AspectRatio } from "@/components/ui/aspect-ratio"
 import { cn } from "@/lib/utils"
 import { resolveClientWsUrl } from "@/lib/browser"
+import { getPortalToken } from "@/lib/client-auth"
 
 export interface PageHeaderMeta {
   label: string
@@ -64,6 +65,7 @@ export function PageHeaderClient({
 }: PageHeaderClientProps) {
   const [now, setNow] = useState(() => new Date(initialTimeIso))
   const [socketState, setSocketState] = useState<"connecting" | "connected" | "disconnected">("connecting")
+  const [authToken, setAuthToken] = useState<string | null>(null)
 
   useEffect(() => {
     setNow(new Date(initialTimeIso))
@@ -74,8 +76,19 @@ export function PageHeaderClient({
   }, [initialTimeIso])
 
   useEffect(() => {
+    const updateToken = () => {
+      const token = getPortalToken()
+      setAuthToken((prev) => (prev === token ? prev : token))
+    }
+    updateToken()
+    const interval = setInterval(updateToken, 30_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
     const base = resolveClientWsUrl(process.env.NEXT_PUBLIC_WS_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL)
-    if (!base || typeof window === "undefined") {
+    if (!base || typeof window === "undefined" || !authToken) {
+      setSocketState("disconnected")
       return
     }
 
@@ -89,6 +102,8 @@ export function PageHeaderClient({
         reconnection: true,
         reconnectionAttempts: Infinity,
         transports: ["polling"],
+        auth: authToken ? { token: authToken } : undefined,
+        query: authToken ? { token: authToken } : undefined,
       })
       setSocketState(socket.connected ? "connected" : "connecting")
       socket.on("connect", () => {
@@ -107,7 +122,7 @@ export function PageHeaderClient({
       console.warn("Không thể khởi tạo websocket cho PageHeader", error)
       setSocketState("disconnected")
     }
-  }, [wsNamespace])
+  }, [wsNamespace, authToken])
 
   const formattedTime = useMemo(() => {
     try {

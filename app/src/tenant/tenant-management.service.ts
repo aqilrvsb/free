@@ -175,6 +175,25 @@ export class TenantManagementService {
     };
   }
 
+  async getTenantSummariesByIds(ids: string[]): Promise<Array<{ id: string; domain: string; name: string }>> {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return [];
+    }
+    const uniqueIds = Array.from(new Set(ids.map((value) => value.trim()).filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+    const tenants = await this.tenantRepo.find({
+      where: { id: In(uniqueIds) },
+      select: ['id', 'name', 'domain'],
+    });
+    return tenants.map((tenant) => ({
+      id: tenant.id,
+      domain: tenant.domain.trim().toLowerCase(),
+      name: tenant.name,
+    }));
+  }
+
   async createTenant(dto: CreateTenantDto): Promise<any> {
     const name = dto.name?.trim();
     const domain = dto.domain?.trim().toLowerCase();

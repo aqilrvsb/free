@@ -11,6 +11,7 @@ import { extractChannelCount, extractChannelRows } from "@/lib/channels";
 import { Loader2, PhoneCall, PhoneOff } from "lucide-react";
 import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
 import { apiFetch } from "@/lib/api";
+import { getPortalToken } from "@/lib/client-auth";
 
 interface CallsRealtimeProps {
   initialChannels: FsChannel[];
@@ -69,6 +70,7 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
   const [connected, setConnected] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hangupUuid, setHangupUuid] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -154,6 +156,16 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
     setChannelCount(initialChannels.length);
   }, [initialChannels]);
 
+  useEffect(() => {
+    const updateToken = () => {
+      const token = getPortalToken();
+      setAuthToken((prev) => (prev === token ? prev : token));
+    };
+    updateToken();
+    const interval = setInterval(updateToken, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleHangup = useCallback(
     async (uuid: string) => {
       setHangupUuid(uuid);
@@ -174,7 +186,8 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
   );
 
   useEffect(() => {
-    if (!socketTarget) {
+    if (!socketTarget || !authToken) {
+      setConnected(false);
       return;
     }
 
@@ -185,6 +198,8 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
       reconnectionAttempts: Infinity,
       upgrade: false,
       transports: ['polling'],
+      auth: authToken ? { token: authToken } : undefined,
+      query: authToken ? { token: authToken } : undefined,
     });
     socketRef.current = socket;
 
@@ -221,7 +236,7 @@ export function CallsRealtime({ initialChannels }: CallsRealtimeProps) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [socketTarget, scheduleSnapshotRefresh]);
+  }, [socketTarget, scheduleSnapshotRefresh, authToken]);
 
   const formatDateTime = useCallback((value?: string) => {
     if (!value) return "-";

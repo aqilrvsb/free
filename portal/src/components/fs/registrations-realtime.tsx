@@ -33,7 +33,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
-import { buildAuthHeaders } from "@/lib/client-auth";
+import { buildAuthHeaders, getPortalToken } from "@/lib/client-auth";
 
 interface RegistrationsRealtimeProps {
   profile: string;
@@ -397,6 +397,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "online" | "offline">("all");
   const [showRaw, setShowRaw] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const isRefreshingRef = useRef(false);
   const filterStateRef = useRef({ status: statusFilter, search: searchTerm.trim() });
   const socketRef = useRef<Socket | null>(null);
@@ -523,11 +524,22 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
   }, [initialSnapshot]);
 
   useEffect(() => {
+    const updateToken = () => {
+      const token = getPortalToken();
+      setAuthToken((prev) => (prev === token ? prev : token));
+    };
+    updateToken();
+    const interval = setInterval(updateToken, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     void fetchSnapshot();
   }, [fetchSnapshot]);
 
   useEffect(() => {
-    if (!socketTarget) {
+    if (!socketTarget || !authToken) {
+      setConnected(false);
       return;
     }
 
@@ -538,6 +550,8 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
       reconnectionAttempts: Infinity,
       upgrade: false,
       transports: ['polling'],
+      auth: authToken ? { token: authToken } : undefined,
+      query: authToken ? { token: authToken } : undefined,
     });
     socketRef.current = socket;
 
@@ -625,7 +639,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [normalizedDomain, profile, scheduleRefresh, socketTarget]);
+  }, [normalizedDomain, profile, scheduleRefresh, socketTarget, authToken]);
 
   const lastActionLabel = useMemo(() => {
     if (!lastEvent) return null;

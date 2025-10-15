@@ -80,6 +80,7 @@ import { AgentsController } from './agents/agents.controller';
 import { AgentsService } from './agents/agents.service';
 import { AutoDialerModule } from './autodialer/auto-dialer.module';
 import { OutboundCallerIdService } from './routing/outbound-caller-id.service';
+import { WsJwtGuard } from './auth/ws-jwt.guard';
 
 @Module({
   imports: [
@@ -221,6 +222,7 @@ import { OutboundCallerIdService } from './routing/outbound-caller-id.service';
     BillingService,
     AgentsService,
     OutboundCallerIdService,
+    WsJwtGuard,
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpLoggingInterceptor,
