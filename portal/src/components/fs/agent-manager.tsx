@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 import type {
   AgentGroupSummary,
   AgentSummary,
@@ -299,7 +300,7 @@ export function AgentManager({
         setAgentPage(result.page || page);
       } catch (error) {
         console.error("[agents] Failed to fetch agents", error);
-        alert("Không thể tải danh sách agent.");
+        displayError(error, "Không thể tải danh sách agent.");
       } finally {
         if (!options?.silent) {
           setAgentLoading(false);
@@ -334,7 +335,7 @@ export function AgentManager({
         setGroupData(list);
       } catch (error) {
         console.error("[agents] Failed to fetch groups", error);
-        alert("Không thể tải danh sách nhóm.");
+        displayError(error, "Không thể tải danh sách nhóm.");
       } finally {
         setGroupLoading(false);
       }
@@ -501,7 +502,7 @@ export function AgentManager({
       setTalktimeData(payload);
     } catch (error) {
       console.error("[agents] Failed to fetch talktime", error);
-      alert("Không thể tải thống kê talktime.");
+      displayError(error, "Không thể tải thống kê talktime.");
     } finally {
       setTalktimeLoading(false);
     }
@@ -562,12 +563,12 @@ export function AgentManager({
         return;
       }
       if (!agentForm.displayName.trim()) {
-        alert("Tên agent không được để trống");
+        displayWarning("Tên agent không được để trống");
         return;
       }
       const tenantId = normalizeTenantId(agentForm.tenantId);
       if (!tenantId) {
-        alert("Vui lòng chọn tenant");
+        displayWarning("Vui lòng chọn tenant");
         return;
       }
 
@@ -576,7 +577,7 @@ export function AgentManager({
       if (agentForm.kpiEnabled && targetSecondsRaw) {
         const parsed = Number.parseInt(targetSecondsRaw, 10);
         if (!Number.isFinite(parsed) || parsed < 0) {
-          alert("Mục tiêu talktime phải là số giây hợp lệ");
+          displayWarning("Mục tiêu talktime phải là số giây hợp lệ");
           return;
         }
         targetSeconds = parsed;
@@ -607,11 +608,12 @@ export function AgentManager({
           throw new Error(await response.text());
         }
         setAgentDialogOpen(false);
+        displaySuccess(isEdit ? "Đã cập nhật agent thành công" : "Đã tạo agent mới");
         await fetchAgentsMemo(isEdit ? agentPage : 1);
         await fetchGroups(payload.tenantId);
       } catch (error) {
         console.error("[agents] Failed to save agent", error);
-        alert("Không thể lưu agent. Kiểm tra thông tin và thử lại.");
+        displayError(error, "Không thể lưu agent. Kiểm tra thông tin và thử lại.");
       } finally {
         setAgentAction(null);
       }
@@ -637,9 +639,10 @@ export function AgentManager({
           throw new Error(await response.text());
         }
         await fetchAgentsMemo(agentPage, { silent: true });
+        displaySuccess("Đã xoá agent.");
       } catch (error) {
         console.error("[agents] Failed to delete agent", error);
-        alert("Không thể xoá agent.");
+        displayError(error, "Không thể xoá agent.");
       } finally {
         setAgentAction(null);
       }
@@ -680,12 +683,12 @@ export function AgentManager({
         return;
       }
       if (!groupForm.name.trim()) {
-        alert("Tên nhóm không được để trống");
+        displayWarning("Tên nhóm không được để trống");
         return;
       }
       const tenantId = normalizeTenantId(groupForm.tenantId);
       if (!tenantId) {
-        alert("Vui lòng chọn tenant");
+        displayWarning("Vui lòng chọn tenant");
         return;
       }
 
@@ -711,11 +714,12 @@ export function AgentManager({
           throw new Error(await response.text());
         }
         setGroupDialogOpen(false);
+        displaySuccess(isEdit ? "Đã cập nhật nhóm thành công" : "Đã tạo nhóm mới");
         await fetchGroups(tenantId);
         await fetchAgentsMemo(agentPage, { silent: true });
       } catch (error) {
         console.error("[agents] Failed to save group", error);
-        alert("Không thể lưu nhóm.");
+        displayError(error, "Không thể lưu nhóm.");
       } finally {
         setAgentAction(null);
       }
@@ -742,9 +746,10 @@ export function AgentManager({
         }
         await fetchGroups(group.tenantId);
         await fetchAgentsMemo(agentPage, { silent: true });
+        displaySuccess("Đã xoá nhóm.");
       } catch (error) {
         console.error("[agents] Failed to delete group", error);
-        alert("Không thể xoá nhóm.");
+        displayError(error, "Không thể xoá nhóm.");
       } finally {
         setAgentAction(null);
       }

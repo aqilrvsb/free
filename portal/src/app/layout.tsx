@@ -11,6 +11,7 @@ import { parsePortalUserCookie } from "@/lib/auth";
 import { resolvePermissions } from "@/lib/permissions";
 import { apiFetch } from "@/lib/api";
 import type { PortalUserSummary } from "@/lib/types";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,6 +57,7 @@ export default async function RootLayout({
           <main className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-12">
             <div className="w-full max-w-xl">{children}</div>
           </main>
+          <Toaster />
         </body>
       </html>
     );
@@ -108,6 +110,7 @@ export default async function RootLayout({
             </SidebarInset>
           </SidebarProvider>
         </TimezoneProvider>
+        <Toaster />
       </body>
     </html>
   );
