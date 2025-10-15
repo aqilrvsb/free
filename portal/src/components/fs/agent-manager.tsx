@@ -391,7 +391,6 @@ export function AgentManager({
           page: "1",
           pageSize: String(MAX_PORTAL_USER_FETCH),
           tenantId,
-          role: "agent",
         });
         const response = await fetch(`${apiBase}/portal-users?${params.toString()}`, {
           method: "GET",

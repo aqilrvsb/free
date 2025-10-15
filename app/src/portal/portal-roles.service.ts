@@ -28,7 +28,7 @@ export class PortalRolesService implements OnModuleInit {
     viewer: {
       name: 'Viewer',
       description: 'Chỉ xem dashboard, CDR, recordings',
-      permissions: ['view_dashboard', 'view_cdr', 'view_recordings', 'view_channels', 'view_billing'],
+      permissions: ['view_dashboard', 'view_cdr', 'view_recordings', 'view_billing'],
     },
     operator: {
       name: 'Operator',
@@ -36,7 +36,6 @@ export class PortalRolesService implements OnModuleInit {
       permissions: [
         'view_dashboard',
         'view_cdr',
-        'view_channels',
         'manage_inbound',
         'manage_outbound',
         'manage_billing',
@@ -50,7 +49,6 @@ export class PortalRolesService implements OnModuleInit {
       permissions: [
         'view_dashboard',
         'view_cdr',
-        'view_channels',
         'manage_gateways',
         'manage_dialplan',
         'manage_inbound',
