@@ -3,17 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
@@ -24,7 +16,22 @@ import {
   type SofiaRegistrationsPayload,
   type ExtensionPresence,
 } from "@/lib/registrations";
-import { Loader2, RefreshCw, Signal, Wifi } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Clock,
+  Layers,
+  Loader2,
+  Monitor,
+  Phone,
+  RefreshCw,
+  Signal,
+  Timer,
+  UserCheck,
+  UserX,
+  Users,
+  Wifi,
+} from "lucide-react";
 import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
 import { buildAuthHeaders } from "@/lib/client-auth";
 
@@ -58,9 +65,11 @@ interface InfoItemProps {
 
 function InfoItem({ label, value }: InfoItemProps) {
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-transparent bg-muted/40 p-3">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium text-foreground">{value}</span>
+    <div className="group relative flex flex-col gap-2 rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-lg">
+      <span className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground/80">
+        {label}
+      </span>
+      <span className="text-sm font-semibold text-foreground">{value}</span>
     </div>
   );
 }
@@ -71,32 +80,297 @@ interface StatItemProps {
   label: string;
   value: number;
   tone?: StatTone;
+  icon: LucideIcon;
 }
 
-function StatItem({ label, value, tone = "default" }: StatItemProps) {
-  const palette: Record<StatTone, string> = {
-    default: "bg-primary/10 text-primary",
-    success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
-    muted: "bg-muted text-muted-foreground",
-  } as const;
-
+function StatItem({ label, value, tone = "default", icon: Icon }: StatItemProps) {
+  const palette: Record<StatTone, { container: string; accent: string; value: string }> = {
+    default: {
+      container: "hover:border-primary/40",
+      accent: "bg-primary/15 text-primary",
+      value: "text-foreground",
+    },
+    success: {
+      container: "hover:border-emerald-400/60",
+      accent: "bg-emerald-500/20 text-emerald-400 dark:text-emerald-300",
+      value: "text-emerald-600 dark:text-emerald-300",
+    },
+    muted: {
+      container: "hover:border-muted-foreground/40",
+      accent: "bg-muted/60 text-muted-foreground",
+      value: "text-muted-foreground",
+    },
+  };
   return (
-    <div className="flex flex-col gap-2 rounded-md border bg-background p-3 shadow-sm">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className={cn("inline-flex w-fit rounded-full px-3 py-1 text-sm font-semibold", palette[tone])}>
-        {value}
-      </span>
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border border-border/60 bg-card/95 p-5 shadow-sm transition-all hover:shadow-lg",
+        palette[tone].container,
+      )}
+    >
+      <div className="flex items-start justify-between">
+        <div className="space-y-2">
+          <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">{label}</span>
+          <div className={cn("text-3xl font-semibold", palette[tone].value)}>
+            {value.toLocaleString("vi-VN")}
+          </div>
+        </div>
+        <span
+          className={cn(
+            "flex size-12 items-center justify-center rounded-xl border border-transparent transition-colors",
+            palette[tone].accent,
+          )}
+        >
+          <Icon className="size-5" />
+        </span>
+      </div>
     </div>
   );
 }
 
-function formatNetwork(registration: { network_ip?: string | null; network_port?: string | null }) {
-  if (registration.network_ip) {
-    return registration.network_port
-      ? `${registration.network_ip}:${registration.network_port}`
-      : registration.network_ip;
+interface DetailBlockProps {
+  icon: LucideIcon;
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  secondary?: ReactNode;
+  monospace?: boolean;
+  clampLines?: number;
+  chips?: string[];
+}
+
+interface StatusSummary {
+  main: string;
+  meta?: string;
+  detail?: string;
+  tooltip?: string;
+  tone: "online" | "offline" | "neutral";
+  metaItems?: string[];
+  detailItems?: string[];
+}
+
+function DetailBlock({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  secondary,
+  monospace,
+  clampLines = 3,
+  chips,
+}: DetailBlockProps) {
+  const clampStyle =
+    typeof clampLines === "number"
+      ? ({
+          WebkitLineClamp: clampLines,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          display: "-webkit-box",
+        } as const)
+      : undefined;
+  const tooltip = hint ?? (typeof value === "string" ? value : undefined);
+
+  return (
+    <div className="min-w-0 rounded-xl border border-border/40 bg-muted/25 p-3 transition-colors group-hover:border-border/70">
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/70">
+        <Icon className="size-4 shrink-0 text-primary/70" />
+        <span className="truncate">{label}</span>
+      </div>
+      <div
+        className={cn(
+          "mt-2 break-words text-sm font-medium leading-[1.35] text-foreground/90",
+          monospace && "font-mono text-xs tracking-tight",
+        )}
+        style={clampStyle}
+        title={tooltip}
+      >
+        {value ?? "-"}
+      </div>
+      {secondary ? (
+        <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/60">
+          {secondary}
+        </div>
+      ) : null}
+      {chips?.length ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {chips.map((chip) => (
+            <span
+              key={`${label}-${chip}`}
+              className="rounded-full border border-primary/30 bg-primary/5 px-2 py-[2px] text-[9px] font-semibold uppercase tracking-[0.2em] text-primary"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface ContactDisplay {
+  main: string;
+  raw?: string;
+  user?: string;
+  domain?: string;
+  host?: string;
+  port?: string;
+  transport?: string;
+  nat?: string;
+  instance?: string;
+  chips: string[];
+}
+
+function formatContactDisplay(contact?: string | null): ContactDisplay {
+  if (!contact) {
+    return { main: "-" , chips: [] };
   }
-  return "-";
+
+  const raw = contact.trim();
+  const cleaned = raw.replace(/^"+|"+$/g, "");
+
+  const matchWithinBrackets = cleaned.match(/<sip:([^>]+)>/i);
+  const content = matchWithinBrackets?.[1] ?? cleaned.replace(/^sip:/i, "");
+  const segments = content.split(";");
+  const uriSegment = segments[0] ?? "";
+  const paramSegments = segments.slice(1);
+
+  const params: Record<string, string> = {};
+  for (const segment of paramSegments) {
+    const [key, value] = segment.split("=");
+    if (key) {
+      params[key.toLowerCase()] = value ? decodeURIComponent(value) : "";
+    }
+  }
+
+  const main = uriSegment.replace(/[<>"]/g, "").trim() || raw;
+  const [user, domain] = main.split("@");
+  const [host, port] = domain ? domain.split(":") : [undefined, undefined];
+
+  const transport = params.transport?.toUpperCase();
+  const nat = params.fs_nat?.toUpperCase();
+  const instance = params.rinstance;
+
+  const chips: string[] = [];
+  if (transport) {
+    chips.push(transport);
+  }
+  if (nat && nat !== "NO") {
+    chips.push(nat === "YES" ? "NAT" : `NAT ${nat}`);
+  }
+  if (instance) {
+    chips.push(`Inst ${instance.slice(0, 6).toUpperCase()}`);
+  }
+  const expires = params.expires || params.exp;
+  if (expires) {
+    const trimmed = expires.length > 5 ? expires.slice(5).trim() : expires;
+    const shortened = trimmed.length > 11 ? trimmed.slice(0, 11) : trimmed;
+    chips.push(`Exp ${shortened}`);
+  }
+
+  if (chips.length > 4) {
+    const overflow = chips.length - 4;
+    chips.splice(4);
+    chips.push(`+${overflow}`);
+  }
+
+  return {
+    main,
+    raw,
+    user,
+    domain,
+    host,
+    port,
+    transport,
+    nat,
+    instance,
+    chips,
+  };
+}
+
+function formatSecondsToCompact(secs: number): string {
+  if (!Number.isFinite(secs) || secs < 0) {
+    return `${secs}`;
+  }
+  if (secs < 60) {
+    return `${Math.round(secs)}s`;
+  }
+  if (secs < 3600) {
+    const minutes = Math.floor(secs / 60);
+    const seconds = Math.round(secs % 60);
+    return seconds > 0 ? `${minutes}m${seconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(secs / 3600);
+  const minutes = Math.round((secs % 3600) / 60);
+  return minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`;
+}
+
+function formatStatusSummary(status?: string | null, fallbackOnline?: boolean): StatusSummary {
+  const tooltip = status?.trim();
+  if (!tooltip) {
+    return {
+      main: fallbackOnline ? "Đang online" : "Offline",
+      tone: fallbackOnline ? "online" : "offline",
+    };
+  }
+
+  const raw = tooltip;
+  const mainMatch = raw.match(/^([^( \t]+)/);
+  const main = mainMatch?.[1] ?? raw.split(/\s+/)[0] ?? raw;
+
+  const parens = Array.from(raw.matchAll(/\(([^\)]+)\)/g)).map((match) => match[1]);
+  const expMatch = raw.match(/exp\(([^)]+)\)/i);
+  const expSecsMatch = raw.match(/expsecs\(([^)]+)\)/i);
+
+  const metaParts: string[] = [];
+  if (parens.length > 0) {
+    const extracted = parens
+      .filter((value) => value && !/^exp/i.test(value) && !/^expsecs/i.test(value))
+      .slice(0, 2);
+    if (extracted.length > 0) {
+      metaParts.push(extracted.join(" · "));
+    }
+  }
+
+  const detailParts: string[] = [];
+  const metaItems = Array.from(
+    parens
+      .filter((value) => value && !/^exp/i.test(value) && !/^expsecs/i.test(value))
+      .map((value) => value.toUpperCase()),
+  ).slice(0, 3);
+
+  const detailItems: string[] = [];
+  if (expMatch?.[1]) {
+    const expValue = expMatch[1];
+    detailParts.push(`EXP ${expValue}`);
+    detailItems.push(`EXP ${expValue}`);
+  }
+  if (expSecsMatch?.[1]) {
+    const seconds = Number(expSecsMatch[1]);
+    if (Number.isFinite(seconds)) {
+      const compact = formatSecondsToCompact(seconds);
+      detailParts.push(`Còn ${compact}`);
+      detailItems.push(`Còn ${compact}`);
+    }
+  }
+
+  const normalizedMain = main.replace(/_/g, " ");
+  const lowerMain = normalizedMain.toLowerCase();
+  let tone: StatusSummary["tone"] = "neutral";
+  if (lowerMain.startsWith("registered")) {
+    tone = "online";
+  } else if (lowerMain.startsWith("unregistered") || lowerMain.includes("expire")) {
+    tone = "offline";
+  }
+
+  return {
+    main: normalizedMain,
+    meta: metaParts.join(" · ") || undefined,
+    detail: detailParts.join(" · ") || undefined,
+    tooltip: raw,
+    tone,
+    metaItems: metaItems.length ? metaItems : undefined,
+    detailItems: detailItems.length ? detailItems : undefined,
+  };
 }
 
 interface RegistrationRow {
@@ -408,37 +682,98 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     return base.toLowerCase();
   }, [lastEvent]);
 
+  const statusOptions: Array<{ value: typeof statusFilter; label: string }> = [
+    { value: "all", label: "Tất cả" },
+    { value: "online", label: "Online" },
+    { value: "offline", label: "Offline" },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Badge
-          variant={connected ? "default" : "secondary"}
-          className="flex items-center gap-1 rounded-full px-3 py-1 text-xs sm:text-sm"
-        >
-          <Signal className="size-3" /> {connected ? "Realtime đã kết nối" : "Đang chờ kết nối"}
-        </Badge>
-        {lastActionLabel ? (
-          <Badge variant="outline" className="flex items-center gap-1 rounded-full px-3 py-1 text-xs">
-            <Wifi className="size-3" /> {lastActionLabel}
-          </Badge>
-        ) : null}
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isRefreshing}
-          className="ml-auto"
-          onClick={() => void fetchSnapshot()}
-        >
-          {isRefreshing ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}Tải lại
-        </Button>
-      </div>
+    <div className="space-y-8">
+      <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white shadow-2xl">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(129,140,248,0.35),_transparent_60%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.25),_transparent_60%)]" />
+        <div className="relative flex flex-col gap-6 p-8 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "flex items-center gap-2 rounded-full border-white/30 bg-white/10 px-3 py-1 text-white backdrop-blur",
+                  connected ? "border-emerald-400/50 text-emerald-100" : "border-orange-400/50 text-orange-100",
+                )}
+              >
+                <Signal className="size-4" />
+                {connected ? "Realtime đã kết nối" : "Đang chờ kết nối"}
+              </Badge>
+              {lastActionLabel ? (
+                <Badge className="flex items-center gap-2 rounded-full border-white/20 bg-white/5 px-3 py-1 text-white/80 backdrop-blur">
+                  <Wifi className="size-4" />
+                  {lastActionLabel}
+                </Badge>
+              ) : null}
+            </div>
+            <div className="space-y-3">
+              <h2 className="text-3xl font-semibold leading-tight sm:text-4xl">Giám sát đăng ký SIP</h2>
+              <p className="max-w-xl text-sm text-indigo-100/80">
+                Toàn cảnh trạng thái realtime của profile <span className="font-semibold text-white">{profile}</span>,
+                giúp bạn theo dõi thiết bị, tình trạng online/offline và sự kiện đăng ký chỉ trong một màn hình.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-indigo-100/85">
+              <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                <Activity className="size-4" />
+                Trạng thái: {profileData?.status?.state ?? "Không rõ"}
+              </span>
+              <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                <Clock className="size-4" />
+                Cập nhật: {formatDate(snapshot.generatedAt)}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isRefreshing}
+              onClick={() => void fetchSnapshot()}
+              className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+            >
+              {isRefreshing ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 size-4" />
+              )}
+              Tải lại dữ liệu
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowRaw((prev) => !prev)}
+              className="border-white/25 bg-transparent text-white/80 hover:bg-white/15 hover:text-white"
+            >
+              {showRaw ? "Ẩn phản hồi raw" : "Xem phản hồi raw"}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatItem label="Tổng đăng ký" value={stats.total} icon={Layers} tone="default" />
+        <StatItem label="Đang online" value={stats.online} icon={UserCheck} tone="success" />
+        <StatItem label="Offline" value={stats.offline} icon={UserX} tone="muted" />
+        <StatItem label="Người dùng duy nhất" value={stats.uniqueUsers} icon={Users} tone="default" />
+      </div> */}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Thông tin profile</CardTitle>
+        <Card className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/95 backdrop-blur lg:col-span-2">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_60%)]" />
+          <CardHeader className="relative space-y-2">
+            <CardTitle className="text-lg font-semibold">Thông tin profile</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Nguồn cấu hình SIP và thông số hạ tầng liên quan tới profile đang theo dõi.
+            </p>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm md:grid-cols-2">
+          <CardContent className="relative grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
             <InfoItem label="Trạng thái" value={profileData?.status?.state ?? "Không rõ"} />
             <InfoItem label="Dialplan" value={(profileData?.info?.dialplan as string) ?? "-"} />
             <InfoItem label="Context" value={(profileData?.info?.context as string) ?? "-"} />
@@ -453,125 +788,230 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Tổng quan</CardTitle>
+        <Card className="rounded-3xl border border-border/60 bg-card/95 backdrop-blur">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-lg font-semibold">Tổng quan extension</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Tăng tốc thao tác với cái nhìn nhanh về số lượng thiết bị và sự kiện mới nhất.
+            </p>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-3 text-sm">
-            <StatItem label="Tổng" value={stats.total} tone="default" />
-            <StatItem label="Đang online" value={stats.online} tone="success" />
-            <StatItem label="Offline" value={stats.offline} tone="muted" />
-            <StatItem label="Người dùng" value={stats.uniqueUsers} tone="default" />
+          <CardContent className="space-y-4 text-sm">
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground/80">
+                Thiết bị đang hiển thị
+              </p>
+              <div className="mt-2 text-3xl font-semibold text-primary">
+                {dataset.length.toLocaleString("vi-VN")}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tổng cộng {overallStats?.total ?? stats.total} thiết bị trong profile.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground/80">
+                Sự kiện realtime mới nhất
+              </p>
+              <p className="mt-2 text-sm text-foreground">
+                {lastActionLabel ?? "Chưa ghi nhận sự kiện mới trong phiên hiện tại."}
+              </p>
+            </div>
+            {overallStats ? (
+              <div className="rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4 text-xs text-primary">
+                <p className="uppercase tracking-[0.3em] text-primary/70">Tổng thể hệ thống</p>
+                <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-primary/60">Tổng</p>
+                    <p className="text-base font-semibold">{overallStats.total ?? "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-primary/60">Online</p>
+                    <p className="text-base font-semibold">{overallStats.online ?? "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-primary/60">Offline</p>
+                    <p className="text-base font-semibold">{overallStats.offline ?? "-"}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="gap-3 sm:flex sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle>Danh sách đăng ký</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Hiển thị {dataset.length}/{overallStats?.total ?? dataset.length} thiết bị
-            </p>
+      <Card className="overflow-hidden rounded-3xl border border-border/60 bg-card/95 shadow-lg">
+        <CardHeader className="space-y-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-lg font-semibold">Danh sách thiết bị đang đăng ký</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Hiển thị {dataset.length}/{overallStats?.total ?? dataset.length} thiết bị phù hợp tiêu chí hiện tại.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {statusOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setStatusFilter(option.value)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition",
+                    statusFilter === option.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted/50",
+                  )}
+                  aria-pressed={statusFilter === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <div className="relative">
             <Input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Tìm extension, IP, user agent..."
-              className="sm:w-64"
+              className="w-full rounded-2xl border border-border/60 bg-background/60 pl-4 pr-4 text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-primary/40"
             />
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
-              <SelectTrigger size="sm" className="w-full sm:w-40">
-                <SelectValue placeholder="Trạng thái" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả</SelectItem>
-                <SelectItem value="online">Đang online</SelectItem>
-                <SelectItem value="offline">Offline</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>IP/Mạng</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Ping</TableHead>
-                  <TableHead className="text-right">Trạng thái</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dataset.map((item) => {
-                  const normalizedId = (item.id || '').toString().toLowerCase();
-                  return (
-                    <TableRow
-                      key={`${item.id}-${item.contact ?? 'nc'}`}
-                      className={cn(
-                        highlightedRowKey && normalizedId === highlightedRowKey ? "bg-muted/60" : undefined,
-                        !item.online && "opacity-75",
-                      )}
-                    >
-                      <TableCell className="font-medium">
-                        <div className="flex flex-col">
-                          <span>{item.id || '-'}</span>
-                          {item.displayName ? (
-                            <span className="text-[11px] text-muted-foreground">{item.displayName}</span>
-                          ) : null}
+        <CardContent className="space-y-6">
+          {dataset.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {dataset.map((item) => {
+                const normalizedId = (item.id || "").toString().toLowerCase();
+                const isHighlighted = Boolean(highlightedRowKey && normalizedId === highlightedRowKey);
+                const statusSummary = formatStatusSummary(item.status, item.online);
+                const statusLabel = statusSummary.main || (item.online ? "Đang online" : "Offline");
+                const pingLabel = item.ping_status
+                  ? `${item.ping_status}${item.ping_time ? ` (${item.ping_time} ms)` : ""}`
+                  : "-";
+                const contactDisplay = formatContactDisplay(item.contact);
+                const isOnlineTone = statusSummary.tone === "online" || item.online;
+                const statusBadges = Array.from(
+                  new Set(
+                    [
+                      ...(statusSummary.metaItems ?? (statusSummary.meta ? [statusSummary.meta] : [])),
+                      ...(statusSummary.detailItems ?? (statusSummary.detail ? [statusSummary.detail] : [])),
+                    ].filter(Boolean),
+                  ),
+                );
+                return (
+                  <article
+                    key={`${item.id}-${item.contact ?? "nc"}`}
+                    className={cn(
+                      "group relative flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/95 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg sm:p-5",
+                      isHighlighted && "border-primary/60 ring-1 ring-primary/40",
+                      !item.online && "bg-muted/40",
+                    )}
+                  >
+                    <header className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "inline-flex size-2 rounded-full",
+                              isOnlineTone
+                                ? "bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.15)]"
+                                : "bg-orange-400 shadow-[0_0_0_4px_rgba(251,146,60,0.15)]",
+                            )}
+                          />
+                          {item.id || "-"}
                         </div>
-                      </TableCell>
-                      <TableCell className="max-w-[220px] truncate text-xs sm:text-sm">
-                        {item.contact || '-'}
-                      </TableCell>
-                      <TableCell>{formatNetwork(item)}</TableCell>
-                      <TableCell className="max-w-[220px] truncate text-xs sm:text-sm">
-                        {item.agent || '-'}
-                      </TableCell>
-                      <TableCell>
-                        {item.ping_status
-                          ? `${item.ping_status}${item.ping_time ? ` (${item.ping_time} ms)` : ''}`
-                          : '-' }
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={item.online ? 'default' : 'secondary'}>
-                          {item.status || (item.online ? 'Đang online' : 'Offline')}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {dataset.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      Không có thiết bị phù hợp tiêu chí.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                        {item.displayName ? (
+                          <div className="text-xs text-muted-foreground">{item.displayName}</div>
+                        ) : null}
+                        {item.tenantId ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+                            {item.tenantId}
+                          </span>
+                        ) : null}
+                      </div>
+                      <Badge
+                        variant={isOnlineTone ? "default" : "secondary"}
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-semibold",
+                          isOnlineTone
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                        title={statusSummary.tooltip}
+                      >
+                        {statusLabel}
+                      </Badge>
+                    </header>
+                    {statusBadges.length ? (
+                      <div className="flex flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/70">
+                        {statusBadges.map((badge) => (
+                          <span
+                            key={`${item.id}-${badge}`}
+                            className="rounded-full border border-border/60 bg-muted/40 px-2 py-[2px]"
+                          >
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="space-y-2 text-sm">
+                      <DetailBlock
+                        icon={Phone}
+                        label="Contact SIP"
+                        value={contactDisplay.main}
+                        secondary={
+                          contactDisplay.main === "-"
+                            ? undefined
+                            : ([
+                                contactDisplay.user ? `User ${contactDisplay.user}` : null,
+                                contactDisplay.domain ? `Host ${contactDisplay.domain}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") || undefined)
+                        }
+                        hint={contactDisplay.raw}
+                        monospace
+                        clampLines={contactDisplay.main === "-" ? 1 : 2}
+                        chips={contactDisplay.main === "-" ? [] : contactDisplay.chips}
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <DetailBlock icon={Monitor} label="User agent" value={item.agent || "-"} clampLines={2} />
+                        <DetailBlock icon={Timer} label="Ping" value={pingLabel} clampLines={2} />
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 text-center">
+              <span className="text-sm font-semibold text-foreground">Không có thiết bị phù hợp tiêu chí.</span>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Thử thay đổi bộ lọc hoặc xoá từ khóa tìm kiếm để xem toàn bộ danh sách đăng ký.
+              </p>
+            </div>
+          )}
 
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Cập nhật lần cuối: {formatDate(snapshot.generatedAt)}</span>
-            <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowRaw((prev) => !prev)}>
-              {showRaw ? "Ẩn" : "Hiển thị"} phản hồi raw
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <Clock className="size-4" /> Cập nhật lần cuối: {formatDate(snapshot.generatedAt)}
+            </span>
+            <span className="flex items-center gap-2 text-muted-foreground/80">
+              <Wifi className="size-4" />
+              {connected ? "Realtime đang hoạt động" : "Realtime chưa kết nối"}
+            </span>
           </div>
-
-          {showRaw ? (
-            <ScrollArea className="h-64 rounded-md border bg-muted/60 p-3 text-xs">
-              <pre className="whitespace-pre-wrap break-all text-[11px] leading-relaxed">
-                {snapshot.raw}
-              </pre>
-            </ScrollArea>
-          ) : null}
         </CardContent>
       </Card>
+
+      {showRaw ? (
+        <div className="rounded-3xl border border-dashed border-primary/30 bg-primary/5 p-4 shadow-inner">
+          <ScrollArea className="h-64 rounded-2xl bg-background/90 p-4 text-xs">
+            <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-primary">
+              {snapshot.raw}
+            </pre>
+          </ScrollArea>
+        </div>
+      ) : null}
     </div>
   );
 }
