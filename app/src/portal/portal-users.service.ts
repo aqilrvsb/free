@@ -3,11 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   AgentEntity,
+  AgentGroupEntity,
   PortalRoleEntity,
   PortalUserEntity,
   PortalUserRole,
   PortalUserTenantEntity,
   TenantEntity,
+  UserEntity,
 } from '../entities';
 import { hash, compare } from 'bcryptjs';
 import { PORTAL_PERMISSION_SET } from './portal-permissions';
@@ -56,6 +58,10 @@ export class PortalUsersService {
     private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(AgentEntity)
     private readonly agentRepo: Repository<AgentEntity>,
+    @InjectRepository(AgentGroupEntity)
+    private readonly agentGroupRepo: Repository<AgentGroupEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
   ) {}
 
   async listUsers(
@@ -427,6 +433,118 @@ export class PortalUsersService {
     };
   }
 
+  async resolveRealtimeAccess(
+    userId: string,
+  ): Promise<{
+    isSuperAdmin: boolean;
+    role: PortalUserRole;
+    tenantIds: string[];
+    managedPortalUserIds: string[] | null;
+    allowedExtensionIds: string[] | null;
+    agentId?: string | null;
+    isAgentLead?: boolean;
+  }> {
+    const user = await this.portalUserRepo.findOne({
+      where: { id: userId },
+      relations: ['tenantMemberships', 'agents'],
+    });
+    if (!user) {
+      throw new NotFoundException('Portal user không tồn tại');
+    }
+
+    const tenantIds = Array.isArray(user.tenantMemberships)
+      ? user.tenantMemberships.map((membership) => membership.tenantId)
+      : [];
+    const normalizedTenantIds = Array.from(new Set(tenantIds));
+
+    const primaryAgent = Array.isArray(user.agents) && user.agents.length > 0 ? user.agents[0] : null;
+    const role = user.roleKey;
+    const isSuperAdmin = role === 'super_admin';
+    const isAgentLead = role === 'agent_lead';
+    const agentId = primaryAgent?.id ?? null;
+
+    if (isSuperAdmin) {
+      return {
+        isSuperAdmin: true,
+        role,
+        tenantIds: normalizedTenantIds,
+        managedPortalUserIds: null,
+        allowedExtensionIds: null,
+        agentId,
+        isAgentLead,
+      };
+    }
+
+    const managedPortalUserIds = new Set<string>([user.id]);
+    const extensionIds = new Set<string>();
+
+    if (role === 'agent') {
+      if (primaryAgent?.extensionId) {
+        extensionIds.add(primaryAgent.extensionId.toLowerCase());
+      }
+    } else if (role === 'agent_lead') {
+      if (!agentId) {
+        return {
+          isSuperAdmin: false,
+          role,
+          tenantIds: normalizedTenantIds,
+          managedPortalUserIds: Array.from(managedPortalUserIds.values()),
+          allowedExtensionIds: Array.from(extensionIds.values()),
+          agentId: null,
+          isAgentLead: true,
+        };
+      }
+      const scope: PortalUserScope = {
+        isSuperAdmin: false,
+        tenantIds: normalizedTenantIds,
+        role,
+        agentId,
+        isAgentLead: true,
+      };
+      const accessible = await this.resolveAccessibleAgentIds(scope);
+      const targetAgentIds =
+        accessible && accessible.size > 0 ? Array.from(accessible.values()) : agentId ? [agentId] : [];
+
+      if (targetAgentIds.length > 0) {
+        const agents = await this.agentRepo.find({
+          where: { id: In(targetAgentIds) },
+        });
+        agents.forEach((agent) => {
+          if (agent.portalUserId) {
+            managedPortalUserIds.add(agent.portalUserId);
+          }
+          if (agent.extensionId) {
+            extensionIds.add(agent.extensionId.toLowerCase());
+          }
+        });
+      }
+    } else {
+      if (normalizedTenantIds.length > 0) {
+        const portalLinks = await this.portalUserTenantRepo.find({
+          where: { tenantId: In(normalizedTenantIds) },
+        });
+        portalLinks.forEach((link) => managedPortalUserIds.add(link.portalUserId));
+
+        const tenantExtensions = await this.userRepo
+          .createQueryBuilder('extension')
+          .select('extension.id', 'id')
+          .where('extension.tenant_id IN (:...tenantIds)', { tenantIds: normalizedTenantIds })
+          .getRawMany();
+        tenantExtensions.forEach((row) => extensionIds.add(String(row.id).toLowerCase()));
+      }
+    }
+
+    return {
+      isSuperAdmin: false,
+      role,
+      tenantIds: normalizedTenantIds,
+      managedPortalUserIds: Array.from(managedPortalUserIds.values()),
+      allowedExtensionIds: Array.from(extensionIds.values()),
+      agentId,
+      isAgentLead,
+    };
+  }
+
   private normalizePermissions(list: string[] | undefined, scope?: PortalUserScope): string[] {
     if (!Array.isArray(list)) {
       return [];
@@ -545,7 +663,7 @@ export class PortalUsersService {
 
     const agents = await this.agentRepo.find({
       where,
-      select: ['id', 'parentAgentId'],
+      select: ['id', 'parentAgentId', 'groupId'],
     });
 
     const childrenMap = new Map<string | null, string[]>();
@@ -571,6 +689,27 @@ export class PortalUsersService {
         if (!accessible.has(child)) {
           queue.push(child);
         }
+      }
+    }
+
+    if (accessible.size > 0) {
+      const groupWhere: Record<string, any> = {
+        ownerAgentId: In(Array.from(accessible.values())),
+      };
+      if (scope.tenantIds.length > 0) {
+        groupWhere.tenantId = In(scope.tenantIds);
+      }
+      const groups = await this.agentGroupRepo.find({
+        where: groupWhere,
+        select: ['id'],
+      });
+      if (groups.length > 0) {
+        const groupIds = new Set(groups.map((group) => group.id));
+        agents.forEach((agent) => {
+          if (agent.groupId && groupIds.has(agent.groupId)) {
+            accessible.add(agent.id);
+          }
+        });
       }
     }
 

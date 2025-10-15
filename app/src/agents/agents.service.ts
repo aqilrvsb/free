@@ -76,7 +76,7 @@ export class AgentsService {
 
     const agents = await this.agentRepo.find({
       where,
-      select: ['id', 'parentAgentId'],
+      select: ['id', 'parentAgentId', 'groupId'],
     });
 
     const childrenMap = new Map<string | null, string[]>();
@@ -102,6 +102,27 @@ export class AgentsService {
         if (!accessible.has(child)) {
           queue.push(child);
         }
+      }
+    }
+
+    if (accessible.size > 0) {
+      const groupWhere: Record<string, any> = {
+        ownerAgentId: In(Array.from(accessible.values())),
+      };
+      if (scope.tenantIds.length > 0) {
+        groupWhere.tenantId = In(scope.tenantIds);
+      }
+      const groups = await this.groupRepo.find({
+        where: groupWhere,
+        select: ['id'],
+      });
+      if (groups.length > 0) {
+        const groupIdSet = new Set(groups.map((group) => group.id));
+        agents.forEach((agent) => {
+          if (agent.groupId && groupIdSet.has(agent.groupId)) {
+            accessible.add(agent.id);
+          }
+        });
       }
     }
 

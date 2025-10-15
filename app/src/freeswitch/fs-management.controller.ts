@@ -1,13 +1,21 @@
-import { Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards, ForbiddenException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FsManagementService } from './fs-management.service';
 import { SwaggerTags } from '../swagger/swagger-tags';
 import { ChannelUuidParamDto, SofiaProfileParamDto, SofiaRegistrationsQueryDto } from './dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { Request } from 'express';
+import { PortalUsersService } from '../portal/portal-users.service';
+import { TenantManagementService } from '../tenant/tenant-management.service';
 
 @ApiTags(SwaggerTags.FreeSWITCH)
 @Controller('fs')
 export class FsManagementController {
-  constructor(private readonly fsManagementService: FsManagementService) {}
+  constructor(
+    private readonly fsManagementService: FsManagementService,
+    private readonly portalUsersService: PortalUsersService,
+    private readonly tenantManagementService: TenantManagementService,
+  ) {}
 
   @Get('status')
   async status() {
@@ -20,15 +28,52 @@ export class FsManagementController {
   }
 
   @Get('sofia/:profile/registrations')
+  @UseGuards(JwtAuthGuard)
   async sofiaRegistrations(
     @Param() params: SofiaProfileParamDto,
     @Query() query: SofiaRegistrationsQueryDto,
+    @Req() req: Request & { user?: any },
   ) {
+    const authUser = req.user;
+    if (!authUser) {
+      throw new ForbiddenException('Phiên đăng nhập không hợp lệ');
+    }
+
+    const access = await this.portalUsersService.resolveRealtimeAccess(authUser.id || authUser.sub);
+    const queryDomain = typeof query.domain === 'string' ? query.domain.trim().toLowerCase() : undefined;
+    const allowedTenantSummaries = access.tenantIds.length
+      ? await this.tenantManagementService.getTenantSummariesByIds(access.tenantIds)
+      : [];
+    const domainToTenant = new Map(allowedTenantSummaries.map((item) => [item.domain, item.id]));
+
+    let effectiveDomain = queryDomain ?? undefined;
+    let effectiveTenantId: string | undefined = undefined;
+
+    if (access.isSuperAdmin) {
+      effectiveTenantId = query.tenantId?.trim() || queryDomain ? domainToTenant.get(queryDomain ?? '') : undefined;
+    } else {
+      if (effectiveDomain) {
+        if (!domainToTenant.has(effectiveDomain)) {
+          effectiveDomain = allowedTenantSummaries.length > 0 ? allowedTenantSummaries[0].domain : undefined;
+        }
+      } else if (allowedTenantSummaries.length > 0) {
+        effectiveDomain = allowedTenantSummaries[0].domain;
+      }
+      if (!effectiveDomain) {
+        throw new ForbiddenException('Không có quyền truy cập dữ liệu đăng ký');
+      }
+      effectiveTenantId = domainToTenant.get(effectiveDomain);
+    }
+
+    const extensionIds = access.allowedExtensionIds ? Array.from(new Set(access.allowedExtensionIds)) : undefined;
+
     return this.fsManagementService.getSofiaRegistrations(params.profile, {
-      tenantId: query.tenantId,
+      tenantId: access.isSuperAdmin ? query.tenantId ?? effectiveTenantId : effectiveTenantId,
       status: query.status,
       search: query.search,
-      domain: query.domain,
+      domain: effectiveDomain ?? query.domain,
+      extensionIds,
+      isSuperAdmin: access.isSuperAdmin,
     });
   }
 

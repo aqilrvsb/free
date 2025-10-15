@@ -33,6 +33,9 @@ interface SofiaProfile {
   status?: { type?: string; state?: string };
   info?: Record<string, unknown>;
   registrations?: SofiaRegistration[] | { registrations?: SofiaRegistration[] };
+  extensionPresence?: Array<Record<string, any>>;
+  extensionStats?: { total: number; online: number; offline: number };
+  extensionStatsOverall?: { total: number; online: number; offline: number };
 }
 
 interface SofiaRegistrationsPayload {
@@ -52,12 +55,20 @@ interface SubscriptionScope {
   profile: string;
   domain?: string | null;
   tenantId?: string | null;
+  portalUserIds?: string[] | null;
+  extensionIds?: string[] | null;
+  role?: string | null;
+  isSuperAdmin?: boolean;
+  roomKey: string;
 }
 
 interface ClientScope {
   isSuperAdmin: boolean;
   tenantIds: string[];
   allowedDomains: Map<string, { tenantId: string; domain: string; name: string }>;
+  managedPortalUserIds: Set<string> | null;
+  allowedExtensionIds: Set<string> | null;
+  role: string;
 }
 
 @WebSocketGateway({ namespace: 'registrations', cors: { origin: true, credentials: true } })
@@ -89,6 +100,41 @@ export class FsRegistrationsGateway
     return normalizedDomain ? `${normalizedProfile}::domain::${normalizedDomain}` : normalizedProfile;
   }
 
+  private buildScopeRoomKey(scope: {
+    profile: string;
+    domain?: string | null;
+    portalUserIds?: string[] | null;
+    extensionIds?: string[] | null;
+  }): string {
+    const base = this.buildRoomKey(scope.profile, scope.domain);
+    const extensionKey = scope.extensionIds?.length
+      ? scope.extensionIds
+          .map((value) => value.toLowerCase())
+          .sort()
+          .join(',')
+      : 'all';
+    const portalKey = scope.portalUserIds?.length
+      ? scope.portalUserIds
+          .map((value) => value.toLowerCase())
+          .sort()
+          .join(',')
+      : 'all';
+    return `${base}::ext::${extensionKey}::users::${portalKey}`;
+  }
+
+  private buildAccessFilters(
+    scope: SubscriptionScope,
+    isSuperAdmin: boolean,
+  ): { extensionFilter: Set<string> | null; portalUserFilter: Set<string> | null; isSuperAdmin: boolean } {
+    const extensionFilter = !isSuperAdmin && scope.extensionIds?.length
+      ? new Set(scope.extensionIds.map((value) => value.toLowerCase()))
+      : null;
+    const portalUserFilter = !isSuperAdmin && scope.portalUserIds?.length
+      ? new Set(scope.portalUserIds.map((value) => value))
+      : null;
+    return { extensionFilter, portalUserFilter, isSuperAdmin };
+  }
+
   private collectScopesForProfile(profile: string): Map<string, SubscriptionScope> {
     const normalizedProfile = profile?.trim() || 'internal';
     const scopes = new Map<string, SubscriptionScope>();
@@ -96,9 +142,9 @@ export class FsRegistrationsGateway
       if (!scope || scope.profile !== normalizedProfile) {
         return;
       }
-      const roomKey = this.buildRoomKey(scope.profile, scope.domain);
-      if (!scopes.has(roomKey)) {
-        scopes.set(roomKey, scope);
+      const key = scope.roomKey || this.buildScopeRoomKey(scope);
+      if (!scopes.has(key)) {
+        scopes.set(key, scope);
       }
     });
     return scopes;
@@ -108,31 +154,42 @@ export class FsRegistrationsGateway
     this.eventsSubscription = this.fsEventsService.registration$.subscribe(async (event) => {
       const profile = event.profile || 'internal';
       const scopes = this.collectScopesForProfile(profile);
-      const normalizedEventDomain = event.domain?.trim()?.toLowerCase() ?? null;
-
-      if (scopes.size > 0) {
-        scopes.forEach((scope) => {
-          const normalizedScopeDomain = scope.domain?.trim()?.toLowerCase() ?? null;
-          if (!normalizedScopeDomain || !normalizedEventDomain || normalizedScopeDomain === normalizedEventDomain) {
-            const roomKey = this.buildRoomKey(scope.profile, scope.domain);
-            this.server.to(roomKey).emit('registrations:event', event);
-          }
-        });
+      if (scopes.size === 0) {
+        return;
       }
 
-      const targets =
-        scopes.size > 0
-          ? Array.from(scopes.values()).filter((scope) => {
-              const normalizedScopeDomain = scope.domain?.trim()?.toLowerCase() ?? null;
-              return !normalizedScopeDomain || !normalizedEventDomain || normalizedScopeDomain === normalizedEventDomain;
-            })
-          : [{ profile, domain: undefined, tenantId: undefined }];
+      const normalizedEventDomain = event.domain?.trim()?.toLowerCase() ?? null;
+      const eventCandidates = this.extractExtensionCandidatesFromEvent(event);
+
+      scopes.forEach((scope) => {
+        const normalizedScopeDomain = scope.domain?.trim()?.toLowerCase() ?? null;
+        if (normalizedScopeDomain && normalizedEventDomain && normalizedScopeDomain !== normalizedEventDomain) {
+          return;
+        }
+        const access = this.buildAccessFilters(scope, scope.isSuperAdmin ?? false);
+        if (access.extensionFilter) {
+          if (eventCandidates.length === 0) {
+            return;
+          }
+          const matches = eventCandidates.some((candidate) => access.extensionFilter!.has(candidate));
+          if (!matches) {
+            return;
+          }
+        }
+        this.server.to(scope.roomKey).emit('registrations:event', event);
+      });
+
+      const targets = Array.from(scopes.values()).filter((scope) => {
+        const normalizedScopeDomain = scope.domain?.trim()?.toLowerCase() ?? null;
+        return !normalizedScopeDomain || !normalizedEventDomain || normalizedScopeDomain === normalizedEventDomain;
+      });
 
       await Promise.all(
         targets.map(async (scope) => {
           try {
-            const snapshot = await this.buildSnapshot(scope.profile, scope.domain, scope.tenantId);
-            this.emitSnapshot(scope.profile, snapshot, scope.domain);
+            const access = this.buildAccessFilters(scope, scope.isSuperAdmin ?? false);
+            const snapshot = await this.buildSnapshot(scope.profile, scope.domain, scope.tenantId, access);
+            this.emitSnapshotForScope(scope, snapshot);
           } catch (error) {
             this.logger.warn(
               `Failed to refresh registrations for profile ${scope.profile} (domain=${scope.domain ?? 'all'}): ${
@@ -221,29 +278,39 @@ export class FsRegistrationsGateway
       tenantId = domainEntry.tenantId;
     }
 
-    const nextRoom = this.buildRoomKey(requestedProfile, requestedDomain);
     const previous = this.subscriptions.get(client.id);
 
     if (previous) {
-      const previousRoom = this.buildRoomKey(previous.profile, previous.domain);
-      if (previousRoom !== nextRoom) {
-        client.leave(previousRoom);
+      if (previous.roomKey !== undefined && previous.roomKey !== '') {
+        client.leave(previous.roomKey);
       }
     }
 
+    const portalUserIds = clientScope.managedPortalUserIds
+      ? Array.from(clientScope.managedPortalUserIds.values())
+      : null;
+    const extensionIds = clientScope.allowedExtensionIds
+      ? Array.from(clientScope.allowedExtensionIds.values())
+      : null;
     const scope: SubscriptionScope = {
       profile: requestedProfile,
       domain: requestedDomain ?? null,
       tenantId: tenantId ?? null,
+      portalUserIds,
+      extensionIds,
+      role: clientScope.role,
+      isSuperAdmin: clientScope.isSuperAdmin,
+      roomKey: '',
     };
+    scope.roomKey = this.buildScopeRoomKey(scope);
 
     this.subscriptions.set(client.id, scope);
-    client.join(nextRoom);
+    client.join(scope.roomKey);
 
     try {
-      const snapshot = await this.buildSnapshot(requestedProfile, requestedDomain, tenantId);
-      client.emit('registrations:snapshot', snapshot);
-      this.snapshotHashes.set(nextRoom, this.hashSnapshot(snapshot));
+      const accessFilters = this.buildAccessFilters(scope, clientScope.isSuperAdmin);
+      const snapshot = await this.buildSnapshot(requestedProfile, requestedDomain, tenantId, accessFilters);
+      this.emitSnapshotForScope(scope, snapshot);
     } catch (error) {
       const isWsError = error instanceof WsException;
       const messagePayload = isWsError ? error.getError() : undefined;
@@ -304,6 +371,11 @@ export class FsRegistrationsGateway
     profile: string,
     domain?: string | null,
     tenantId?: string | null,
+    accessFilters?: {
+      extensionFilter: Set<string> | null;
+      portalUserFilter: Set<string> | null;
+      isSuperAdmin: boolean;
+    },
   ): Promise<RegistrationSnapshot> {
     const normalizedDomain = domain?.trim()?.toLowerCase();
     const commandResult = await this.fsManagementService.getSofiaRegistrations(
@@ -317,13 +389,45 @@ export class FsRegistrationsGateway
     );
     const payload = (commandResult.parsed as SofiaRegistrationsPayload | undefined) ?? undefined;
     const profileData = payload?.profiles?.[profile];
+    const extensionFilter = accessFilters?.extensionFilter ?? null;
     const registrations = this.extractRegistrations(profileData);
+    const filteredRegistrations = extensionFilter
+      ? registrations.filter((registration) => this.registrationMatchesExtensions(registration, extensionFilter))
+      : registrations;
+
+    let filteredProfileData = profileData ? { ...profileData } : undefined;
+    if (filteredProfileData) {
+      filteredProfileData.registrations = filteredRegistrations;
+
+      if (Array.isArray(filteredProfileData.extensionPresence)) {
+        const presenceList = extensionFilter
+          ? (filteredProfileData.extensionPresence as Array<Record<string, any>>).filter((item) =>
+              typeof item?.id === 'string' ? extensionFilter.has(item.id.toLowerCase()) : false,
+            )
+          : filteredProfileData.extensionPresence;
+        const onlineCount = presenceList.filter((item: any) => Boolean(item?.online)).length;
+        filteredProfileData = {
+          ...filteredProfileData,
+          extensionPresence: presenceList,
+          extensionStats: {
+            total: presenceList.length,
+            online: onlineCount,
+            offline: Math.max(presenceList.length - onlineCount, 0),
+          },
+          extensionStatsOverall: {
+            total: presenceList.length,
+            online: onlineCount,
+            offline: Math.max(presenceList.length - onlineCount, 0),
+          },
+        } as SofiaProfile;
+      }
+    }
 
     return {
       profile,
       domain: normalizedDomain ?? null,
-      profileData,
-      registrations,
+      profileData: filteredProfileData,
+      registrations: filteredRegistrations,
       raw: commandResult.raw ?? '',
       generatedAt: Date.now(),
     };
@@ -343,28 +447,39 @@ export class FsRegistrationsGateway
   }
 
   async refreshProfile(profile: string): Promise<void> {
-    try {
-      const snapshot = await this.buildSnapshot(profile);
-      this.emitSnapshot(profile, snapshot);
-    } catch (error) {
-      this.logger.warn(
-        `Manual snapshot refresh failed for profile ${profile}: ${error instanceof Error ? error.message : error}`
-      );
+    const scopes = this.collectScopesForProfile(profile);
+    if (scopes.size === 0) {
+      return;
     }
+
+    await Promise.all(
+      Array.from(scopes.values()).map(async (scope) => {
+        try {
+          const access = this.buildAccessFilters(scope, scope.isSuperAdmin ?? false);
+          const snapshot = await this.buildSnapshot(profile, scope.domain, scope.tenantId, access);
+          this.emitSnapshotForScope(scope, snapshot);
+        } catch (error) {
+          this.logger.warn(
+            `Manual snapshot refresh failed for profile ${profile} (domain=${scope.domain ?? 'all'}): ${
+              error instanceof Error ? error.message : error
+            }`,
+          );
+        }
+      }),
+    );
   }
 
-  private emitSnapshot(profile: string, snapshot: RegistrationSnapshot, domain?: string | null): void {
-    const effectiveDomain = domain ?? snapshot.domain ?? null;
+  private emitSnapshotForScope(scope: SubscriptionScope, snapshot: RegistrationSnapshot): void {
+    const effectiveDomain = scope.domain ?? snapshot.domain ?? null;
     snapshot.domain = effectiveDomain;
     const hash = this.hashSnapshot(snapshot);
-    const roomKey = this.buildRoomKey(profile, effectiveDomain);
-    this.snapshotHashes.set(roomKey, hash);
+    this.snapshotHashes.set(scope.roomKey, hash);
     this.logger.log(
-      `[gateway] emit snapshot profile=${profile} domain=${effectiveDomain ?? 'all'} registrations=${
-        snapshot.registrations.length
-      } generatedAt=${snapshot.generatedAt}`,
+      `[gateway] emit snapshot profile=${scope.profile} domain=${effectiveDomain ?? 'all'} extensions=${
+        scope.extensionIds ? scope.extensionIds.length : 'ALL'
+      } registrations=${snapshot.registrations.length} generatedAt=${snapshot.generatedAt}`,
     );
-    this.server.to(roomKey).emit('registrations:snapshot', snapshot);
+    this.server.to(scope.roomKey).emit('registrations:snapshot', snapshot);
   }
 
   private hashSnapshot(snapshot: RegistrationSnapshot): string {
@@ -389,9 +504,9 @@ export class FsRegistrationsGateway
         if (!scope) {
           return;
         }
-        const roomKey = this.buildRoomKey(scope.profile, scope.domain);
-        if (!scopes.has(roomKey)) {
-          scopes.set(roomKey, scope);
+        const key = scope.roomKey || this.buildScopeRoomKey(scope);
+        if (!scopes.has(key)) {
+          scopes.set(key, scope);
         }
       });
 
@@ -401,10 +516,11 @@ export class FsRegistrationsGateway
 
       for (const [roomKey, scope] of scopes) {
         try {
-          const snapshot = await this.buildSnapshot(scope.profile, scope.domain, scope.tenantId);
+          const access = this.buildAccessFilters(scope, scope.isSuperAdmin ?? false);
+          const snapshot = await this.buildSnapshot(scope.profile, scope.domain, scope.tenantId, access);
           const hash = this.hashSnapshot(snapshot);
           if (this.snapshotHashes.get(roomKey) !== hash) {
-            this.emitSnapshot(scope.profile, snapshot, scope.domain);
+            this.emitSnapshotForScope(scope, snapshot);
           }
         } catch (error) {
           this.logger.warn(
@@ -415,6 +531,43 @@ export class FsRegistrationsGateway
         }
       }
     }, this.pollIntervalMs);
+  }
+
+  private registrationMatchesExtensions(registration: SofiaRegistration, filter: Set<string>): boolean {
+    const candidates = [registration.user, registration.aor, registration.contact]
+      .map((value) => this.normalizeExtensionValue(value))
+      .filter((value): value is string => Boolean(value));
+    if (candidates.length === 0) {
+      return false;
+    }
+    return candidates.some((candidate) => filter.has(candidate));
+  }
+
+  private normalizeExtensionValue(value: unknown): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) {
+      return null;
+    }
+    const cleaned = raw.replace(/^<sip:/, '').replace(/^sip:/, '').replace(/>$/, '');
+    const withoutParams = cleaned.split(/[;>]/)[0];
+    const base = withoutParams.includes('@') ? withoutParams.split('@')[0] : withoutParams;
+    return base || null;
+  }
+
+  private extractExtensionCandidatesFromEvent(event: RegistrationEvent): string[] {
+    const values = new Set<string>();
+    const add = (input: unknown) => {
+      const normalized = this.normalizeExtensionValue(input);
+      if (normalized) {
+        values.add(normalized);
+      }
+    };
+    add(event.username);
+    add(event.contact);
+    return Array.from(values.values());
   }
 
   private async ensureClientUser(client: Socket): Promise<Record<string, any>> {
@@ -558,10 +711,27 @@ export class FsRegistrationsGateway
       throw new WsException('Tài khoản hiện tại chưa được gán vào tenant nào hoặc tenant đã bị khoá.');
     }
 
+    const realtimeAccess = await this.portalUsersService.resolveRealtimeAccess(user.id);
+    const managedPortalUserIds = realtimeAccess.managedPortalUserIds
+      ? new Set(realtimeAccess.managedPortalUserIds)
+      : null;
+    const allowedExtensionIds = realtimeAccess.allowedExtensionIds
+      ? new Set(realtimeAccess.allowedExtensionIds.map((value) => value.toLowerCase()))
+      : null;
+
+    this.logger.log(
+      `[gateway] realtime access user=${userIdentifier} role=${roleKey} portals=${
+        managedPortalUserIds ? Array.from(managedPortalUserIds.values()).length : 'ALL'
+      } extensions=${allowedExtensionIds ? Array.from(allowedExtensionIds.values()).length : 'ALL'}`,
+    );
+
     const scope: ClientScope = {
       isSuperAdmin,
       tenantIds,
       allowedDomains,
+      managedPortalUserIds,
+      allowedExtensionIds,
+      role: roleKey,
     };
     if (!client.data) {
       client.data = {};

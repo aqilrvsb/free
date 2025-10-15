@@ -159,7 +159,7 @@ const NAV_SECTIONS: Array<{
           description: "Gán extension & KPI",
           href: "/fs/agents",
           icon: Workflow,
-          roles: ["super_admin", "tenant_admin"],
+          roles: ["super_admin", "tenant_admin", "agent_lead"],
           permission: "manage_agents",
         },
         {
@@ -175,7 +175,7 @@ const NAV_SECTIONS: Array<{
           description: "Quản lý tài khoản đăng nhập",
           href: "/admin/users",
           icon: Users,
-          roles: ["super_admin", "tenant_admin"],
+          roles: ["super_admin", "tenant_admin", "agent_lead"],
           permission: "manage_portal_users",
         },
         {

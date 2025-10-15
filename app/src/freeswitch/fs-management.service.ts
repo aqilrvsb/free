@@ -10,6 +10,15 @@ interface CommandResult<T = string> {
   parsed?: T;
 }
 
+interface SofiaRegistrationsOptions {
+  tenantId?: string;
+  status?: string;
+  search?: string;
+  domain?: string;
+  extensionIds?: string[];
+  isSuperAdmin?: boolean;
+}
+
 @Injectable()
 export class FsManagementService {
   private readonly logger = new Logger(FsManagementService.name);
@@ -64,14 +73,17 @@ export class FsManagementService {
     }
   }
 
-  async getSofiaRegistrations(
-    profile: string,
-    options?: { tenantId?: string; status?: string; search?: string; domain?: string },
-  ): Promise<CommandResult<any>> {
+  async getSofiaRegistrations(profile: string, options?: SofiaRegistrationsOptions): Promise<CommandResult<any>> {
     const statusFilter = (options?.status ?? 'all').toLowerCase();
     const tenantId = options?.tenantId?.trim() || undefined;
     const searchTerm = options?.search?.trim()?.toLowerCase() ?? '';
     const domainFilter = options?.domain?.trim().toLowerCase() || undefined;
+    const allowedExtensions = Array.isArray(options?.extensionIds)
+      ? options!.extensionIds
+          .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+          .filter((value) => value.length > 0)
+      : [];
+    const extensionFilter = allowedExtensions.length > 0 ? new Set<string>(allowedExtensions) : null;
 
     const [jsonStatusRaw, xmlStatusRaw] = await Promise.all([
       this.runCommand(`sofia jsonstatus profile ${profile}`),
@@ -157,7 +169,8 @@ export class FsManagementService {
         undefined,
         domainFilter,
       );
-      extensionPresence = extensions.map((extension) => {
+      extensionPresence = extensions
+        .map((extension) => {
         const normalizedId = extension.id.toLowerCase();
         const match = registeredIds.get(normalizedId) || null;
         return {
@@ -174,7 +187,13 @@ export class FsManagementService {
           ping_status: match?.ping_status ?? null,
           ping_time: match?.ping_time ?? null,
         };
-      });
+        })
+        .filter((item) => {
+          if (!extensionFilter) {
+            return true;
+          }
+          return extensionFilter.has(item.id.toLowerCase());
+        });
     } catch (error) {
       this.logger.warn(
         `Failed to load extensions for comparison: ${error instanceof Error ? error.message : String(error)}`,
@@ -228,6 +247,10 @@ export class FsManagementService {
       : undefined;
 
     let filteredRegistrations = scopedRegistrations;
+    if (extensionFilter) {
+      const filter = extensionFilter;
+      filteredRegistrations = filteredRegistrations.filter((item) => this.matchesExtensionFilter(item, filter));
+    }
     if (extensionPresence.length > 0) {
       const allowedIds = new Set(
         filteredPresence
@@ -237,10 +260,14 @@ export class FsManagementService {
       if (statusFilter === 'offline') {
         filteredRegistrations = [];
       } else {
-        filteredRegistrations = scopedRegistrations.filter((item) => {
+        const filter = extensionFilter;
+        filteredRegistrations = filteredRegistrations.filter((item) => {
           const identifier = (item.user || item.aor || item.contact || '').toLowerCase();
           const normalizedIdentifier = identifier.includes('@') ? identifier.split('@')[0] : identifier;
-          if (allowedIds.size > 0 && !allowedIds.has(normalizedIdentifier)) {
+          const matchesAllowed = extensionFilter
+            ? this.matchesExtensionFilter(item, filter)
+            : allowedIds.has(normalizedIdentifier);
+          if (allowedIds.size > 0 && !matchesAllowed) {
             return false;
           }
           if (searchTerm) {
@@ -307,6 +334,30 @@ export class FsManagementService {
     }
 
     return { raw: combinedRawParts.join('\n\n'), parsed };
+  }
+
+  private matchesExtensionFilter(registration: Record<string, any>, filter: Set<string>): boolean {
+    const candidates = [registration.user, registration.aor, registration.contact]
+      .map((value) => this.normalizeExtensionValue(value))
+      .filter((value): value is string => Boolean(value));
+    if (candidates.length === 0) {
+      return false;
+    }
+    return candidates.some((candidate) => filter.has(candidate));
+  }
+
+  private normalizeExtensionValue(value: unknown): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) {
+      return null;
+    }
+    const cleaned = raw.replace(/^<sip:/, '').replace(/^sip:/, '').replace(/>$/, '');
+    const withoutParams = cleaned.split(/[;>]/)[0];
+    const base = withoutParams.includes('@') ? withoutParams.split('@')[0] : withoutParams;
+    return base || null;
   }
 
   async rescanProfile(profile: string): Promise<void> {
