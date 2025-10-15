@@ -652,8 +652,11 @@ export class PortalUsersService {
   }
 
   private async resolveAccessibleAgentIds(scope?: PortalUserScope): Promise<Set<string> | null> {
-    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead) {
       return null;
+    }
+    if (!scope.agentId) {
+      return new Set<string>();
     }
 
     const where: Record<string, any> = {};
@@ -721,6 +724,11 @@ export class PortalUsersService {
     scope?: PortalUserScope,
   ): Promise<void> {
     if (!scope || scope.isSuperAdmin) {
+      return;
+    }
+
+    if (scope.isAgentLead && !scope.agentId) {
+      query.andWhere('1 = 0');
       return;
     }
 

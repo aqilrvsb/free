@@ -40,6 +40,9 @@ export class FsManagementController {
     }
 
     const access = await this.portalUsersService.resolveRealtimeAccess(authUser.id || authUser.sub);
+    if (access.isAgentLead && !access.agentId) {
+      throw new ForbiddenException('Không có quyền truy cập dữ liệu đăng ký');
+    }
     const queryDomain = typeof query.domain === 'string' ? query.domain.trim().toLowerCase() : undefined;
     const allowedTenantSummaries = access.tenantIds.length
       ? await this.tenantManagementService.getTenantSummariesByIds(access.tenantIds)

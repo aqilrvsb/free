@@ -91,7 +91,10 @@ export class CdrService {
       return null;
     }
 
-    if (scope.isAgentLead && scope.agentId) {
+    if (scope.isAgentLead) {
+      if (!scope.agentId) {
+        return new Set<string>();
+      }
       const where: Record<string, any> = {};
       if (scope.tenantIds.length > 0) {
         where.tenantId = In(scope.tenantIds);
@@ -130,7 +133,10 @@ export class CdrService {
       return accessible;
     }
 
-    if (scope.role === 'agent' && scope.agentId) {
+    if (scope.role === 'agent') {
+      if (!scope.agentId) {
+        return new Set<string>();
+      }
       return new Set<string>([scope.agentId]);
     }
 

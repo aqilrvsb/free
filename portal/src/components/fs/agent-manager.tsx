@@ -80,6 +80,11 @@ function normalizeTenantId(value: string | null | undefined): string {
   return value?.trim() || "";
 }
 
+function normalizeNullableId(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 function useAuthHeaders() {
   return useCallback((json: boolean = false): HeadersInit => {
     const headers: Record<string, string> = {};
@@ -581,9 +586,9 @@ export function AgentManager({
       const payload = {
         tenantId,
         displayName: agentForm.displayName.trim(),
-        extensionId: agentForm.extensionId.trim() || undefined,
-        groupId: agentForm.groupId.trim() || undefined,
-        portalUserId: agentForm.portalUserId.trim() || undefined,
+        extensionId: normalizeNullableId(agentForm.extensionId),
+        groupId: normalizeNullableId(agentForm.groupId),
+        portalUserId: normalizeNullableId(agentForm.portalUserId),
         kpiTalktimeEnabled: agentForm.kpiEnabled,
         kpiTalktimeTargetSeconds: agentForm.kpiEnabled ? targetSeconds ?? 0 : null,
       };

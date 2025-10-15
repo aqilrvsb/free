@@ -65,8 +65,11 @@ export class AgentsService {
   }
 
   private async resolveAccessibleAgentIds(scope?: AgentScope): Promise<Set<string> | null> {
-    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead) {
       return null;
+    }
+    if (!scope.agentId) {
+      return new Set<string>();
     }
 
     const where: Record<string, any> = {};
@@ -146,7 +149,7 @@ export class AgentsService {
 
   private async ensureAgentAccess(agent: AgentEntity, scope?: AgentScope): Promise<void> {
     this.ensureTenantAccess(scope, agent.tenantId);
-    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead) {
       return;
     }
     const accessible = await this.resolveAccessibleAgentIds(scope);
@@ -208,13 +211,13 @@ export class AgentsService {
 
   private async ensureGroupAccess(group: AgentGroupEntity, scope?: AgentScope): Promise<void> {
     this.ensureTenantAccess(scope, group.tenantId);
-    if (!scope || scope.isSuperAdmin || !scope.isAgentLead || !scope.agentId) {
+    if (!scope || scope.isSuperAdmin || !scope.isAgentLead) {
       return;
     }
+    const accessible = await this.resolveAccessibleAgentIds(scope);
     if (!group.ownerAgentId) {
       throw new ForbiddenException('Không có quyền thao tác với nhóm này');
     }
-    const accessible = await this.resolveAccessibleAgentIds(scope);
     if (accessible && !accessible.has(group.ownerAgentId)) {
       throw new ForbiddenException('Không có quyền thao tác với nhóm này');
     }
@@ -458,8 +461,10 @@ export class AgentsService {
           throw new BadRequestException('Extension đã được gán cho agent khác');
         }
         agent.extensionId = newExtensionId;
+        agent.extension = extension;
       } else {
         agent.extensionId = null;
+        agent.extension = null;
       }
     }
 
@@ -471,8 +476,10 @@ export class AgentsService {
           throw new BadRequestException('Nhóm quản lý không hợp lệ');
         }
         agent.groupId = newGroupId;
+        agent.group = group;
       } else {
         agent.groupId = null;
+        agent.group = null;
       }
     }
 
@@ -508,8 +515,10 @@ export class AgentsService {
           throw new BadRequestException('Portal user phải thuộc role agent hoặc agent lead');
         }
         agent.portalUserId = newPortalUserId;
+        agent.portalUser = portalUser;
       } else {
         agent.portalUserId = null;
+        agent.portalUser = null;
       }
     }
 

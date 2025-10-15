@@ -27,9 +27,6 @@ import {
   RefreshCw,
   Signal,
   Timer,
-  UserCheck,
-  UserX,
-  Users,
   Wifi,
 } from "lucide-react";
 import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
@@ -71,60 +68,6 @@ function InfoItem({ label, value }: InfoItemProps) {
         {label}
       </span>
       <span className="text-sm font-semibold text-foreground">{value}</span>
-    </div>
-  );
-}
-
-type StatTone = "default" | "success" | "muted";
-
-interface StatItemProps {
-  label: string;
-  value: number;
-  tone?: StatTone;
-  icon: LucideIcon;
-}
-
-function StatItem({ label, value, tone = "default", icon: Icon }: StatItemProps) {
-  const palette: Record<StatTone, { container: string; accent: string; value: string }> = {
-    default: {
-      container: "hover:border-primary/40",
-      accent: "bg-primary/15 text-primary",
-      value: "text-foreground",
-    },
-    success: {
-      container: "hover:border-emerald-400/60",
-      accent: "bg-emerald-500/20 text-emerald-400 dark:text-emerald-300",
-      value: "text-emerald-600 dark:text-emerald-300",
-    },
-    muted: {
-      container: "hover:border-muted-foreground/40",
-      accent: "bg-muted/60 text-muted-foreground",
-      value: "text-muted-foreground",
-    },
-  };
-  return (
-    <div
-      className={cn(
-        "group relative overflow-hidden rounded-2xl border border-border/60 bg-card/95 p-5 shadow-sm transition-all hover:shadow-lg",
-        palette[tone].container,
-      )}
-    >
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">{label}</span>
-          <div className={cn("text-3xl font-semibold", palette[tone].value)}>
-            {value.toLocaleString("vi-VN")}
-          </div>
-        </div>
-        <span
-          className={cn(
-            "flex size-12 items-center justify-center rounded-xl border border-transparent transition-colors",
-            palette[tone].accent,
-          )}
-        >
-          <Icon className="size-5" />
-        </span>
-      </div>
     </div>
   );
 }

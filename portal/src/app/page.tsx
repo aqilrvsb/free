@@ -8,12 +8,7 @@ import type {
   PaginatedResult,
 } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
-import { vi } from "date-fns/locale";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/common/page-header";
 import { extractChannelCount } from "@/lib/channels";
 import {
@@ -27,26 +22,9 @@ import {
   Users,
   ArrowUpRight,
 } from "lucide-react";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { LocalTime } from "@/components/common/local-time";
 import { getServerTimezone } from "@/lib/server-timezone";
 
 export const dynamic = "force-dynamic";
-
-function resolveStatusVariant(status: string) {
-  switch (status) {
-    case "answered":
-      return "default" as const;
-    case "busy":
-    case "failed":
-      return "destructive" as const;
-    case "cancelled":
-    case "no_answer":
-      return "secondary" as const;
-    default:
-      return "outline" as const;
-  }
-}
 
 export default async function DashboardPage() {
   const fallbackCdr: PaginatedCdrResponse = {
