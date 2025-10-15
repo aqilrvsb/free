@@ -28,6 +28,7 @@ export class FsManagementController {
       tenantId: query.tenantId,
       status: query.status,
       search: query.search,
+      domain: query.domain,
     });
   }
 

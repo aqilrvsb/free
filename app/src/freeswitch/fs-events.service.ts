@@ -6,6 +6,7 @@ export interface RegistrationEvent {
   action: 'register' | 'unregister' | 'expire' | 'reregister' | string;
   profile: string;
   username: string;
+  domain?: string | null;
   contact?: string;
   networkIp?: string;
   networkPort?: string;
@@ -175,13 +176,20 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
     const expires = event.getHeader('expires') || event.getHeader('expires-in') || '';
     const timestampHeader = event.getHeader('Event-Date-Timestamp');
     const eventId = event.getHeader('unique-id') || event.getHeader('Event-UUID') || undefined;
+    const realm = event.getHeader('realm') || event.getHeader('login-realm') || event.getHeader('sofia-realm') || '';
 
     const timestamp = timestampHeader ? Number(timestampHeader) : Date.now();
+    const domain =
+      this.extractDomain(username) ||
+      this.extractDomain(contact) ||
+      this.extractDomain(realm) ||
+      null;
 
     const payload: RegistrationEvent = {
       action,
       profile,
       username,
+      domain,
       contact,
       networkIp,
       networkPort,
@@ -202,6 +210,7 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
         profileRaw,
         normalized: payload.profile,
         username,
+        domain,
         contact,
         networkIp,
         networkPort,
@@ -260,6 +269,26 @@ export class FsEventsService implements OnModuleInit, OnModuleDestroy {
       `[ESL call] event=${payload.eventName} uuid=${payload.callUuid} direction=${payload.direction} caller=${payload.callerNumber} dest=${payload.destinationNumber} state=${payload.channelState}`,
     );
     this.callSubject.next(payload);
+  }
+
+  private extractDomain(value: unknown): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    const raw = String(value).trim();
+    if (!raw) {
+      return null;
+    }
+    const lower = raw.toLowerCase();
+    const sipMatch = lower.match(/sip:[^@]+@([^;>\s]+)/i);
+    if (sipMatch && sipMatch[1]) {
+      return sipMatch[1].split(':')[0] || null;
+    }
+    if (lower.includes('@')) {
+      return lower.split('@')[1].split(/[;:>\s]/)[0] || null;
+    }
+    const cleaned = lower.replace(/^sip:/, '').replace(/^<sip:/, '').replace(/>$/, '');
+    return cleaned.split(/[;:>\s]/)[0] || null;
   }
 
   private scheduleReconnect(): void {

@@ -37,6 +37,7 @@ import { buildAuthHeaders } from "@/lib/client-auth";
 
 interface RegistrationsRealtimeProps {
   profile: string;
+  domain?: string | null;
   initialSnapshot: RegistrationSnapshot;
 }
 
@@ -376,6 +377,7 @@ function formatStatusSummary(status?: string | null, fallbackOnline?: boolean): 
 interface RegistrationRow {
   id: string;
   tenantId?: string;
+  tenantDomain?: string | null;
   displayName?: string | null;
   contact?: string | null;
   network_ip?: string | null;
@@ -387,7 +389,7 @@ interface RegistrationRow {
   online: boolean;
 }
 
-export function RegistrationsRealtime({ profile, initialSnapshot }: RegistrationsRealtimeProps) {
+export function RegistrationsRealtime({ profile, domain = null, initialSnapshot }: RegistrationsRealtimeProps) {
   const [snapshot, setSnapshot] = useState<RegistrationSnapshot>(initialSnapshot);
   const [connected, setConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<RegistrationEventMessage | null>(null);
@@ -399,6 +401,10 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
   const filterStateRef = useRef({ status: statusFilter, search: searchTerm.trim() });
   const socketRef = useRef<Socket | null>(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const normalizedDomain = useMemo(
+    () => (typeof domain === "string" && domain.trim().length > 0 ? domain.trim().toLowerCase() : null),
+    [domain],
+  );
 
   const apiBase = useMemo(
     () => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL),
@@ -453,6 +459,9 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
       if (statusFilter !== "all") {
         params.set("status", statusFilter);
       }
+      if (normalizedDomain) {
+        params.set("domain", normalizedDomain);
+      }
       const query = params.toString();
       const url = `${apiBase}/fs/sofia/${profile}/registrations${query ? `?${query}` : ''}`;
       const response = await fetch(url, { cache: "no-store", headers: buildAuthHeaders() });
@@ -464,6 +473,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
         (data?.parsed ?? data?.payload) as SofiaRegistrationsPayload | undefined,
         profile,
         data?.raw ?? "",
+        normalizedDomain,
       );
       setSnapshot(nextSnapshot);
     } catch (error) {
@@ -471,7 +481,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     } finally {
       setIsRefreshing(false);
     }
-  }, [apiBase, profile, searchTerm, statusFilter]);
+  }, [apiBase, normalizedDomain, profile, searchTerm, statusFilter]);
 
   const fetchSnapshotRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -532,7 +542,10 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
     socketRef.current = socket;
 
     const subscribe = () => {
-      socket.emit("subscribe", { profile });
+      socket.emit("subscribe", {
+        profile,
+        domain: normalizedDomain ?? null,
+      });
     };
 
     socket.on("connect", () => {
@@ -559,6 +572,13 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
         );
       }
       if (data.profile !== profile) return;
+      const incomingDomain =
+        typeof data.domain === "string" && data.domain.trim().length > 0
+          ? data.domain.trim().toLowerCase()
+          : null;
+      if ((incomingDomain || null) !== (normalizedDomain || null)) {
+        return;
+      }
       const currentFilters = filterStateRef.current;
       const hasActiveFilter = currentFilters.status !== 'all' || currentFilters.search.length > 0;
       if (hasActiveFilter) {
@@ -578,6 +598,17 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
         console.debug("[ws] event", event.profile, event.action, event);
       }
       if (!event || event.profile !== profile) return;
+      const eventDomain =
+        typeof event.domain === "string" && event.domain.trim().length > 0
+          ? event.domain.trim().toLowerCase()
+          : null;
+      if (normalizedDomain) {
+        if (eventDomain !== normalizedDomain) {
+          return;
+        }
+      } else if (eventDomain) {
+        return;
+      }
       setLastEvent(event);
       scheduleRefresh();
     });
@@ -594,7 +625,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [profile, scheduleRefresh, socketTarget]);
+  }, [normalizedDomain, profile, scheduleRefresh, socketTarget]);
 
   const lastActionLabel = useMemo(() => {
     if (!lastEvent) return null;
@@ -620,6 +651,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
       return presence.map((item) => ({
         id: item.id,
         tenantId: item.tenantId,
+        tenantDomain: item.tenantDomain ?? null,
         displayName: item.displayName ?? null,
         contact: item.contact ?? null,
         network_ip: item.network_ip ?? null,
@@ -637,6 +669,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
       const id = identifier.includes('@') ? identifier.split('@')[0] : identifier;
       return {
         id,
+        tenantDomain: item.realm ?? null,
         contact: item.contact ?? null,
         network_ip: item.network_ip ?? null,
         network_port: item.network_port ?? null,
@@ -728,6 +761,12 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
                 <Clock className="size-4" />
                 Cập nhật: {formatDate(snapshot.generatedAt)}
               </span>
+              {normalizedDomain ? (
+                <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  <Layers className="size-4" />
+                  Domain: {normalizedDomain}
+                </span>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -893,6 +932,7 @@ export function RegistrationsRealtime({ profile, initialSnapshot }: Registration
                     [
                       ...(statusSummary.metaItems ?? (statusSummary.meta ? [statusSummary.meta] : [])),
                       ...(statusSummary.detailItems ?? (statusSummary.detail ? [statusSummary.detail] : [])),
+                      item.tenantDomain ? `Domain ${item.tenantDomain}` : null,
                     ].filter(Boolean),
                   ),
                 );

@@ -66,11 +66,12 @@ export class FsManagementService {
 
   async getSofiaRegistrations(
     profile: string,
-    options?: { tenantId?: string; status?: string; search?: string },
+    options?: { tenantId?: string; status?: string; search?: string; domain?: string },
   ): Promise<CommandResult<any>> {
     const statusFilter = (options?.status ?? 'all').toLowerCase();
     const tenantId = options?.tenantId?.trim() || undefined;
     const searchTerm = options?.search?.trim()?.toLowerCase() ?? '';
+    const domainFilter = options?.domain?.trim().toLowerCase() || undefined;
 
     const [jsonStatusRaw, xmlStatusRaw] = await Promise.all([
       this.runCommand(`sofia jsonstatus profile ${profile}`),
@@ -91,8 +92,54 @@ export class FsManagementService {
     }
 
     const registrations = this.parseRegistrationsXml(xmlStatusRaw);
+
+    const normalizeDomainValue = (input?: string | null): string | null => {
+      if (!input) {
+        return null;
+      }
+      const lower = String(input).trim().toLowerCase();
+      if (!lower) {
+        return null;
+      }
+      const cleaned = lower
+        .replace(/^sip:/, '')
+        .replace(/^<sip:/, '')
+        .replace(/>$/, '');
+      const atIndex = cleaned.indexOf('@');
+      if (atIndex >= 0) {
+        const segment = cleaned.slice(atIndex + 1);
+        return segment.split(/[;:\s>]/)[0] || null;
+      }
+      return cleaned.split(/[;:\s>]/)[0] || null;
+    };
+
+    const registrationMatchesDomain = (registration: Record<string, any>): boolean => {
+      if (!domainFilter) {
+        return true;
+      }
+      const candidates = new Set<string>();
+      const addCandidate = (value?: string | null) => {
+        const normalized = normalizeDomainValue(value);
+        if (normalized) {
+          candidates.add(normalized);
+        }
+      };
+      addCandidate(registration.realm);
+      addCandidate(registration.host);
+      addCandidate(registration.aor);
+      addCandidate(registration.contact);
+      if (candidates.size === 0) {
+        return false;
+      }
+      return Array.from(candidates).some((item) => item === domainFilter);
+    };
+
+    const scopedRegistrations = domainFilter
+      ? registrations.filter((registration) => registrationMatchesDomain(registration))
+      : registrations;
+
     const registeredIds = new Map<string, Record<string, any>>();
-    registrations.forEach((registration) => {
+    scopedRegistrations.forEach((registration) => {
       const primary = (registration.user || registration.aor || '').toLowerCase();
       if (primary) {
         registeredIds.set(primary, registration);
@@ -104,13 +151,19 @@ export class FsManagementService {
 
     let extensionPresence: Array<Record<string, any>> = [];
     try {
-      const extensions = await this.tenantManagementService.listExtensions(tenantId);
+      const extensions = await this.tenantManagementService.listExtensions(
+        tenantId,
+        undefined,
+        undefined,
+        domainFilter,
+      );
       extensionPresence = extensions.map((extension) => {
         const normalizedId = extension.id.toLowerCase();
         const match = registeredIds.get(normalizedId) || null;
         return {
           id: extension.id,
           tenantId: extension.tenantId,
+          tenantDomain: extension.tenantDomain ?? null,
           displayName: extension.displayName ?? null,
           online: Boolean(match),
           contact: match?.contact ?? null,
@@ -152,6 +205,7 @@ export class FsManagementService {
           item.network_port ?? undefined,
           item.agent ?? undefined,
           item.status ?? undefined,
+          item.tenantDomain ?? undefined,
         ]
           .filter(Boolean)
           .join(' ')
@@ -173,7 +227,7 @@ export class FsManagementService {
         }
       : undefined;
 
-    let filteredRegistrations = registrations;
+    let filteredRegistrations = scopedRegistrations;
     if (extensionPresence.length > 0) {
       const allowedIds = new Set(
         filteredPresence
@@ -183,7 +237,7 @@ export class FsManagementService {
       if (statusFilter === 'offline') {
         filteredRegistrations = [];
       } else {
-        filteredRegistrations = registrations.filter((item) => {
+        filteredRegistrations = scopedRegistrations.filter((item) => {
           const identifier = (item.user || item.aor || item.contact || '').toLowerCase();
           const normalizedIdentifier = identifier.includes('@') ? identifier.split('@')[0] : identifier;
           if (allowedIds.size > 0 && !allowedIds.has(normalizedIdentifier)) {
@@ -199,6 +253,7 @@ export class FsManagementService {
               item.agent,
               item.status,
               item.rpid,
+              item.realm,
             ]
               .filter(Boolean)
               .join(' ')
@@ -211,7 +266,7 @@ export class FsManagementService {
         });
       }
     } else if (searchTerm) {
-      filteredRegistrations = registrations.filter((item) => {
+      filteredRegistrations = scopedRegistrations.filter((item) => {
         const haystack = [
           item.user,
           item.aor,
@@ -221,6 +276,7 @@ export class FsManagementService {
           item.agent,
           item.status,
           item.rpid,
+          item.realm,
         ]
           .filter(Boolean)
           .join(' ')
@@ -242,6 +298,7 @@ export class FsManagementService {
       extensionPresence: filteredPresence,
       extensionStats: filteredStats,
       extensionStatsOverall: overallStats,
+      activeDomain: domainFilter ?? null,
     };
 
     const combinedRawParts = [`[jsonstatus]\n${jsonStatusRaw}`];
@@ -435,6 +492,7 @@ export class FsManagementService {
     return {
       aor,
       user,
+      realm,
       contact: toStringValue(entry.contact),
       network_ip: networkIp,
       network_port: networkPort,

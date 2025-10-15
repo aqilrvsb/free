@@ -1,6 +1,7 @@
 export interface SofiaRegistration {
   aor?: string;
   user?: string;
+  realm?: string;
   contact?: string;
   network_ip?: string;
   network_port?: string;
@@ -17,6 +18,7 @@ export interface SofiaProfile {
   info?: Record<string, unknown>;
   registrations?: SofiaRegistration[] | { registrations?: SofiaRegistration[] };
   extensionPresence?: ExtensionPresence[];
+  activeDomain?: string | null;
   extensionStats?: {
     total: number;
     online: number;
@@ -32,6 +34,7 @@ export interface SofiaProfile {
 export interface ExtensionPresence {
   id: string;
   tenantId: string;
+  tenantDomain?: string | null;
   displayName?: string | null;
   online: boolean;
   contact?: string | null;
@@ -49,6 +52,7 @@ export interface SofiaRegistrationsPayload {
 
 export interface RegistrationSnapshot {
   profile: string;
+  domain?: string | null;
   profileData?: SofiaProfile;
   registrations: SofiaRegistration[];
   raw: string;
@@ -59,6 +63,7 @@ export interface RegistrationEventMessage {
   action: 'register' | 'unregister' | 'expire' | 'reregister' | string;
   profile: string;
   username: string;
+  domain?: string | null;
   contact?: string;
   networkIp?: string;
   networkPort?: string;
@@ -85,10 +90,18 @@ export function buildSnapshot(
   payload: SofiaRegistrationsPayload | undefined,
   profile: string,
   raw: string,
+  domain?: string | null,
 ): RegistrationSnapshot {
   const profileData = payload?.profiles?.[profile];
+  const activeDomain =
+    typeof profileData?.activeDomain === "string" && profileData.activeDomain.length > 0
+      ? profileData.activeDomain.toLowerCase()
+      : null;
+  const normalizedDomain =
+    typeof domain === "string" && domain.trim().length > 0 ? domain.trim().toLowerCase() : null;
   return {
     profile,
+    domain: normalizedDomain ?? activeDomain ?? null,
     profileData,
     registrations: extractRegistrations(profileData),
     raw,

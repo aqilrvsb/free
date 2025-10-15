@@ -36,10 +36,16 @@ interface SofiaRegistrationsPayload {
 
 interface RegistrationSnapshot {
   profile: string;
+  domain?: string | null;
   profileData?: SofiaProfile;
   registrations: SofiaRegistration[];
   raw: string;
   generatedAt: number;
+}
+
+interface SubscriptionScope {
+  profile: string;
+  domain?: string | null;
 }
 
 @WebSocketGateway({ namespace: 'registrations', cors: { origin: true, credentials: true } })
@@ -50,7 +56,7 @@ export class FsRegistrationsGateway
   server!: Server;
 
   private readonly logger = new Logger(FsRegistrationsGateway.name);
-  private readonly subscriptions = new Map<string, string>();
+  private readonly subscriptions = new Map<string, SubscriptionScope>();
   private eventsSubscription?: Subscription;
   private pollTimer?: NodeJS.Timeout;
   private readonly pollIntervalMs = 5000;
@@ -61,19 +67,49 @@ export class FsRegistrationsGateway
     private readonly fsManagementService: FsManagementService,
   ) {}
 
+  private buildRoomKey(profile: string, domain?: string | null): string {
+    const normalizedProfile = profile?.trim() || 'internal';
+    const normalizedDomain = domain?.trim()?.toLowerCase();
+    return normalizedDomain ? `${normalizedProfile}::domain::${normalizedDomain}` : normalizedProfile;
+  }
+
+  private collectScopesForProfile(profile: string): Map<string, SubscriptionScope> {
+    const normalizedProfile = profile?.trim() || 'internal';
+    const scopes = new Map<string, SubscriptionScope>();
+    this.subscriptions.forEach((scope) => {
+      if (!scope || scope.profile !== normalizedProfile) {
+        return;
+      }
+      const roomKey = this.buildRoomKey(scope.profile, scope.domain);
+      if (!scopes.has(roomKey)) {
+        scopes.set(roomKey, scope);
+      }
+    });
+    return scopes;
+  }
+
   afterInit(): void {
     this.eventsSubscription = this.fsEventsService.registration$.subscribe(async (event) => {
       const profile = event.profile || 'internal';
       this.server.emit('registrations:event', event);
 
-      try {
-        const snapshot = await this.buildSnapshot(profile);
-        this.emitSnapshot(profile, snapshot);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to refresh registrations for profile ${profile}: ${error instanceof Error ? error.message : error}`,
-        );
-      }
+      const scopes = this.collectScopesForProfile(profile);
+      const targets = scopes.size > 0 ? Array.from(scopes.values()) : [{ profile, domain: undefined }];
+
+      await Promise.all(
+        targets.map(async (scope) => {
+          try {
+            const snapshot = await this.buildSnapshot(scope.profile, scope.domain);
+            this.emitSnapshot(scope.profile, snapshot, scope.domain);
+          } catch (error) {
+            this.logger.warn(
+              `Failed to refresh registrations for profile ${scope.profile} (domain=${scope.domain ?? 'all'}): ${
+                error instanceof Error ? error.message : error
+              }`,
+            );
+          }
+        }),
+      );
     });
     this.startPolling();
   }
@@ -85,9 +121,9 @@ export class FsRegistrationsGateway
 
   handleDisconnect(client: Socket): void {
     this.logger.log(`Client disconnected: ${client.id}`);
-    const profile = this.subscriptions.get(client.id);
-    if (profile) {
-      client.leave(profile);
+    const scope = this.subscriptions.get(client.id);
+    if (scope) {
+      client.leave(this.buildRoomKey(scope.profile, scope.domain));
       this.subscriptions.delete(client.id);
     }
   }
@@ -95,7 +131,7 @@ export class FsRegistrationsGateway
   @SubscribeMessage('subscribe')
   async handleSubscribe(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { profile?: string },
+    @MessageBody() payload: { profile?: string; domain?: string | null },
   ): Promise<void> {
     await this.subscribeClient(client, payload);
   }
@@ -111,24 +147,43 @@ export class FsRegistrationsGateway
     }
   }
 
-  private async subscribeClient(client: Socket, payload?: { profile?: string }): Promise<void> {
+  private async subscribeClient(
+    client: Socket,
+    payload?: { profile?: string; domain?: string | null },
+  ): Promise<void> {
     const requestedProfile = payload?.profile?.trim() || 'internal';
+    const requestedDomainRaw = typeof payload?.domain === 'string' ? payload.domain : undefined;
+    const requestedDomain = requestedDomainRaw?.trim()
+      ? requestedDomainRaw.trim().toLowerCase()
+      : undefined;
+
+    const nextRoom = this.buildRoomKey(requestedProfile, requestedDomain);
     const previous = this.subscriptions.get(client.id);
 
-    if (previous && previous !== requestedProfile) {
-      client.leave(previous);
+    if (previous) {
+      const previousRoom = this.buildRoomKey(previous.profile, previous.domain);
+      if (previousRoom !== nextRoom) {
+        client.leave(previousRoom);
+      }
     }
 
-    this.subscriptions.set(client.id, requestedProfile);
-    client.join(requestedProfile);
+    const scope: SubscriptionScope = {
+      profile: requestedProfile,
+      domain: requestedDomain,
+    };
+
+    this.subscriptions.set(client.id, scope);
+    client.join(nextRoom);
 
     try {
-      const snapshot = await this.buildSnapshot(requestedProfile);
+      const snapshot = await this.buildSnapshot(requestedProfile, requestedDomain);
       client.emit('registrations:snapshot', snapshot);
-      this.snapshotHashes.set(requestedProfile, this.hashSnapshot(snapshot));
+      this.snapshotHashes.set(nextRoom, this.hashSnapshot(snapshot));
     } catch (error) {
       this.logger.error(
-        `Failed to send snapshot to client ${client.id}: ${error instanceof Error ? error.message : error}`,
+        `Failed to send snapshot to client ${client.id} (profile=${requestedProfile}, domain=${
+          requestedDomain ?? 'all'
+        }): ${error instanceof Error ? error.message : error}`,
       );
       client.emit('registrations:error', {
         message: 'Không thể tải dữ liệu đăng ký hiện tại.',
@@ -137,14 +192,19 @@ export class FsRegistrationsGateway
     }
   }
 
-  private async buildSnapshot(profile: string): Promise<RegistrationSnapshot> {
-    const commandResult = await this.fsManagementService.getSofiaRegistrations(profile);
+  private async buildSnapshot(profile: string, domain?: string | null): Promise<RegistrationSnapshot> {
+    const normalizedDomain = domain?.trim()?.toLowerCase();
+    const commandResult = await this.fsManagementService.getSofiaRegistrations(
+      profile,
+      normalizedDomain ? { domain: normalizedDomain } : undefined,
+    );
     const payload = (commandResult.parsed as SofiaRegistrationsPayload | undefined) ?? undefined;
     const profileData = payload?.profiles?.[profile];
     const registrations = this.extractRegistrations(profileData);
 
     return {
       profile,
+      domain: normalizedDomain ?? null,
       profileData,
       registrations,
       raw: commandResult.raw ?? '',
@@ -176,14 +236,18 @@ export class FsRegistrationsGateway
     }
   }
 
-  private emitSnapshot(profile: string, snapshot: RegistrationSnapshot): void {
+  private emitSnapshot(profile: string, snapshot: RegistrationSnapshot, domain?: string | null): void {
+    const effectiveDomain = domain ?? snapshot.domain ?? null;
+    snapshot.domain = effectiveDomain;
     const hash = this.hashSnapshot(snapshot);
-    this.snapshotHashes.set(profile, hash);
+    const roomKey = this.buildRoomKey(profile, effectiveDomain);
+    this.snapshotHashes.set(roomKey, hash);
     this.logger.log(
-      `[gateway] emit snapshot profile=${profile} registrations=${snapshot.registrations.length} generatedAt=${snapshot.generatedAt}`,
+      `[gateway] emit snapshot profile=${profile} domain=${effectiveDomain ?? 'all'} registrations=${
+        snapshot.registrations.length
+      } generatedAt=${snapshot.generatedAt}`,
     );
-    this.server.to(profile).emit('registrations:snapshot', snapshot);
-    this.server.emit('registrations:snapshot', snapshot);
+    this.server.to(roomKey).emit('registrations:snapshot', snapshot);
   }
 
   private hashSnapshot(snapshot: RegistrationSnapshot): string {
@@ -203,21 +267,33 @@ export class FsRegistrationsGateway
       return;
     }
     this.pollTimer = setInterval(async () => {
-      const profiles = new Set(this.subscriptions.values());
-      if (profiles.size === 0) {
+      const scopes = new Map<string, SubscriptionScope>();
+      this.subscriptions.forEach((scope) => {
+        if (!scope) {
+          return;
+        }
+        const roomKey = this.buildRoomKey(scope.profile, scope.domain);
+        if (!scopes.has(roomKey)) {
+          scopes.set(roomKey, scope);
+        }
+      });
+
+      if (scopes.size === 0) {
         return;
       }
 
-      for (const profile of profiles) {
+      for (const [roomKey, scope] of scopes) {
         try {
-          const snapshot = await this.buildSnapshot(profile);
+          const snapshot = await this.buildSnapshot(scope.profile, scope.domain);
           const hash = this.hashSnapshot(snapshot);
-          if (this.snapshotHashes.get(profile) !== hash) {
-            this.emitSnapshot(profile, snapshot);
+          if (this.snapshotHashes.get(roomKey) !== hash) {
+            this.emitSnapshot(scope.profile, snapshot, scope.domain);
           }
         } catch (error) {
           this.logger.warn(
-            `Polling snapshot failed for profile ${profile}: ${error instanceof Error ? error.message : error}`,
+            `Polling snapshot failed for profile ${scope.profile} (domain=${scope.domain ?? 'all'}): ${
+              error instanceof Error ? error.message : error
+            }`,
           );
         }
       }

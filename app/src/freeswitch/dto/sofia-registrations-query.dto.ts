@@ -9,4 +9,7 @@ export class SofiaRegistrationsQueryDto {
 
   @ApiPropertyOptional({ description: 'Từ khoá tìm kiếm' })
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Giới hạn theo domain (SIP realm)' })
+  domain?: string;
 }

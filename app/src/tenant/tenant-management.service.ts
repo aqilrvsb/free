@@ -364,7 +364,12 @@ export class TenantManagementService {
     };
   }
 
-  async listExtensions(tenantId?: string, search?: string | null, scope?: TenantAccessScope): Promise<any[]> {
+  async listExtensions(
+    tenantId?: string,
+    search?: string | null,
+    scope?: TenantAccessScope,
+    domain?: string | null,
+  ): Promise<any[]> {
     const query = this.userRepo
       .createQueryBuilder('extension')
       .leftJoinAndSelect('extension.tenant', 'tenant')
@@ -390,6 +395,13 @@ export class TenantManagementService {
             .orWhere('LOWER(tenant.domain) LIKE :term', { term });
         }),
       );
+    }
+
+    if (domain) {
+      const normalizedDomain = domain.trim().toLowerCase();
+      if (normalizedDomain) {
+        query.andWhere('LOWER(tenant.domain) = :domain', { domain: normalizedDomain });
+      }
     }
 
     const extensions = await query.getMany();
