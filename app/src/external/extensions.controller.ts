@@ -1,7 +1,7 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiHeader, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ExternalExtensionsService } from './extensions.service';
-import { CreateExternalExtensionDto, ExternalExtensionResponseDto } from './dto';
+import { CreateExternalExtensionDto, ExternalExtensionResponseDto, UpdateExternalExtensionDto } from './dto';
 import { ExternalApiGuard } from './external-api.guard';
 import { SwaggerTags } from '../swagger/swagger-tags';
 
@@ -24,11 +24,43 @@ export class ExternalExtensionsController {
   }
 
   @Get(':id')
+  @ApiQuery({
+    name: 'tenantId',
+    required: false,
+    description: 'Tenant ID sở hữu extension (ưu tiên so với tenantDomain)',
+  })
+  @ApiQuery({
+    name: 'tenantDomain',
+    required: false,
+    description: 'Domain của tenant (được dùng khi không truyền tenantId)',
+  })
   @ApiResponse({ status: 200, type: ExternalExtensionResponseDto })
   async getExtension(
     @Param('id') id: string,
     @Query('tenantId') tenantId?: string,
+    @Query('tenantDomain') tenantDomain?: string,
   ): Promise<ExternalExtensionResponseDto> {
-    return this.extensionsService.getExtension(id, tenantId);
+    return this.extensionsService.getExtension(id, { tenantId, tenantDomain });
+  }
+
+  @Put(':id')
+  @ApiQuery({
+    name: 'tenantId',
+    required: false,
+    description: 'Tenant ID sở hữu extension (ưu tiên so với tenantDomain)',
+  })
+  @ApiQuery({
+    name: 'tenantDomain',
+    required: false,
+    description: 'Domain của tenant (được dùng khi không truyền tenantId)',
+  })
+  @ApiResponse({ status: 200, type: ExternalExtensionResponseDto })
+  async updateExtension(
+    @Param('id') id: string,
+    @Body() body: UpdateExternalExtensionDto,
+    @Query('tenantId') tenantId?: string,
+    @Query('tenantDomain') tenantDomain?: string,
+  ): Promise<ExternalExtensionResponseDto> {
+    return this.extensionsService.updateExtension(id, body, { tenantId, tenantDomain });
   }
 }

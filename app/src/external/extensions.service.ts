@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TenantEntity, UserEntity } from '../entities';
-import { CreateExternalExtensionDto, ExternalExtensionResponseDto } from './dto';
+import { CreateExternalExtensionDto, ExternalExtensionResponseDto, UpdateExternalExtensionDto } from './dto';
 
 @Injectable()
 export class ExternalExtensionsService {
@@ -39,37 +39,90 @@ export class ExternalExtensionsService {
     return this.buildResponse(saved, tenant);
   }
 
-  async getExtension(id: string, tenantId?: string): Promise<ExternalExtensionResponseDto> {
+  async updateExtension(
+    id: string,
+    dto: UpdateExternalExtensionDto,
+    options: { tenantId?: string | null; tenantDomain?: string | null } = {},
+  ): Promise<ExternalExtensionResponseDto> {
+    const tenantHint = options.tenantId?.trim() || dto.tenantId?.trim();
+    const tenantDomainHint = options.tenantDomain?.trim();
+
+    const extension = await this.lookupExtension(id, {
+      tenantId: tenantHint,
+      tenantDomain: tenantDomainHint,
+    });
+
+    if (dto.password) {
+      extension.password = dto.password.trim();
+    }
+    if (dto.displayName !== undefined) {
+      extension.displayName = dto.displayName?.trim() || null;
+    }
+
+    await this.userRepo.save(extension);
+    const tenant = await this.tenantRepo.findOne({ where: { id: extension.tenantId } });
+    return this.buildResponse(extension, tenant);
+  }
+
+  async getExtension(
+    id: string,
+    options: { tenantId?: string | null; tenantDomain?: string | null } = {},
+  ): Promise<ExternalExtensionResponseDto> {
+    const extension = await this.lookupExtension(id, options);
+    return this.buildResponse(extension, extension.tenant);
+  }
+
+  private async lookupExtension(
+    id: string,
+    options: { tenantId?: string | null; tenantDomain?: string | null } = {},
+  ): Promise<UserEntity & { tenant?: TenantEntity | null }> {
     const normalizedId = id.trim();
     if (!normalizedId) {
       throw new NotFoundException('Extension không tồn tại');
     }
 
-    let extension: UserEntity | null = null;
+    const tenantId = options.tenantId?.trim();
+    const tenantDomain = options.tenantDomain?.trim()?.toLowerCase();
 
     if (tenantId) {
-      extension = await this.userRepo.findOne({
-        where: { id: normalizedId, tenantId: tenantId.trim() },
+      const extension = await this.userRepo.findOne({
+        where: { id: normalizedId, tenantId },
         relations: ['tenant'],
       });
       if (!extension) {
         throw new NotFoundException('Extension không tồn tại trong tenant được chỉ định');
       }
-    } else {
-      const matches = await this.userRepo.find({
-        where: { id: normalizedId },
-        relations: ['tenant'],
-      });
-      if (matches.length === 0) {
-        throw new NotFoundException('Extension không tồn tại');
-      }
-      if (matches.length > 1) {
-        throw new ConflictException('Có nhiều extension trùng ID. Vui lòng chỉ định tenantId.');
-      }
-      extension = matches[0];
+      return extension;
     }
 
-    return this.buildResponse(extension, extension.tenant);
+    if (tenantDomain) {
+      const tenant = await this.tenantRepo.findOne({
+        where: { domain: tenantDomain },
+      });
+      if (!tenant) {
+        throw new NotFoundException('Không tìm thấy tenant với domain đã cho');
+      }
+      const extension = await this.userRepo.findOne({
+        where: { id: normalizedId, tenantId: tenant.id },
+        relations: ['tenant'],
+      });
+      if (!extension) {
+        throw new NotFoundException('Extension không tồn tại trong tenant được chỉ định');
+      }
+      return extension;
+    }
+
+    const matches = await this.userRepo.find({
+      where: { id: normalizedId },
+      relations: ['tenant'],
+    });
+    if (matches.length === 0) {
+      throw new NotFoundException('Extension không tồn tại');
+    }
+    if (matches.length > 1) {
+      throw new BadRequestException('Vui lòng chỉ định tenantId hoặc tenantDomain để xác định extension.');
+    }
+    return matches[0];
   }
 
   private async assertExtensionQuota(tenant: TenantEntity): Promise<void> {
