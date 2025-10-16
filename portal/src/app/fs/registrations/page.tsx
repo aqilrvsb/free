@@ -7,6 +7,7 @@ import { RegistrationsRealtime } from "@/components/fs/registrations-realtime";
 import { buildSnapshot, type RegistrationSnapshot, type SofiaRegistrationsPayload } from "@/lib/registrations";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { hasPermission } from "@/lib/permissions";
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -46,6 +47,17 @@ export default async function RegistrationsPage({
         suppressError: true,
         onError: (error) => console.warn("[fs/registrations] Không thể tải profile", error),
       })) || null;
+  }
+
+  if (!currentUser || !hasPermission(currentUser, "view_registrations")) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Đăng ký SIP"
+          description="Bạn không có quyền truy cập trang theo dõi đăng ký SIP."
+        />
+      </div>
+    );
   }
 
   const isSuperAdmin = currentUser?.role === "super_admin";

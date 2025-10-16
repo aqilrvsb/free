@@ -3,6 +3,8 @@ export const PORTAL_PERMISSIONS = [
   'view_cdr',
   'view_recordings',
   'view_channels',
+  'view_registrations',
+  'view_calls',
   'manage_gateways',
   'manage_tenants',
   'manage_dialplan',

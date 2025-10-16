@@ -1,4 +1,15 @@
-import { Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FsManagementService } from './fs-management.service';
 import { SwaggerTags } from '../swagger/swagger-tags';
@@ -40,6 +51,10 @@ export class FsManagementController {
     }
 
     const access = await this.portalUsersService.resolveRealtimeAccess(authUser.id || authUser.sub);
+    const allowedPermissions = this.extractAllowedPermissions(authUser);
+    if (!access.isSuperAdmin && !allowedPermissions.has('view_registrations')) {
+      throw new ForbiddenException('Không có quyền truy cập dữ liệu đăng ký');
+    }
     if (access.isAgentLead && !access.agentId) {
       throw new ForbiddenException('Không có quyền truy cập dữ liệu đăng ký');
     }
@@ -81,7 +96,17 @@ export class FsManagementController {
   }
 
   @Get('channels')
-  async channels() {
+  @UseGuards(JwtAuthGuard)
+  async channels(@Req() req: Request & { user?: any }) {
+    const authUser = req.user;
+    if (!authUser) {
+      throw new ForbiddenException('Phiên đăng nhập không hợp lệ');
+    }
+    const access = await this.portalUsersService.resolveRealtimeAccess(authUser.id || authUser.sub);
+    const allowedPermissions = this.extractAllowedPermissions(authUser);
+    if (!access.isSuperAdmin && !allowedPermissions.has('view_calls')) {
+      throw new ForbiddenException('Không có quyền truy cập dữ liệu cuộc gọi');
+    }
     return this.fsManagementService.getChannels();
   }
 
@@ -90,5 +115,24 @@ export class FsManagementController {
   async hangup(@Param() params: ChannelUuidParamDto) {
     await this.fsManagementService.hangupCall(params.uuid);
     return { success: true };
+  }
+
+  private extractAllowedPermissions(user: any): Set<string> {
+    const permissions = new Set<string>();
+    if (Array.isArray(user?.permissions)) {
+      for (const perm of user.permissions) {
+        if (typeof perm === 'string' && perm.trim()) {
+          permissions.add(perm.trim());
+        }
+      }
+    }
+    if (Array.isArray(user?.rolePermissions)) {
+      for (const perm of user.rolePermissions) {
+        if (typeof perm === 'string' && perm.trim()) {
+          permissions.add(perm.trim());
+        }
+      }
+    }
+    return permissions;
   }
 }

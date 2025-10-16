@@ -19,6 +19,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { formatWithTimezone } from "@/lib/timezone";
 import { cookies } from "next/headers";
 import { parsePortalUserCookie } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -200,6 +201,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
   }
 
   const isSuperAdmin = currentUser?.role === "super_admin";
+  const canViewRecordings = hasPermission(currentUser, "view_recordings");
 
   const [cdr, timezone, tenantOptions, agentOptionsPayload, agentGroupPayload] = await Promise.all([
     apiFetch<PaginatedCdrResponse>(`/cdr?${query.toString()}`, {
@@ -243,6 +245,8 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
   const timezoneValue = timezone;
   const now = new Date();
   const showGatewayColumn = isSuperAdmin;
+  const showRecordingColumn = canViewRecordings;
+  const baseColumnCount = 12 + (showGatewayColumn ? 1 : 0) + (showRecordingColumn ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -288,7 +292,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Bắt đầu</TableHead>
                   <TableHead>Kết thúc</TableHead>
-                  <TableHead>Ghi âm</TableHead>
+                  {showRecordingColumn && <TableHead>Ghi âm</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -399,28 +403,30 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
                           </Tooltip>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {item.recordingUrl ? (
-                          <audio
-                            controls
-                            preload="none"
-                            className="h-8 max-w-[220px]"
-                            src={new URL(item.recordingUrl, recordingsBaseUrl).toString()}
-                          >
-                            <Link href={new URL(item.recordingUrl, recordingsBaseUrl).toString()} target="_blank">
-                              Tải xuống
-                            </Link>
-                          </audio>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
+                      {showRecordingColumn ? (
+                        <TableCell>
+                          {item.recordingUrl ? (
+                            <audio
+                              controls
+                              preload="none"
+                              className="h-8 max-w-[220px]"
+                              src={new URL(item.recordingUrl, recordingsBaseUrl).toString()}
+                            >
+                              <Link href={new URL(item.recordingUrl, recordingsBaseUrl).toString()} target="_blank">
+                                Tải xuống
+                              </Link>
+                            </audio>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   );
                 })}
                 {cdrItems.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={showGatewayColumn ? 14 : 13} className="text-center text-muted-foreground">
+                    <TableCell colSpan={baseColumnCount} className="text-center text-muted-foreground">
                       Không có dữ liệu.
                     </TableCell>
                   </TableRow>

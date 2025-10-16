@@ -5,6 +5,8 @@ export type PermissionKey =
   | "view_cdr"
   | "view_recordings"
   | "view_channels"
+  | "view_calls"
+  | "view_registrations"
   | "manage_gateways"
   | "manage_tenants"
   | "manage_dialplan"
@@ -27,9 +29,11 @@ type PermissionSet = Record<PermissionKey, boolean>;
 
 const BASE_PERMISSIONS: PermissionSet = {
   view_dashboard: true,
-  view_cdr: true,
-  view_recordings: true,
-  view_channels: true,
+  view_cdr: false,
+  view_recordings: false,
+  view_channels: false,
+  view_calls: false,
+  view_registrations: false,
   manage_gateways: false,
   manage_tenants: false,
   manage_dialplan: false,
@@ -52,18 +56,33 @@ const BASE_PERMISSIONS: PermissionSet = {
 const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
   viewer: {
     ...BASE_PERMISSIONS,
+    view_cdr: true,
+    view_recordings: true,
+    view_channels: true,
+    view_calls: true,
+    view_registrations: true,
     view_billing: true,
   },
   operator: {
     ...BASE_PERMISSIONS,
+    view_cdr: true,
+    view_recordings: true,
     manage_inbound: true,
     manage_outbound: true,
     manage_ivr: true,
     manage_recordings: true,
+    view_channels: true,
+    view_calls: true,
+    view_registrations: true,
     view_billing: true,
   },
   tenant_admin: {
     ...BASE_PERMISSIONS,
+    view_cdr: true,
+    view_recordings: true,
+    view_channels: true,
+    view_calls: true,
+    view_registrations: true,
     manage_gateways: true,
     manage_dialplan: true,
     manage_inbound: true,
@@ -79,7 +98,6 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
     manage_agents: true,
     manage_sub_agents: true,
     manage_own_groups: true,
-    view_channels: false,
   },
   super_admin: {
     ...Object.keys(BASE_PERMISSIONS).reduce((acc, key) => {
@@ -95,17 +113,21 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
   },
   agent_lead: {
     ...BASE_PERMISSIONS,
+    view_cdr: true,
+    view_recordings: true,
+    view_channels: true,
+    view_registrations: true,
+    view_calls: true,
     manage_agents: true,
     manage_portal_users: true,
     manage_sub_agents: true,
     manage_own_groups: true,
     manage_extensions: true,
-    view_channels: false,
-
   },
   agent: {
     ...BASE_PERMISSIONS,
-    view_channels: false,
+    view_cdr: true,
+    view_recordings: true,
   },
 };
 

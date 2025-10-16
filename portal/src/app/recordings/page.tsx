@@ -1,10 +1,13 @@
 import { apiFetch, API_BASE_URL } from "@/lib/api";
-import type { RecordingMetadata, RecordingStorageConfig, PaginatedResult } from "@/lib/types";
+import type { RecordingMetadata, RecordingStorageConfig, PaginatedResult, PortalUserSummary } from "@/lib/types";
 import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecordingsTable } from "@/components/recordings/recordings-table";
 import { RecordingStorageSettings } from "@/components/recordings/recording-storage-settings";
 import { PaginationControls } from "@/components/common/pagination";
+import { cookies } from "next/headers";
+import { parsePortalUserCookie } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,31 @@ function getParam(value: string | string[] | undefined, fallback = "") {
 const PAGE_SIZE = 25;
 
 export default async function RecordingsPage({ searchParams }: RecordingsPageProps) {
+  const cookieStore = await cookies();
+  const rawUser = cookieStore.get("portal_user")?.value ?? null;
+  let currentUser = parsePortalUserCookie(rawUser);
+
+  if (!currentUser) {
+    currentUser = await apiFetch<PortalUserSummary | null>("/auth/profile", {
+      cache: "no-store",
+      fallbackValue: null,
+      suppressError: true,
+      onError: (error) => console.warn("[recordings] Không thể tải profile", error),
+    });
+  }
+
+  const canManageRecordings = hasPermission(currentUser, "manage_recordings");
+  if (!canManageRecordings) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Ghi âm"
+          description="Bạn không có quyền truy cập trang quản lý ghi âm."
+        />
+      </div>
+    );
+  }
+
   const resolvedSearchParams = (await (searchParams ?? Promise.resolve({}))) as Record<
     string,
     string | string[]

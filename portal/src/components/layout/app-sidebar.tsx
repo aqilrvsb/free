@@ -48,6 +48,9 @@ type PermissionKey =
   | "view_cdr"
   | "view_recordings"
   | "view_channels"
+  | "view_calls"
+  | "view_registrations"
+  | "view_billing"
   | "manage_gateways"
   | "manage_tenants"
   | "manage_dialplan"
@@ -60,7 +63,6 @@ type PermissionKey =
   | "manage_portal_users"
   | "manage_roles"
   | "manage_security"
-  | "view_billing"
   | "manage_billing"
   | "manage_agents";
 
@@ -119,21 +121,14 @@ const NAV_SECTIONS: Array<{
           description: "Theo dõi realtime",
           href: "/fs/calls",
           icon: Activity,
-          permission: "view_channels",
+          permission: "view_calls",
         },
         {
           title: "Đăng ký",
           description: "Thiết bị SIP",
           href: "/fs/registrations",
           icon: RadioTower,
-          permission: "view_channels",
-        },
-        {
-          title: "Ghi âm",
-          description: "Tệp lưu lại",
-          href: "/recordings",
-          icon: FileAudio,
-          permission: "view_recordings",
+          permission: "view_registrations",
         },
       ],
     },
@@ -266,6 +261,13 @@ const NAV_SECTIONS: Array<{
           href: "/fs/system-recordings",
           icon: FileAudio,
           roles: ["super_admin", "tenant_admin", "operator"],
+          permission: "manage_recordings",
+        },
+        {
+          title: "Recordings",
+          description: "Tệp ghi âm cuộc gọi",
+          href: "/recordings",
+          icon: FileAudio,
           permission: "manage_recordings",
         },
       ],
