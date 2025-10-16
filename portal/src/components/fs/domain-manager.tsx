@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PaginatedResult, TenantSummary } from "@/lib/types";
@@ -271,13 +270,13 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="max-h-[420px] pr-2">
+          <div className="max-h-[420px] overflow-y-auto pr-2">
             {tenantLoading ? (
               <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                 Đang tải domain...
               </div>
             ) : tenantData.items.length > 0 ? (
-              <div className="space-y-4 overflow-auto">
+              <div className="space-y-4">
                 {tenantData.items.map((tenant) => (
                   <div key={tenant.id} className="rounded-lg border p-4 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -326,7 +325,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
             ) : (
               <div className="p-6 text-center text-sm text-muted-foreground">Chưa có domain nào.</div>
             )}
-          </ScrollArea>
+          </div>
           {tenantData.total > TENANTS_PER_PAGE ? (
             <PaginationBar
               page={tenantPage}

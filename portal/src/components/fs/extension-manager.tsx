@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ExtensionSummary, PaginatedResult, TenantLookupItem } from "@/lib/types";
@@ -543,7 +542,7 @@ export function ExtensionManager({
           </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="max-h-[420px] pr-2">
+          <div className="max-h-[420px] overflow-y-auto pr-2">
             {extensionLoading ? (
               <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                 Đang tải extension...
@@ -567,7 +566,7 @@ export function ExtensionManager({
                     </TableRow>
                   ) : (
                     extensionData.items.map((extension) => (
-                      <TableRow key={extension.id}>
+                      <TableRow key={`${extension.tenantId}-${extension.id}`}>
                         <TableCell className="font-medium">{extension.id}</TableCell>
                         <TableCell>
                           <div className="flex flex-col text-sm">
@@ -597,14 +596,14 @@ export function ExtensionManager({
                           </>
                         ) : null}
                       </div>
-                    </TableCell>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
             )}
-          </ScrollArea>
+          </div>
           {extensionData.total > EXTENSIONS_PER_PAGE ? (
             <PaginationBar
               page={extensionPage}
