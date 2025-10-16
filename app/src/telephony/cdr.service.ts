@@ -425,16 +425,9 @@ export class CdrService {
       variables.ani,
       variables.caller_id_name,
     ];
-    const initialFromNumber = this.pickBestNumber(rawFromCandidates);
-    const nonExtensionCandidates = rawFromCandidates
-      .map((value) => {
-        if (value === undefined || value === null) {
-          return null;
-        }
-        const trimmed = String(value).trim();
-        return trimmed || null;
-      })
-      .filter((value): value is string => Boolean(value && !this.isLikelyExtension(value)));
+    const normalizedFromCandidates = this.normalizeCandidateList(rawFromCandidates);
+    const initialFromNumber = this.pickBestNumber(normalizedFromCandidates);
+    const nonExtensionCandidates = this.filterExternalNumberCandidates(rawFromCandidates);
     const externalCallerId = this.pickBestNumber(nonExtensionCandidates);
     const agentExtension = this.pickLikelyExtension([
       internalExtension,
@@ -472,9 +465,8 @@ export class CdrService {
       callerProfile?.dialed_user,
     ];
     const toNumber =
-      this.pickBestNumber(
-        toNumberCandidates.filter((value) => value && !this.isLikelyExtension(value)) as Array<string | null | undefined>,
-      ) ?? this.pickBestNumber(toNumberCandidates);
+      this.pickBestNumber(this.filterExternalNumberCandidates(toNumberCandidates)) ??
+      this.pickBestNumber(this.normalizeCandidateList(toNumberCandidates));
     const startTime = this.parseEpoch({ primary: variables.start_epoch, fallback: variables.start_stamp_epoch });
     const answerTime = this.parseEpoch({ primary: variables.answer_epoch, fallback: variables.answer_stamp_epoch });
     const endTime = this.parseEpoch({ primary: variables.end_epoch, fallback: variables.end_stamp_epoch });
@@ -510,9 +502,7 @@ export class CdrService {
       variables.sip_from_user,
       this.extractUser(variables.sip_from_uri),
     ];
-    const billingCaller = this.pickBestNumber(
-      billingCallerCandidatesRaw.filter((candidate) => !this.isLikelyExtension(candidate)),
-    );
+    const billingCaller = this.pickBestNumber(this.filterExternalNumberCandidates(billingCallerCandidatesRaw));
 
     const billing = await this.computeBillingContext({
       tenantId: tenantBillingId,
@@ -786,6 +776,44 @@ export class CdrService {
     return null;
   }
 
+  private normalizeCandidateValue(value: unknown): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    if (typeof value === 'object') {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const normalized = this.normalizeCandidateValue(item);
+          if (normalized) {
+            return normalized;
+          }
+        }
+        return null;
+      }
+      if (typeof (value as any)['#text'] === 'string') {
+        return this.normalizeCandidateValue((value as any)['#text']);
+      }
+      return null;
+    }
+    const normalized = String(value).trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private normalizeCandidateList(values: Array<unknown>): string[] {
+    const result: string[] = [];
+    for (const value of values) {
+      const normalized = this.normalizeCandidateValue(value);
+      if (normalized) {
+        result.push(normalized);
+      }
+    }
+    return result;
+  }
+
+  private filterExternalNumberCandidates(values: Array<unknown>): string[] {
+    return this.normalizeCandidateList(values).filter((value) => !this.isLikelyExtension(value));
+  }
+
   private pickBestNumber(values: Array<string | null | undefined>): string | null {
     const candidates: string[] = [];
     for (const value of values) {
@@ -949,15 +977,12 @@ export class CdrService {
     const flows = Array.isArray(callflow) ? callflow : [callflow];
     const candidates: string[] = [];
     const pushCandidate = (value: unknown) => {
-      if (value === undefined || value === null) {
+      const normalized = this.normalizeCandidateValue(value);
+      if (!normalized) {
         return;
       }
-      const str = String(value).trim();
-      if (!str) {
-        return;
-      }
-      if (!candidates.includes(str)) {
-        candidates.push(str);
+      if (!candidates.includes(normalized)) {
+        candidates.push(normalized);
       }
     };
 
@@ -985,7 +1010,7 @@ export class CdrService {
     }
 
     for (const candidate of candidates) {
-      if (this.isLikelyExtension(candidate)) {
+      if (candidate && this.isLikelyExtension(candidate)) {
         return candidate;
       }
     }
@@ -1546,7 +1571,7 @@ export class CdrService {
     const externalCallerId =
       record.billingCid ??
       record.fromNumber ??
-      this.pickBestNumber(rawFromCandidates.filter((value) => !this.isLikelyExtension(value ?? undefined))) ??
+      this.pickBestNumber(this.filterExternalNumberCandidates(rawFromCandidates)) ??
       null;
     const destinationNumber =
       record.toNumber ??
