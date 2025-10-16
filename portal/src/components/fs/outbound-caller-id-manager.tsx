@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { displayError, displaySuccess } from "@/lib/toast";
 
 export interface OutboundCallerIdManagerProps {
   tenants: TenantSummary[];
@@ -163,9 +164,10 @@ export function OutboundCallerIdManager({
       setDialogOpen(false);
       setEditing(null);
       resetForm();
+      displaySuccess(dialogMode === "create" ? "Đã thêm Caller ID." : "Đã cập nhật Caller ID.");
     } catch (error) {
       console.error("Không thể lưu Caller ID", error);
-      alert("Không thể lưu Caller ID. Vui lòng kiểm tra lại dữ liệu.");
+      displayError(error, "Không thể lưu Caller ID. Vui lòng kiểm tra lại dữ liệu.");
     } finally {
       setLoading(null);
     }
@@ -184,9 +186,10 @@ export function OutboundCallerIdManager({
         cache: "no-store",
       });
       setCallerIds((prev) => prev.filter((entry) => entry.id !== item.id));
+      displaySuccess("Đã xóa Caller ID.");
     } catch (error) {
       console.error("Không thể xóa Caller ID", error);
-      alert("Không thể xóa Caller ID.");
+      displayError(error, "Không thể xóa Caller ID.");
     } finally {
       setLoading(null);
     }
@@ -203,9 +206,10 @@ export function OutboundCallerIdManager({
         cache: "no-store",
       }).then((raw) => normalizeCallerId(raw));
       setCallerIds((prev) => prev.map((entry) => (entry.id === item.id ? normalized : entry)));
+      displaySuccess(next ? "Đã bật Caller ID." : "Đã tắt Caller ID.");
     } catch (error) {
       console.error("Không thể cập nhật trạng thái Caller ID", error);
-      alert("Không thể cập nhật trạng thái Caller ID.");
+      displayError(error, "Không thể cập nhật trạng thái Caller ID.");
     } finally {
       setLoading(null);
     }

@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface DialplanRulesManagerProps {
   tenants: TenantSummary[];
@@ -274,15 +275,15 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
   const submitRule = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.tenantId.trim()) {
-      alert("Vui lòng chọn tenant");
+      displayWarning("Vui lòng chọn tenant");
       return;
     }
     if (!form.name.trim()) {
-      alert("Vui lòng nhập tên rule");
+      displayWarning("Vui lòng nhập tên rule");
       return;
     }
     if (!form.pattern.trim()) {
-      alert("Vui lòng nhập pattern");
+      displayWarning("Vui lòng nhập pattern");
       return;
     }
 
@@ -303,15 +304,17 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
       });
       if (dialogMode === "create") {
         setRules((prev) => [...prev, rule]);
+        displaySuccess("Đã tạo dialplan rule.");
       } else if (editing) {
         setRules((prev) => prev.map((item) => (item.id === editing.id ? rule : item)));
+        displaySuccess("Đã cập nhật dialplan rule.");
       }
       setDialogOpen(false);
       setEditing(null);
       setForm({ ...defaultRuleForm });
     } catch (error) {
       console.error("Failed to save dialplan rule", error);
-      alert("Không thể lưu dialplan rule. Kiểm tra log server.");
+      displayError(error, "Không thể lưu dialplan rule. Kiểm tra log server.");
     } finally {
       setLoading(null);
     }
@@ -330,9 +333,10 @@ export function DialplanRulesManager({ tenants, initialRules }: DialplanRulesMan
         cache: "no-store",
       });
       setRules((prev) => prev.filter((item) => item.id !== rule.id));
+      displaySuccess("Đã xóa dialplan rule.");
     } catch (error) {
       console.error("Failed to delete dialplan rule", error);
-      alert("Không thể xóa rule. Vui lòng kiểm tra log.");
+      displayError(error, "Không thể xóa rule. Vui lòng kiểm tra log.");
     } finally {
       setLoading(null);
     }

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ExtensionSummary, PaginatedResult, TenantLookupItem } from "@/lib/types";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 import Image from "next/image";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import QRCode from "qrcode";
@@ -126,7 +127,7 @@ export function ExtensionManager({
           return;
         }
         console.error("Failed to fetch extensions", error);
-        alert("Không thể tải danh sách extension.");
+        displayError(error, "Không thể tải danh sách extension.");
       } finally {
         if (!silent) {
           setExtensionLoading(false);
@@ -190,12 +191,12 @@ export function ExtensionManager({
       return;
     }
     if (tenantChoices.length === 0) {
-      alert("Không có tenant nào để tạo extension.");
+      displayWarning("Không có tenant nào để tạo extension.");
       return;
     }
     const availableTenants = tenantChoices.filter((tenant) => tenantHasCapacity(tenant));
     if (availableTenants.length === 0) {
-      alert("Tất cả tenant đã đạt giới hạn extension. Vui lòng tăng quota trước khi tạo thêm.");
+      displayWarning("Tất cả tenant đã đạt giới hạn extension. Vui lòng tăng quota trước khi tạo thêm.");
       return;
     }
     let preferredTenantId = "";
@@ -262,7 +263,7 @@ export function ExtensionManager({
     if (!apiBase || !canManageExtensions) return;
 
     if (!extensionForm.tenantId.trim()) {
-      alert("Vui lòng chọn tenant cho extension");
+      displayWarning("Vui lòng chọn tenant cho extension");
       return;
     }
 
@@ -283,7 +284,7 @@ export function ExtensionManager({
       if (tenantInfo && tenantInfo.extensionLimit != null) {
         const currentCount = tenantInfo.extensionCount ?? 0;
         if (currentCount >= tenantInfo.extensionLimit) {
-          alert("Tenant đã đạt giới hạn extension. Vui lòng tăng quota trước khi tạo thêm.");
+          displayWarning("Tenant đã đạt giới hạn extension. Vui lòng tăng quota trước khi tạo thêm.");
           return;
         }
       }
@@ -292,7 +293,7 @@ export function ExtensionManager({
     try {
       if (extensionDialogMode === "create") {
         if (!payload.id || !payload.tenantId) {
-          alert("Cần nhập extension và tenant");
+          displayWarning("Cần nhập extension và tenant");
           return;
         }
         setLoading("extension-create");
@@ -310,6 +311,7 @@ export function ExtensionManager({
         await fetchExtensionPage(shouldResetPage ? 1 : extensionPage, tenantFilter, extensionSearch, {
           silent: true,
         });
+        displaySuccess("Đã tạo extension mới.");
       } else if (editingExtension) {
         setLoading(`extension-update-${editingExtension.id}`);
         const response = await fetch(`${apiBase}/extensions/${editingExtension.id}`, {
@@ -322,6 +324,7 @@ export function ExtensionManager({
         }
         await response.json();
         await fetchExtensionPage(extensionPage, tenantFilter, extensionSearch, { silent: true });
+        displaySuccess("Đã cập nhật extension.");
       }
       setExtensionForm(defaultExtensionForm);
       closeExtensionDialog();
@@ -331,7 +334,7 @@ export function ExtensionManager({
         error instanceof Error && error.message
           ? error.message
           : "Thao tác với extension thất bại. Vui lòng kiểm tra log.";
-      alert(message);
+      displayError(error, message);
     } finally {
       setLoading(null);
     }
@@ -354,10 +357,11 @@ export function ExtensionManager({
       }
       await fetchExtensionPage(extensionPage, tenantFilter, extensionSearch, { silent: true });
       await refreshTenantOptions();
+      displaySuccess("Đã xóa extension.");
     } catch (error) {
       console.error("Failed to delete extension", error);
       const message = error instanceof Error && error.message ? error.message : "Không thể xóa extension.";
-      alert(message);
+      displayError(error, message);
     } finally {
       setLoading(null);
     }
@@ -370,7 +374,7 @@ export function ExtensionManager({
     const domain = tenantInfo?.domain || extension.tenantDomain || "";
     const displayTenantName = tenantInfo?.name || extension.tenantName || extension.tenantId;
     if (!domain) {
-      alert("Không tìm thấy thông tin domain của tenant.");
+      displayWarning("Không tìm thấy thông tin domain của tenant.");
       return;
     }
 
@@ -404,7 +408,7 @@ export function ExtensionManager({
       });
     } catch (error) {
       console.error("Failed to load QR info", error);
-      alert("Không thể lấy mật khẩu để tạo QR.");
+      displayError(error, "Không thể lấy mật khẩu để tạo QR.");
       setQrDialogOpen(false);
       setQrLoading(false);
     }
@@ -434,9 +438,10 @@ export function ExtensionManager({
       setTimeout(() => {
         setCopiedField((current) => (current === field ? null : current));
       }, 2000);
+      displaySuccess("Đã sao chép giá trị.");
     } catch (error) {
       console.error("Failed to copy value", error);
-      alert("Không thể sao chép giá trị.");
+      displayError(error, "Không thể sao chép giá trị.");
     }
   };
 

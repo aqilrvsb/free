@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { resolveClientBaseUrl } from "@/lib/browser";
 import { buildAuthHeaders } from "@/lib/client-auth";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 import {
   Select,
   SelectContent,
@@ -246,7 +247,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
     event.preventDefault();
     if (!apiBase) return;
     if (!form.tenantId.trim()) {
-      alert("Vui lòng chọn tenant");
+      displayWarning("Vui lòng chọn tenant");
       return;
     }
 
@@ -269,8 +270,10 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
       const route = (await response.json()) as OutboundRouteSummary;
       if (dialogMode === "create") {
         setRoutes((prev) => [...prev, route]);
+        displaySuccess("Đã tạo outbound route.");
       } else if (editing) {
         setRoutes((prev) => prev.map((item) => (item.id === editing.id ? route : item)));
+        displaySuccess("Đã cập nhật outbound route.");
       }
       setDialogOpen(false);
       setEditing(null);
@@ -278,7 +281,7 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
       setSelectedTemplate("");
     } catch (error) {
       console.error("Failed to save outbound route", error);
-      alert("Không thể lưu outbound route. Vui lòng kiểm tra log.");
+      displayError(error, "Không thể lưu outbound route. Vui lòng kiểm tra log.");
     } finally {
       setLoading(null);
     }
@@ -299,9 +302,10 @@ export function OutboundRoutesManager({ tenants, gateways, initialRoutes }: Outb
         throw new Error(await response.text());
       }
       setRoutes((prev) => prev.filter((item) => item.id !== route.id));
+      displaySuccess("Đã xóa outbound route.");
     } catch (error) {
       console.error("Failed to delete outbound route", error);
-      alert("Không thể xóa outbound route.");
+      displayError(error, "Không thể xóa outbound route.");
     } finally {
       setLoading(null);
     }

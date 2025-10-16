@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
+import { displayError, displaySuccess } from "@/lib/toast";
 import {
   Dialog,
   DialogContent,
@@ -133,15 +134,17 @@ export function GatewayManager({ initialGateways }: GatewayManagerProps) {
       });
       if (dialogMode === "create") {
         setGateways((prev) => [...prev, gateway]);
+        displaySuccess("Đã tạo gateway mới.");
       } else if (editing) {
         setGateways((prev) => prev.map((item) => (item.id === editing.id ? gateway : item)));
+        displaySuccess("Đã cập nhật gateway.");
       }
       setDialogOpen(false);
       setEditing(null);
       setForm({ ...defaultForm });
     } catch (error) {
       console.error("Gateway mutation failed", error);
-      alert("Không thể lưu gateway. Vui lòng kiểm tra log.");
+      displayError(error, "Không thể lưu gateway. Vui lòng kiểm tra log.");
     } finally {
       setLoading(null);
     }
@@ -160,9 +163,10 @@ export function GatewayManager({ initialGateways }: GatewayManagerProps) {
         cache: "no-store",
       });
       setGateways((prev) => prev.filter((item) => item.id !== gateway.id));
+      displaySuccess("Đã xóa gateway.");
     } catch (error) {
       console.error("Failed to delete gateway", error);
-      alert("Không thể xóa gateway.");
+      displayError(error, "Không thể xóa gateway.");
     } finally {
       setLoading(null);
     }

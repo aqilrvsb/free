@@ -41,6 +41,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { RefreshCw, ShieldAlert, ShieldCheck, Trash2, X, Plus } from "lucide-react";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface SecurityDashboardProps {
   initialOverview: SecurityOverviewResponse;
@@ -319,7 +320,7 @@ export function SecurityDashboard({
       }
     } catch (error) {
       console.error("[security] refresh failed", error);
-      alert("Không thể tải lại dữ liệu bảo mật. Vui lòng thử lại sau.");
+      displayError(error, "Không thể tải lại dữ liệu bảo mật. Vui lòng thử lại sau.");
     } finally {
       setRefreshing(false);
     }
@@ -356,9 +357,10 @@ export function SecurityDashboard({
       });
       setBanForm({ ...defaultBanForm });
       setBanDialogOpen(false);
+      displaySuccess("Đã thêm IP vào danh sách ban.");
     } catch (error) {
       console.error("[security] create ban failed", error);
-      alert("Không thể thêm IP vào danh sách ban. Kiểm tra log backend.");
+      displayError(error, "Không thể thêm IP vào danh sách ban. Kiểm tra log backend.");
     } finally {
       setActionTarget(null);
     }
@@ -384,9 +386,10 @@ export function SecurityDashboard({
         throw new Error(await response.text());
       }
       setBans((prev) => prev.filter((item) => (item.id || item.ip) !== (ban.id || ban.ip)));
+      displaySuccess("Đã gỡ IP khỏi danh sách ban.");
     } catch (error) {
       console.error("[security] remove ban failed", error);
-      alert("Không thể gỡ IP ra khỏi danh sách ban.");
+      displayError(error, "Không thể gỡ IP ra khỏi danh sách ban.");
     } finally {
       setActionTarget(null);
     }
@@ -423,9 +426,10 @@ export function SecurityDashboard({
       setRules((prev) => [created, ...prev]);
       setRuleForm({ ...defaultRuleForm });
       setRuleDialogOpen(false);
+      displaySuccess("Đã tạo rule firewall mới.");
     } catch (error) {
       console.error("[security] create firewall rule failed", error);
-      alert("Không thể tạo rule firewall mới.");
+      displayError(error, "Không thể tạo rule firewall mới.");
     } finally {
       setActionTarget(null);
     }
@@ -436,7 +440,7 @@ export function SecurityDashboard({
       return;
     }
     if (!rule.id) {
-      alert("Không tìm thấy mã rule để xóa.");
+      displayWarning("Không tìm thấy mã rule để xóa.");
       return;
     }
     if (!confirm(`Xóa rule ${rule.description || rule.id}?`)) {
@@ -453,9 +457,10 @@ export function SecurityDashboard({
         throw new Error(await response.text());
       }
       setRules((prev) => prev.filter((item) => item.id !== rule.id));
+      displaySuccess("Đã xóa rule firewall.");
     } catch (error) {
       console.error("[security] delete firewall rule failed", error);
-      alert("Không thể xóa rule firewall.");
+      displayError(error, "Không thể xóa rule firewall.");
     } finally {
       setActionTarget(null);
     }

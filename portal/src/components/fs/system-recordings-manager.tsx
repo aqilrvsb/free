@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { resolveClientBaseUrl } from "@/lib/browser";
 import { buildAuthHeaders } from "@/lib/client-auth";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface SystemRecordingsManagerProps {
   initialRecordings: SystemRecordingSummary[];
@@ -63,7 +64,7 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
   const uploadRecording = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!apiBase || !selectedFile) {
-      alert("Vui lòng chọn file âm thanh");
+      displayWarning("Vui lòng chọn file âm thanh");
       return;
     }
 
@@ -86,9 +87,10 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
       const recording = (await response.json()) as SystemRecordingSummary;
       setRecordings((prev) => [recording, ...prev]);
       resetUpload();
+      displaySuccess("Đã tải lên file ghi âm.");
     } catch (error) {
       console.error("Failed to upload system recording", error);
-      alert("Không thể upload file. Vui lòng kiểm tra kích thước và định dạng.");
+      displayError(error, "Không thể upload file. Vui lòng kiểm tra kích thước và định dạng.");
     } finally {
       setUploading(false);
     }
@@ -108,23 +110,24 @@ export function SystemRecordingsManager({ initialRecordings }: SystemRecordingsM
         throw new Error(await response.text());
       }
       setRecordings((prev) => prev.filter((item) => item.id !== recording.id));
+      displaySuccess("Đã xóa file ghi âm.");
     } catch (error) {
       console.error("Failed to delete system recording", error);
-      alert("Không thể xóa file. Vui lòng xem log backend.");
+      displayError(error, "Không thể xóa file. Vui lòng xem log backend.");
     }
   };
 
   const copyToClipboard = async (value?: string | null) => {
     if (!value) {
-      alert("Không có nội dung để sao chép.");
+      displayWarning("Không có nội dung để sao chép.");
       return;
     }
     try {
       await navigator.clipboard.writeText(value);
-      alert(`Đã sao chép: ${value}`);
+      displaySuccess(`Đã sao chép: ${value}`);
     } catch (error) {
       console.error("Failed to copy", error);
-      alert("Không thể sao chép vào clipboard.");
+      displayError(error, "Không thể sao chép vào clipboard.");
     }
   };
 

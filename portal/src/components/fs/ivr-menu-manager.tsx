@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { resolveClientBaseUrl } from "@/lib/browser";
 import { buildAuthHeaders } from "@/lib/client-auth";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface IvrMenuManagerProps {
   tenants: TenantSummary[];
@@ -276,23 +277,23 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
     event.preventDefault();
     if (!apiBase) return;
     if (!form.tenantId.trim()) {
-      alert("Vui lòng chọn tenant");
+      displayWarning("Vui lòng chọn tenant");
       return;
     }
     if (!form.name.trim()) {
-      alert("Tên menu không được để trống");
+      displayWarning("Tên menu không được để trống");
       return;
     }
     if (options.length === 0) {
-      alert("Cần cấu hình ít nhất một lựa chọn");
+      displayWarning("Cần cấu hình ít nhất một lựa chọn");
       return;
     }
     if (form.invalidActionType && form.invalidActionType !== "hangup" && !form.invalidActionValue.trim()) {
-      alert("Vui lòng nhập giá trị cho hành động khi bấm sai phím.");
+      displayWarning("Vui lòng nhập giá trị cho hành động khi bấm sai phím.");
       return;
     }
     if (form.timeoutActionType && form.timeoutActionType !== "hangup" && !form.timeoutActionValue.trim()) {
-      alert("Vui lòng nhập giá trị cho hành động khi timeout.");
+      displayWarning("Vui lòng nhập giá trị cho hành động khi timeout.");
       return;
     }
 
@@ -313,13 +314,15 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
       const menu = (await response.json()) as IvrMenuSummary;
       if (dialogMode === "create") {
         setMenus((prev) => [...prev, menu]);
+        displaySuccess("Đã tạo IVR menu.");
       } else if (editing) {
         setMenus((prev) => prev.map((item) => (item.id === menu.id ? menu : item)));
+        displaySuccess("Đã cập nhật IVR menu.");
       }
       closeDialog();
     } catch (error) {
       console.error("Failed to save IVR menu", error);
-      alert("Không thể lưu IVR menu. Vui lòng kiểm tra log backend.");
+      displayError(error, "Không thể lưu IVR menu. Vui lòng kiểm tra log backend.");
     } finally {
       setLoading(null);
     }
@@ -340,9 +343,10 @@ export function IvrMenuManager({ tenants, extensions, initialMenus, systemRecord
         throw new Error(await response.text());
       }
       setMenus((prev) => prev.filter((item) => item.id !== menu.id));
+      displaySuccess("Đã xóa IVR menu.");
     } catch (error) {
       console.error("Failed to delete IVR menu", error);
-      alert("Không thể xóa IVR menu.");
+      displayError(error, "Không thể xóa IVR menu.");
     } finally {
       setLoading(null);
     }

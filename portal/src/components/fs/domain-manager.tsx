@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PaginatedResult, TenantSummary } from "@/lib/types";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface DomainManagerProps {
   initialTenants: PaginatedResult<TenantSummary>;
@@ -90,7 +91,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
           return;
         }
         console.error("Failed to fetch tenants", error);
-        alert("Không thể tải danh sách domain.");
+        displayError(error, "Không thể tải danh sách domain.");
       } finally {
         if (!silent) {
           setTenantLoading(false);
@@ -178,7 +179,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
     } else {
       const parsedLimit = Number(limitInput);
       if (!Number.isInteger(parsedLimit) || parsedLimit < 0) {
-        alert("Giới hạn extension phải là số nguyên không âm");
+        displayWarning("Giới hạn extension phải là số nguyên không âm");
         return;
       }
       payload.extensionLimit = parsedLimit;
@@ -187,7 +188,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
     try {
       if (tenantDialogMode === "create") {
         if (!payload.name || !payload.domain) {
-          alert("Vui lòng nhập đầy đủ tên và domain");
+          displayWarning("Vui lòng nhập đầy đủ tên và domain");
           return;
         }
         setLoading("tenant-create");
@@ -200,6 +201,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
           throw new Error(await response.text());
         }
         await fetchTenantPage(1, tenantSearch, { silent: true });
+        displaySuccess("Đã tạo tenant mới.");
       } else if (editingTenant) {
         setLoading(`tenant-update-${editingTenant.id}`);
         const response = await fetch(`${apiBase}/tenants/${editingTenant.id}`, {
@@ -211,12 +213,13 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
           throw new Error(await response.text());
         }
         await fetchTenantPage(tenantPage, tenantSearch, { silent: true });
+        displaySuccess("Đã cập nhật tenant.");
       }
       setTenantForm(defaultTenantForm);
       closeTenantDialog();
     } catch (error) {
       console.error("Tenant operation failed", error);
-      alert("Thao tác với tenant thất bại. Vui lòng kiểm tra log.");
+      displayError(error, "Thao tác với tenant thất bại. Vui lòng kiểm tra log.");
     } finally {
       setLoading(null);
     }
@@ -238,10 +241,11 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
         throw new Error(raw || "Không thể xóa tenant.");
       }
       await fetchTenantPage(tenantPage, tenantSearch, { silent: true });
+      displaySuccess("Đã xóa tenant.");
     } catch (error) {
       console.error("Failed to delete tenant", error);
       const message = error instanceof Error && error.message ? error.message : "Không thể xóa tenant.";
-      alert(message);
+      displayError(error, message);
     } finally {
       setLoading(null);
     }

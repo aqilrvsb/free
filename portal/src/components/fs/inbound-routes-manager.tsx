@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface InboundRoutesManagerProps {
   tenants: TenantSummary[];
@@ -135,15 +136,15 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
   const submitRoute = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.tenantId.trim()) {
-      alert("Vui lòng chọn tenant");
+      displayWarning("Vui lòng chọn tenant");
       return;
     }
     if (!form.didNumber.trim()) {
-      alert("Vui lòng nhập DID");
+      displayWarning("Vui lòng nhập DID");
       return;
     }
     if (!form.destinationValue.trim()) {
-      alert("Vui lòng nhập giá trị đích");
+      displayWarning("Vui lòng nhập giá trị đích");
       return;
     }
 
@@ -162,13 +163,15 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
       });
       if (dialogMode === "create") {
         setRoutes((prev) => [...prev, route].sort((a, b) => a.priority - b.priority));
+        displaySuccess("Đã tạo inbound route.");
       } else if (editing) {
         setRoutes((prev) => prev.map((item) => (item.id === route.id ? route : item)).sort((a, b) => a.priority - b.priority));
+        displaySuccess("Đã cập nhật inbound route.");
       }
       closeDialog();
     } catch (error) {
       console.error("Failed to save inbound route", error);
-      alert("Không thể lưu inbound route. Vui lòng kiểm tra log backend.");
+      displayError(error, "Không thể lưu inbound route. Vui lòng kiểm tra log backend.");
     } finally {
       setLoading(null);
     }
@@ -186,9 +189,10 @@ export function InboundRoutesManager({ tenants, extensions, initialRoutes, ivrMe
         cache: "no-store",
       });
       setRoutes((prev) => prev.filter((item) => item.id !== route.id));
+      displaySuccess("Đã xóa inbound route.");
     } catch (error) {
       console.error("Failed to delete inbound route", error);
-      alert("Không thể xóa inbound route.");
+      displayError(error, "Không thể xóa inbound route.");
     } finally {
       setLoading(null);
     }
