@@ -52,7 +52,7 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
     key: "viewer",
     name: "Viewer",
     description: "Chỉ xem dashboard, CDR, recordings",
-    permissions: ["view_dashboard", "view_cdr", "view_channels", "view_recordings", "view_billing"],
+    permissions: ["view_dashboard", "view_cdr", "view_recordings", "view_billing"],
     isSystem: true,
   },
   {
@@ -62,7 +62,6 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
     permissions: [
       "view_dashboard",
       "view_cdr",
-      "view_channels",
       "view_recordings",
       "view_billing",
       "manage_inbound",
@@ -78,7 +77,7 @@ export const FALLBACK_ROLE_DEFS: PortalRoleSummary[] = [
     permissions: [
       "view_dashboard",
       "view_cdr",
-      "view_channels",
+      "view_recordings",
       "manage_gateways",
       "manage_dialplan",
       "manage_inbound",

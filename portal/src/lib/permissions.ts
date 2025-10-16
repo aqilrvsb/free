@@ -79,6 +79,7 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
     manage_agents: true,
     manage_sub_agents: true,
     manage_own_groups: true,
+    view_channels: false,
   },
   super_admin: {
     ...Object.keys(BASE_PERMISSIONS).reduce((acc, key) => {
@@ -98,9 +99,13 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
     manage_portal_users: true,
     manage_sub_agents: true,
     manage_own_groups: true,
+    manage_extensions: true,
+    view_channels: false,
+
   },
   agent: {
     ...BASE_PERMISSIONS,
+    view_channels: false,
   },
 };
 

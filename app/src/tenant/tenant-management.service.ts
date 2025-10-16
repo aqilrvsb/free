@@ -42,6 +42,7 @@ interface UpdateExtensionDto {
 interface TenantAccessScope {
   isSuperAdmin: boolean;
   tenantIds: string[];
+  allowedPermissions?: string[];
 }
 
 @Injectable()

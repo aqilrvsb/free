@@ -56,6 +56,7 @@ type PermissionKey =
   | "manage_ivr"
   | "manage_settings"
   | "manage_recordings"
+  | "manage_extensions"
   | "manage_portal_users"
   | "manage_roles"
   | "manage_security"
@@ -152,7 +153,8 @@ const NAV_SECTIONS: Array<{
           description: "Quản lý danh sách máy nhánh",
           href: "/fs/extensions",
           icon: PhoneCall,
-          roles: ["super_admin", "tenant_admin"],
+          roles: ["super_admin", "tenant_admin", "agent_lead"],
+          permission: "manage_extensions",
         },
         {
           title: "Agents",

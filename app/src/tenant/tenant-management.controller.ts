@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { TenantManagementService } from './tenant-management.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -21,13 +21,15 @@ interface AuthenticatedRequest extends Request {
   user?: {
     role?: string;
     tenantIds?: string[];
+    permissions?: string[];
+    rolePermissions?: string[];
   };
 }
 
 @ApiTags(SwaggerTags.Tenant)
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('super_admin', 'tenant_admin')
+@Roles('super_admin', 'tenant_admin', 'agent_lead')
 @Controller()
 export class TenantManagementController {
   constructor(private readonly managementService: TenantManagementService) {}
@@ -36,9 +38,25 @@ export class TenantManagementController {
     const user = req?.user;
     const role = user?.role || null;
     const tenantIds = Array.isArray(user?.tenantIds) ? user!.tenantIds : [];
+    const permissionSources: string[] = [];
+    if (Array.isArray(user?.permissions)) {
+      permissionSources.push(...user!.permissions);
+    }
+    if (Array.isArray(user?.rolePermissions)) {
+      permissionSources.push(...user!.rolePermissions);
+    }
+    const allowedPermissions = Array.from(
+      new Set(
+        permissionSources
+          .filter((perm): perm is string => typeof perm === 'string')
+          .map((perm) => perm.trim())
+          .filter((perm) => perm.length > 0),
+      ),
+    );
     return {
       isSuperAdmin: role === 'super_admin',
       tenantIds,
+      allowedPermissions,
     };
   }
 
@@ -93,6 +111,9 @@ export class TenantManagementController {
     const page = Number(query.page ?? 0) || 0;
     const pageSize = Number(query.pageSize ?? 0) || 0;
     const scope = this.resolveScope(req);
+    if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
+      throw new ForbiddenException('Không có quyền quản lý extension');
+    }
     if (page > 0 && pageSize > 0) {
       return this.managementService.listExtensionsPaginated({
         tenantId,
@@ -106,7 +127,11 @@ export class TenantManagementController {
 
   @Post('/extensions')
   async createExtension(@Body() body: CreateExtensionDto, @Req() req: AuthenticatedRequest) {
-    return this.managementService.createExtension(body, this.resolveScope(req));
+    const scope = this.resolveScope(req);
+    if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
+      throw new ForbiddenException('Không có quyền quản lý extension');
+    }
+    return this.managementService.createExtension(body, scope);
   }
 
   @Put('/extensions/:id')
@@ -115,17 +140,29 @@ export class TenantManagementController {
     @Body() body: UpdateExtensionDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.managementService.updateExtension(params.id, body, this.resolveScope(req));
+    const scope = this.resolveScope(req);
+    if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
+      throw new ForbiddenException('Không có quyền quản lý extension');
+    }
+    return this.managementService.updateExtension(params.id, body, scope);
   }
 
   @Delete('/extensions/:id')
   async deleteExtension(@Param() params: ExtensionIdParamDto, @Req() req: AuthenticatedRequest) {
-    await this.managementService.deleteExtension(params.id, this.resolveScope(req));
+    const scope = this.resolveScope(req);
+    if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
+      throw new ForbiddenException('Không có quyền quản lý extension');
+    }
+    await this.managementService.deleteExtension(params.id, scope);
     return { success: true };
   }
 
   @Get('/extensions/:id/password')
   async getExtensionSecret(@Param() params: ExtensionIdParamDto, @Req() req: AuthenticatedRequest) {
-    return this.managementService.getExtensionSecret(params.id, this.resolveScope(req));
+    const scope = this.resolveScope(req);
+    if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
+      throw new ForbiddenException('Không có quyền quản lý extension');
+    }
+    return this.managementService.getExtensionSecret(params.id, scope);
   }
 }
