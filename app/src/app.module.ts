@@ -63,6 +63,7 @@ import { PortalUsersController } from './portal/portal-users.controller';
 import { PortalUsersService } from './portal/portal-users.service';
 import { PortalRolesController } from './portal/portal-roles.controller';
 import { PortalRolesService } from './portal/portal-roles.service';
+import { PortalConfigController } from './portal/portal-config.controller';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { JwtStrategy } from './auth/jwt.strategy';
@@ -191,6 +192,7 @@ import { ExternalExtensionsModule } from './external/external-extensions.module'
     SettingsController,
     PortalUsersController,
     PortalRolesController,
+    PortalConfigController,
     AuthController,
     SecurityController,
     BillingController,
