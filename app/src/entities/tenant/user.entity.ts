@@ -6,7 +6,7 @@ export class UserEntity {
   @PrimaryColumn({ type: 'varchar', length: 32 })
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'varchar', length: 64 })
+  @PrimaryColumn({ name: 'tenant_id', type: 'varchar', length: 64 })
   tenantId!: string;
 
   @ManyToOne(() => TenantEntity, (tenant) => tenant.users, { onDelete: 'CASCADE' })

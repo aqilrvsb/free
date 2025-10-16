@@ -277,7 +277,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
                 Đang tải domain...
               </div>
             ) : tenantData.items.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-auto">
                 {tenantData.items.map((tenant) => (
                   <div key={tenant.id} className="rounded-lg border p-4 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">

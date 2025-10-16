@@ -36,8 +36,11 @@ export class AgentEntity {
   @Column({ name: 'extension_id', type: 'varchar', length: 32, nullable: true })
   extensionId?: string | null;
 
-  @ManyToOne(() => UserEntity, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'extension_id' })
+  @ManyToOne(() => UserEntity, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn([
+    { name: 'extension_id', referencedColumnName: 'id' },
+    { name: 'tenant_id', referencedColumnName: 'tenantId' },
+  ])
   extension?: UserEntity | null;
 
   @Column({ name: 'group_id', type: 'char', length: 36, nullable: true })

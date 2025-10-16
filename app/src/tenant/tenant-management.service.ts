@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
-import { TenantEntity, RoutingConfigEntity, UserEntity } from '../entities';
+import { Brackets, FindOptionsWhere, In, Repository, SelectQueryBuilder } from 'typeorm';
+import { TenantEntity, RoutingConfigEntity, UserEntity, AgentEntity } from '../entities';
 import { randomUUID } from 'crypto';
 
 interface CreateTenantDto {
@@ -51,6 +51,7 @@ export class TenantManagementService {
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(RoutingConfigEntity) private readonly routingRepo: Repository<RoutingConfigEntity>,
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
+    @InjectRepository(AgentEntity) private readonly agentRepo: Repository<AgentEntity>,
   ) {}
 
   private ensureTenantAccess(scope: TenantAccessScope | undefined, tenantId: string): void {
@@ -107,13 +108,45 @@ export class TenantManagementService {
   private async assertExtensionAccess(
     id: string,
     scope: TenantAccessScope | undefined,
+    tenantId?: string | null,
   ): Promise<UserEntity> {
-    const extension = await this.userRepo.findOne({ where: { id } });
-    if (!extension) {
+    const normalizedId = id?.trim();
+    if (!normalizedId) {
       throw new BadRequestException('Extension không tồn tại');
     }
-    this.ensureTenantAccess(scope, extension.tenantId);
-    return extension;
+
+    if (tenantId) {
+      const extension = await this.userRepo.findOne({ where: { id: normalizedId, tenantId } });
+      if (!extension) {
+        throw new BadRequestException('Extension không tồn tại trong tenant');
+      }
+      this.ensureTenantAccess(scope, extension.tenantId);
+      return extension;
+    }
+
+    if (scope && !scope.isSuperAdmin) {
+      if (!scope.tenantIds.length) {
+        throw new BadRequestException('Extension không tồn tại');
+      }
+      const where: FindOptionsWhere<UserEntity>[] = scope.tenantIds.map((allowedTenantId) => ({
+        id: normalizedId,
+        tenantId: allowedTenantId,
+      }));
+      const extension = await this.userRepo.findOne({ where });
+      if (!extension) {
+        throw new BadRequestException('Extension không tồn tại trong phạm vi được cấp');
+      }
+      return extension;
+    }
+
+    const matches = await this.userRepo.find({ where: { id: normalizedId } });
+    if (matches.length === 0) {
+      throw new BadRequestException('Extension không tồn tại');
+    }
+    if (matches.length > 1) {
+      throw new BadRequestException('Có nhiều extension trùng ID. Vui lòng cung cấp tenantId.');
+    }
+    return matches[0];
   }
 
   async listTenants(options?: { search?: string | null }, scope?: TenantAccessScope): Promise<any[]> {
@@ -484,7 +517,7 @@ export class TenantManagementService {
 
     this.ensureTenantAccess(scope, tenant.id);
 
-    const existing = await this.userRepo.findOne({ where: { id: dto.id } });
+    const existing = await this.userRepo.findOne({ where: { id: dto.id.trim(), tenantId: tenant.id } });
     if (existing) {
       throw new BadRequestException('Extension đã tồn tại');
     }
@@ -513,7 +546,13 @@ export class TenantManagementService {
   }
 
   async updateExtension(id: string, dto: UpdateExtensionDto, scope?: TenantAccessScope): Promise<any> {
-    const extension = await this.assertExtensionAccess(id, scope);
+    const tenantHintRaw = (dto as { tenantId?: string | null | undefined }).tenantId;
+    const tenantHint = tenantHintRaw ? tenantHintRaw.trim() : undefined;
+    const extension = await this.assertExtensionAccess(id, scope, tenantHint);
+
+    if (tenantHint && tenantHint !== extension.tenantId) {
+      throw new BadRequestException('Không thể chuyển extension sang tenant khác');
+    }
 
     if (dto.password) {
       extension.password = dto.password.trim();
@@ -527,13 +566,21 @@ export class TenantManagementService {
     return this.sanitizeExtension(extension);
   }
 
-  async deleteExtension(id: string, scope?: TenantAccessScope): Promise<void> {
-    await this.assertExtensionAccess(id, scope);
-    await this.userRepo.delete({ id });
+  async deleteExtension(id: string, scope?: TenantAccessScope, tenantIdHint?: string | null): Promise<void> {
+    const extension = await this.assertExtensionAccess(id, scope, tenantIdHint?.trim() || undefined);
+    await this.agentRepo.update(
+      { tenantId: extension.tenantId, extensionId: extension.id },
+      { extensionId: null },
+    );
+    await this.userRepo.delete({ id: extension.id, tenantId: extension.tenantId });
   }
 
-  async getExtensionSecret(id: string, scope?: TenantAccessScope): Promise<{ id: string; password: string }> {
-    const extension = await this.assertExtensionAccess(id, scope);
+  async getExtensionSecret(
+    id: string,
+    scope?: TenantAccessScope,
+    tenantIdHint?: string | null,
+  ): Promise<{ id: string; password: string }> {
+    const extension = await this.assertExtensionAccess(id, scope, tenantIdHint?.trim() || undefined);
 
     return {
       id: extension.id,

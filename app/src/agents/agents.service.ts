@@ -323,8 +323,8 @@ export class AgentsService {
     const extensionId = dto.extensionId?.trim() || null;
     let extension: UserEntity | null = null;
     if (extensionId) {
-      extension = await this.userRepo.findOne({ where: { id: extensionId } });
-      if (!extension || extension.tenantId !== tenantId) {
+      extension = await this.userRepo.findOne({ where: { id: extensionId, tenantId } });
+      if (!extension) {
         throw new BadRequestException('Extension không hợp lệ');
       }
       const duplicate = await this.agentRepo.findOne({ where: { tenantId, extensionId } });
@@ -452,8 +452,8 @@ export class AgentsService {
     if (dto.extensionId !== undefined) {
       const newExtensionId = dto.extensionId?.trim() || null;
       if (newExtensionId) {
-        const extension = await this.userRepo.findOne({ where: { id: newExtensionId } });
-        if (!extension || extension.tenantId !== agent.tenantId) {
+        const extension = await this.userRepo.findOne({ where: { id: newExtensionId, tenantId: agent.tenantId } });
+        if (!extension) {
           throw new BadRequestException('Extension không hợp lệ');
         }
         const duplicate = await this.agentRepo.findOne({ where: { tenantId: agent.tenantId, extensionId: newExtensionId } });

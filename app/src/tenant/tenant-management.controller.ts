@@ -131,7 +131,16 @@ export class TenantManagementController {
     if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
       throw new ForbiddenException('Không có quyền quản lý extension');
     }
-    return this.managementService.createExtension(body, scope);
+    return this.managementService.createExtension(
+      {
+        ...body,
+        id: body.id?.trim(),
+        tenantId: body.tenantId?.trim(),
+        password: body.password?.trim(),
+        displayName: body.displayName?.trim(),
+      },
+      scope,
+    );
   }
 
   @Put('/extensions/:id')
@@ -144,7 +153,15 @@ export class TenantManagementController {
     if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
       throw new ForbiddenException('Không có quyền quản lý extension');
     }
-    return this.managementService.updateExtension(params.id, body, scope);
+    const tenantIdQuery =
+      typeof req?.query?.tenantId === 'string' ? (req.query.tenantId as string).trim() : undefined;
+    const payload: UpdateExtensionDto = {
+      ...body,
+      tenantId: body.tenantId?.trim() || tenantIdQuery,
+      password: body.password?.trim(),
+      displayName: body.displayName?.trim(),
+    };
+    return this.managementService.updateExtension(params.id, payload, scope);
   }
 
   @Delete('/extensions/:id')
@@ -153,7 +170,9 @@ export class TenantManagementController {
     if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
       throw new ForbiddenException('Không có quyền quản lý extension');
     }
-    await this.managementService.deleteExtension(params.id, scope);
+    const tenantId =
+      typeof req?.query?.tenantId === 'string' ? (req.query.tenantId as string).trim() : undefined;
+    await this.managementService.deleteExtension(params.id, scope, tenantId);
     return { success: true };
   }
 
@@ -163,6 +182,8 @@ export class TenantManagementController {
     if (!scope.isSuperAdmin && !(scope.allowedPermissions?.includes('manage_extensions'))) {
       throw new ForbiddenException('Không có quyền quản lý extension');
     }
-    return this.managementService.getExtensionSecret(params.id, scope);
+    const tenantId =
+      typeof req?.query?.tenantId === 'string' ? (req.query.tenantId as string).trim() : undefined;
+    return this.managementService.getExtensionSecret(params.id, scope, tenantId);
   }
 }

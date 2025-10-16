@@ -148,7 +148,7 @@ const NAV_SECTIONS: Array<{
           description: "Quản lý danh sách máy nhánh",
           href: "/fs/extensions",
           icon: PhoneCall,
-          roles: ["super_admin", "tenant_admin", "agent_lead"],
+          // roles: ["super_admin", "tenant_admin", "agent_lead"],
           permission: "manage_extensions",
         },
         {
@@ -156,7 +156,7 @@ const NAV_SECTIONS: Array<{
           description: "Gán extension & KPI",
           href: "/fs/agents",
           icon: Workflow,
-          roles: ["super_admin", "tenant_admin", "agent_lead"],
+          // roles: ["super_admin", "tenant_admin", "agent_lead"],
           permission: "manage_agents",
         },
         {
@@ -164,7 +164,7 @@ const NAV_SECTIONS: Array<{
           description: "Chiến dịch gọi tự động",
           href: "/fs/auto-dialer",
           icon: Workflow,
-          roles: ["super_admin", "tenant_admin", "operator"],
+          // roles: ["super_admin", "tenant_admin", "operator"],
           permission: "manage_outbound",
         },
         {
@@ -172,7 +172,7 @@ const NAV_SECTIONS: Array<{
           description: "Quản lý tài khoản đăng nhập",
           href: "/admin/users",
           icon: Users,
-          roles: ["super_admin", "tenant_admin", "agent_lead"],
+          // roles: ["super_admin", "tenant_admin", "agent_lead"],
           permission: "manage_portal_users",
         },
         {
@@ -188,7 +188,7 @@ const NAV_SECTIONS: Array<{
           description: "Kết nối Telco bên ngoài",
           href: "/fs/gateways",
           icon: RadioTower,
-          roles: ["super_admin", "tenant_admin"],
+          roles: ["super_admin"],
           permission: "manage_gateways",
         },
         {
@@ -196,7 +196,7 @@ const NAV_SECTIONS: Array<{
           description: "Quy tắc gọi nội bộ & outbound",
           href: "/fs/dialplan",
           icon: GitBranch,
-          roles: ["super_admin", "tenant_admin"],
+          roles: ["super_admin"],
           permission: "manage_dialplan",
         },
         {
@@ -220,7 +220,7 @@ const NAV_SECTIONS: Array<{
           description: "Cước gọi và cấu hình billing",
           href: "/fs/billing",
           icon: DollarSign,
-          roles: ["super_admin", "tenant_admin"],
+          // roles: ["super_admin", "tenant_admin"],
           permission: "view_billing",
         },
         {

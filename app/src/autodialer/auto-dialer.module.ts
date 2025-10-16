@@ -12,6 +12,7 @@ import {
   UserEntity,
   GatewayEntity,
   OutboundCallerIdEntity,
+  AgentEntity,
 } from '../entities';
 import { AutoDialerService } from './auto-dialer.service';
 import { AutoDialerController } from './auto-dialer.controller';
@@ -34,6 +35,7 @@ import { OutboundCallerIdService } from '../routing/outbound-caller-id.service';
       UserEntity,
       GatewayEntity,
       OutboundCallerIdEntity,
+      AgentEntity,
     ]),
   ],
   controllers: [AutoDialerController],

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ExternalExtensionsService } from './extensions.service';
 import { CreateExternalExtensionDto, ExternalExtensionResponseDto } from './dto';
@@ -25,7 +25,10 @@ export class ExternalExtensionsController {
 
   @Get(':id')
   @ApiResponse({ status: 200, type: ExternalExtensionResponseDto })
-  async getExtension(@Param('id') id: string): Promise<ExternalExtensionResponseDto> {
-    return this.extensionsService.getExtension(id);
+  async getExtension(
+    @Param('id') id: string,
+    @Query('tenantId') tenantId?: string,
+  ): Promise<ExternalExtensionResponseDto> {
+    return this.extensionsService.getExtension(id, tenantId);
   }
 }

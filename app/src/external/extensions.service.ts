@@ -19,7 +19,7 @@ export class ExternalExtensionsService {
     }
 
     const extensionId = dto.id.trim();
-    const existing = await this.userRepo.findOne({ where: { id: extensionId } });
+    const existing = await this.userRepo.findOne({ where: { id: extensionId, tenantId } });
     if (existing) {
       throw new ConflictException('Extension đã tồn tại');
     }
@@ -39,14 +39,36 @@ export class ExternalExtensionsService {
     return this.buildResponse(saved, tenant);
   }
 
-  async getExtension(id: string): Promise<ExternalExtensionResponseDto> {
-    const extension = await this.userRepo.findOne({
-      where: { id: id.trim() },
-      relations: ['tenant'],
-    });
-    if (!extension) {
+  async getExtension(id: string, tenantId?: string): Promise<ExternalExtensionResponseDto> {
+    const normalizedId = id.trim();
+    if (!normalizedId) {
       throw new NotFoundException('Extension không tồn tại');
     }
+
+    let extension: UserEntity | null = null;
+
+    if (tenantId) {
+      extension = await this.userRepo.findOne({
+        where: { id: normalizedId, tenantId: tenantId.trim() },
+        relations: ['tenant'],
+      });
+      if (!extension) {
+        throw new NotFoundException('Extension không tồn tại trong tenant được chỉ định');
+      }
+    } else {
+      const matches = await this.userRepo.find({
+        where: { id: normalizedId },
+        relations: ['tenant'],
+      });
+      if (matches.length === 0) {
+        throw new NotFoundException('Extension không tồn tại');
+      }
+      if (matches.length > 1) {
+        throw new ConflictException('Có nhiều extension trùng ID. Vui lòng chỉ định tenantId.');
+      }
+      extension = matches[0];
+    }
+
     return this.buildResponse(extension, extension.tenant);
   }
 

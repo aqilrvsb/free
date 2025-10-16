@@ -65,13 +65,13 @@ export class InboundRoutingService {
       : [];
     const menuMap = new Map(menus.map((menu) => [menu.id, menu]));
 
-    const extensionIds = routes
+    const extensionTargets = routes
       .filter((route) => route.destinationType === 'extension' && route.destinationValue)
-      .map((route) => route.destinationValue);
-    const extensions = extensionIds.length
-      ? await this.userRepo.find({ where: { id: In(extensionIds) } })
+      .map((route) => ({ id: route.destinationValue, tenantId: route.tenantId }));
+    const extensions = extensionTargets.length
+      ? await this.userRepo.find({ where: extensionTargets.map((item) => ({ id: item.id, tenantId: item.tenantId })) })
       : [];
-    const extensionMap = new Map(extensions.map((ext) => [ext.id, ext]));
+    const extensionMap = new Map(extensions.map((ext) => [`${ext.tenantId}:${ext.id}`, ext]));
 
     return routes.map((route) => this.sanitize(route, { menuMap, extensionMap }));
   }
@@ -103,7 +103,10 @@ export class InboundRoutingService {
 
     await this.routeRepo.save(route);
     const saved = await this.routeRepo.findOne({ where: { id: route.id }, relations: ['tenant'] });
-    return this.sanitize(saved!, { menuMap: await this.loadMenuMap([route.destinationValue]), extensionMap: await this.loadExtensionMap([route.destinationValue]) });
+    return this.sanitize(saved!, {
+      menuMap: await this.loadMenuMap([route.destinationValue]),
+      extensionMap: await this.loadExtensionMap([{ id: route.destinationValue, tenantId: route.tenantId }]),
+    });
   }
 
   async updateRoute(id: string, dto: UpdateInboundRouteDto, scope?: RoutingScope) {
@@ -158,7 +161,7 @@ export class InboundRoutingService {
     const saved = await this.routeRepo.findOne({ where: { id: route.id }, relations: ['tenant'] });
     return this.sanitize(saved!, {
       menuMap: await this.loadMenuMap([route.destinationValue]),
-      extensionMap: await this.loadExtensionMap([route.destinationValue]),
+      extensionMap: await this.loadExtensionMap([{ id: route.destinationValue, tenantId: route.tenantId }]),
     });
   }
 
@@ -178,7 +181,8 @@ export class InboundRoutingService {
       extensionMap?: Map<string, UserEntity>;
     },
   ) {
-    const extension = maps.extensionMap?.get(route.destinationValue);
+    const extensionKey = `${route.tenantId}:${route.destinationValue}`;
+    const extension = maps.extensionMap?.get(extensionKey);
     const menu = maps.menuMap?.get(route.destinationValue);
 
     let destinationLabel = route.destinationValue;
@@ -286,13 +290,18 @@ export class InboundRoutingService {
     return new Map(menus.map((menu) => [menu.id, menu]));
   }
 
-  private async loadExtensionMap(ids: string[]): Promise<Map<string, UserEntity>> {
-    const uniqueIds = Array.from(new Set(ids.filter((id) => id)));
-    if (!uniqueIds.length) {
+  private async loadExtensionMap(targets: Array<{ id: string; tenantId: string }>): Promise<Map<string, UserEntity>> {
+    const uniqueTargets = targets
+      .filter((item) => item.id && item.tenantId)
+      .map((item) => ({ id: item.id.trim(), tenantId: item.tenantId.trim() }))
+      .filter((item) => item.id && item.tenantId);
+    if (!uniqueTargets.length) {
       return new Map();
     }
-    const users = await this.userRepo.find({ where: { id: In(uniqueIds) } });
-    return new Map(users.map((user) => [user.id, user]));
+    const users = await this.userRepo.find({
+      where: uniqueTargets.map((item) => ({ id: item.id, tenantId: item.tenantId })),
+    });
+    return new Map(users.map((user) => [`${user.tenantId}:${user.id}`, user]));
   }
 
   private ensureTenantAccess(scope: RoutingScope | undefined, tenantId: string): void {
