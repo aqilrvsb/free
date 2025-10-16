@@ -9,6 +9,7 @@ export const SwaggerTags = {
   Security: 'Security',
   Agents: 'Agent Management',
   AutoDialer: 'Auto Dialer',
+  External: 'External Integrations',
 } as const;
 
 export type SwaggerTag = (typeof SwaggerTags)[keyof typeof SwaggerTags];

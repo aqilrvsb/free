@@ -81,6 +81,7 @@ import { AgentsService } from './agents/agents.service';
 import { AutoDialerModule } from './autodialer/auto-dialer.module';
 import { OutboundCallerIdService } from './routing/outbound-caller-id.service';
 import { WsJwtGuard } from './auth/ws-jwt.guard';
+import { ExternalExtensionsModule } from './external/external-extensions.module';
 
 @Module({
   imports: [
@@ -173,6 +174,7 @@ import { WsJwtGuard } from './auth/ws-jwt.guard';
       maxRedirects: 3,
     }),
     AutoDialerModule,
+    ExternalExtensionsModule,
   ],
   controllers: [
     FsXmlController,
