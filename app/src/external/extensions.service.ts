@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { TenantEntity, UserEntity } from '../entities';
+import { AgentEntity, TenantEntity, UserEntity } from '../entities';
 import { CreateExternalExtensionDto, ExternalExtensionResponseDto, UpdateExternalExtensionDto } from './dto';
 
 @Injectable()
@@ -9,6 +9,7 @@ export class ExternalExtensionsService {
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
+    @InjectRepository(AgentEntity) private readonly agentRepo: Repository<AgentEntity>,
   ) {}
 
   async createExtension(dto: CreateExternalExtensionDto): Promise<ExternalExtensionResponseDto> {
@@ -70,6 +71,18 @@ export class ExternalExtensionsService {
   ): Promise<ExternalExtensionResponseDto> {
     const extension = await this.lookupExtension(id, options);
     return this.buildResponse(extension, extension.tenant);
+  }
+
+  async deleteExtension(
+    id: string,
+    options: { tenantId?: string | null; tenantDomain?: string | null } = {},
+  ): Promise<{ success: true }> {
+    const extension = await this.lookupExtension(id, options);
+
+    await this.agentRepo.update({ extensionId: extension.id, tenantId: extension.tenantId }, { extensionId: null });
+    await this.userRepo.delete({ id: extension.id, tenantId: extension.tenantId });
+
+    return { success: true };
   }
 
   private async lookupExtension(

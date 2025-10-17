@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiHeader, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ExternalExtensionsService } from './extensions.service';
 import { CreateExternalExtensionDto, ExternalExtensionResponseDto, UpdateExternalExtensionDto } from './dto';
@@ -62,5 +62,25 @@ export class ExternalExtensionsController {
     @Query('tenantDomain') tenantDomain?: string,
   ): Promise<ExternalExtensionResponseDto> {
     return this.extensionsService.updateExtension(id, body, { tenantId, tenantDomain });
+  }
+
+  @Delete(':id')
+  @ApiQuery({
+    name: 'tenantId',
+    required: false,
+    description: 'Tenant ID sở hữu extension (ưu tiên so với tenantDomain)',
+  })
+  @ApiQuery({
+    name: 'tenantDomain',
+    required: false,
+    description: 'Domain của tenant (được dùng khi không truyền tenantId)',
+  })
+  @ApiResponse({ status: 200, schema: { properties: { success: { type: 'boolean', example: true } } } })
+  async deleteExtension(
+    @Param('id') id: string,
+    @Query('tenantId') tenantId?: string,
+    @Query('tenantDomain') tenantDomain?: string,
+  ): Promise<{ success: true }> {
+    return this.extensionsService.deleteExtension(id, { tenantId, tenantDomain });
   }
 }
