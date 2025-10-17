@@ -318,7 +318,8 @@ function formatStatusSummary(status?: string | null, fallbackOnline?: boolean): 
 }
 
 interface RegistrationRow {
-  id: string;
+  extensionId: string;
+  rowKey: string;
   tenantId?: string;
   tenantDomain?: string | null;
   displayName?: string | null;
@@ -605,28 +606,38 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
 
   const dataset = useMemo<RegistrationRow[]>(() => {
     if (presence.length > 0) {
-      return presence.map((item) => ({
-        id: item.id,
-        tenantId: item.tenantId,
-        tenantDomain: item.tenantDomain ?? null,
-        displayName: item.displayName ?? null,
-        contact: item.contact ?? null,
-        network_ip: item.network_ip ?? null,
-        network_port: item.network_port ?? null,
-        agent: item.agent ?? null,
-        status: item.status ?? null,
-        ping_status: item.ping_status ?? null,
-        ping_time: item.ping_time ?? null,
-        online: item.online,
-      }));
+      return presence.map((item) => {
+        const extensionId = item.id;
+        const domainKey = (item.tenantDomain || item.tenantId || "global").toLowerCase();
+        const rowKey = `${domainKey}:${extensionId.toLowerCase()}`;
+        return {
+          extensionId,
+          rowKey,
+          tenantId: item.tenantId,
+          tenantDomain: item.tenantDomain ?? null,
+          displayName: item.displayName ?? null,
+          contact: item.contact ?? null,
+          network_ip: item.network_ip ?? null,
+          network_port: item.network_port ?? null,
+          agent: item.agent ?? null,
+          status: item.status ?? null,
+          ping_status: item.ping_status ?? null,
+          ping_time: item.ping_time ?? null,
+          online: item.online,
+        };
+      });
     }
 
     return registrations.map((item) => {
       const identifier = item.user || item.aor || item.contact || "unknown";
-      const id = identifier.includes('@') ? identifier.split('@')[0] : identifier;
+      const idCandidate = identifier.includes('@') ? identifier.split('@')[0] : identifier;
+      const tenantDomain = item.realm ?? null;
+      const domainKey = (tenantDomain || "global").toLowerCase();
+      const rowKey = `${domainKey}:${idCandidate.toLowerCase()}`;
       return {
-        id,
-        tenantDomain: item.realm ?? null,
+        extensionId: idCandidate,
+        rowKey,
+        tenantDomain,
         contact: item.contact ?? null,
         network_ip: item.network_ip ?? null,
         network_port: item.network_port ?? null,
@@ -642,7 +653,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
   const stats = useMemo(() => {
     const statsFromBackend = profileData?.extensionStats;
     if (statsFromBackend) {
-      const uniqueCount = new Set(dataset.map((item) => item.id || 'unknown')).size;
+      const uniqueCount = new Set(dataset.map((item) => item.rowKey)).size;
       return {
         total: statsFromBackend.total,
         online: statsFromBackend.online,
@@ -653,7 +664,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
 
     const online = dataset.filter((item) => item.online).length;
     const offline = dataset.length - online;
-    const uniqueUsers = new Set(dataset.map((item) => item.id || 'unknown')).size;
+    const uniqueUsers = new Set(dataset.map((item) => item.rowKey)).size;
     return {
       total: dataset.length,
       online,
@@ -669,8 +680,9 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
     const base = lastEvent.username.includes('@')
       ? lastEvent.username.split('@')[0]
       : lastEvent.username;
-    return base.toLowerCase();
-  }, [lastEvent]);
+    const domainKey = lastEvent.domain?.toLowerCase() ?? normalizedDomain ?? "global";
+    return `${domainKey}:${base.toLowerCase()}`;
+  }, [lastEvent, normalizedDomain]);
 
   const statusOptions: Array<{ value: typeof statusFilter; label: string }> = [
     { value: "all", label: "Tất cả" },
@@ -875,8 +887,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
           {dataset.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {dataset.map((item) => {
-                const normalizedId = (item.id || "").toString().toLowerCase();
-                const isHighlighted = Boolean(highlightedRowKey && normalizedId === highlightedRowKey);
+                const isHighlighted = Boolean(highlightedRowKey && item.rowKey === highlightedRowKey);
                 const statusSummary = formatStatusSummary(item.status, item.online);
                 const statusLabel = statusSummary.main || (item.online ? "Đang online" : "Offline");
                 const pingLabel = item.ping_status
@@ -895,7 +906,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
                 );
                 return (
                   <article
-                    key={`${item.id}-${item.contact ?? "nc"}`}
+                    key={`${item.rowKey}-${item.contact ?? "nc"}`}
                     className={cn(
                       "group relative flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/95 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg sm:p-5",
                       isHighlighted && "border-primary/60 ring-1 ring-primary/40",
@@ -914,10 +925,13 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
                                 : "bg-orange-400 shadow-[0_0_0_4px_rgba(251,146,60,0.15)]",
                             )}
                           />
-                          {item.id || "-"}
+                          {item.extensionId || "-"}
                         </div>
                         {item.displayName ? (
                           <div className="text-xs text-muted-foreground">{item.displayName}</div>
+                        ) : null}
+                        {item.tenantDomain ? (
+                          <div className="text-xs text-muted-foreground">Domain: {item.tenantDomain}</div>
                         ) : null}
                         {item.tenantId ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
@@ -942,7 +956,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
                       <div className="flex flex-wrap gap-1.5 text-[9px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/70">
                         {statusBadges.map((badge) => (
                           <span
-                            key={`${item.id}-${badge}`}
+                            key={`${item.rowKey}-${badge}`}
                             className="rounded-full border border-border/60 bg-muted/40 px-2 py-[2px]"
                           >
                             {badge}

@@ -146,19 +146,41 @@ export class FsManagementService {
       return Array.from(candidates).some((item) => item === domainFilter);
     };
 
-    const scopedRegistrations = domainFilter
-      ? registrations.filter((registration) => registrationMatchesDomain(registration))
-      : registrations;
+    const scopedRegistrations = registrations;
 
     const registeredIds = new Map<string, Record<string, any>>();
-    scopedRegistrations.forEach((registration) => {
-      const primary = (registration.user || registration.aor || '').toLowerCase();
-      if (primary) {
-        registeredIds.set(primary, registration);
-        if (primary.includes('@')) {
-          registeredIds.set(primary.split('@')[0], registration);
-        }
+    const registerCandidate = (
+      candidate: string | null,
+      domainKey: string | null,
+      registration: Record<string, any>,
+    ) => {
+      if (!candidate) {
+        return;
       }
+      const normalized = candidate.toLowerCase();
+      if (!normalized) {
+        return;
+      }
+      if (domainKey) {
+        const scopedKey = `${normalized}@${domainKey}`;
+        if (!registeredIds.has(scopedKey)) {
+          registeredIds.set(scopedKey, registration);
+        }
+      } else if (!registeredIds.has(normalized)) {
+        registeredIds.set(normalized, registration);
+      }
+    };
+
+    const normalizedFilterDomain = domainFilter ? domainFilter.trim().toLowerCase() : null;
+
+    scopedRegistrations.forEach((registration) => {
+      const registrationDomain = this.extractRegistrationDomain(registration, normalizedFilterDomain);
+      if (normalizedFilterDomain && registrationDomain && registrationDomain !== normalizedFilterDomain) {
+        return;
+      }
+      const candidates = this.extractRegistrationCandidates(registration);
+      const domainKey = normalizedFilterDomain ?? registrationDomain ?? null;
+      candidates.forEach((candidate) => registerCandidate(candidate, domainKey, registration));
     });
 
     let extensionPresence: Array<Record<string, any>> = [];
@@ -172,7 +194,18 @@ export class FsManagementService {
       extensionPresence = extensions
         .map((extension) => {
         const normalizedId = extension.id.toLowerCase();
-        const match = registeredIds.get(normalizedId) || null;
+        const extensionDomainKey = extension.tenantDomain
+          ? extension.tenantDomain.toLowerCase()
+          : domainFilter?.toLowerCase() ?? null;
+        let match: Record<string, any> | null = null;
+        if (normalizedFilterDomain) {
+          match = registeredIds.get(`${normalizedId}@${normalizedFilterDomain}`) || null;
+        } else if (extensionDomainKey) {
+          match = registeredIds.get(`${normalizedId}@${extensionDomainKey}`) || null;
+        }
+        if (!match) {
+          match = registeredIds.get(normalizedId) || null;
+        }
         return {
           id: extension.id,
           tenantId: extension.tenantId,
@@ -358,6 +391,63 @@ export class FsManagementService {
     const withoutParams = cleaned.split(/[;>]/)[0];
     const base = withoutParams.includes('@') ? withoutParams.split('@')[0] : withoutParams;
     return base || null;
+  }
+
+  private extractDomainFromUri(value: unknown): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) {
+      return null;
+    }
+    const cleaned = raw.replace(/^<sip:/, '').replace(/^sip:/, '').replace(/>$/, '');
+    const withoutParams = cleaned.split(/[;>]/)[0];
+    if (!withoutParams.includes('@')) {
+      return null;
+    }
+    const domainPart = withoutParams.split('@')[1] ?? '';
+    if (!domainPart) {
+      return null;
+    }
+    return domainPart.split(':')[0] || null;
+  }
+
+  private extractRegistrationDomain(registration: Record<string, any>, fallback?: string | null): string | null {
+    const prioritized = [
+      typeof registration.realm === 'string' ? registration.realm.trim().toLowerCase() : null,
+      this.extractDomainFromUri(registration.aor),
+      this.extractDomainFromUri(registration.contact),
+      this.extractDomainFromUri(registration.user),
+      typeof registration.host === 'string' ? registration.host.trim().toLowerCase() : null,
+    ];
+    const normalizedFallback = fallback ? fallback.toLowerCase() : null;
+
+    if (normalizedFallback) {
+      for (const candidate of prioritized) {
+        if (candidate && candidate === normalizedFallback) {
+          return normalizedFallback;
+        }
+      }
+    }
+
+    for (const candidate of prioritized) {
+      if (candidate) {
+        return candidate.split(':')[0];
+      }
+    }
+    return normalizedFallback;
+  }
+
+  private extractRegistrationCandidates(registration: Record<string, any>): string[] {
+    const values = new Set<string>();
+    [registration.user, registration.aor, registration.contact].forEach((value) => {
+      const normalized = this.normalizeExtensionValue(value);
+      if (normalized) {
+        values.add(normalized);
+      }
+    });
+    return Array.from(values.values());
   }
 
   async rescanProfile(profile: string): Promise<void> {
