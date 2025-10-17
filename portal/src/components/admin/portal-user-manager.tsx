@@ -30,6 +30,7 @@ import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import { Loader2, PencilLine, PlusCircle, RefreshCw, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface PortalUserManagerProps {
   initialUsers: PaginatedResult<PortalUserSummary>;
@@ -275,10 +276,6 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
   const [search, setSearch] = useState<string>("");
   const [page, setPage] = useState<number>(initialUsers.page || 1);
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState<{ error: string | null; success: string | null }>({
-    error: null,
-    success: null,
-  });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const [formState, setFormState] = useState<PortalUserFormState>(() => ({
@@ -354,6 +351,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
       } catch (error) {
         if (!cancelled) {
           setTenantError((error as Error).message || "Không thể tải danh sách tenant");
+          displayError(error, "Không thể tải danh sách tenant");
         }
       } finally {
         if (!cancelled) {
@@ -373,7 +371,6 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         return;
       }
       setLoading(true);
-      setFeedback((prev) => ({ ...prev, error: null }));
       try {
         const params = new URLSearchParams({
           page: String(Math.max(1, targetPage)),
@@ -395,10 +392,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         setData(payload);
         setPage(payload.page);
       } catch (error) {
-        setFeedback({
-          error: (error as Error).message || "Không thể tải danh sách người dùng",
-          success: null,
-        });
+        displayError(error, "Không thể tải danh sách người dùng");
       } finally {
         setLoading(false);
       }
@@ -546,7 +540,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
 
     if (dialogMode === "create") {
       if (!formState.password || formState.password.trim().length < 6) {
-        setFeedback({ error: "Mật khẩu phải có ít nhất 6 ký tự", success: null });
+        displayWarning("Mật khẩu phải có ít nhất 6 ký tự");
         return;
       }
       payload.password = formState.password.trim();
@@ -555,7 +549,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
     if (isSuperAdminUser) {
       if (formState.role === "tenant_admin") {
         if (formState.tenantIds.length === 0) {
-          setFeedback({ error: "Tenant admin cần được gán ít nhất một tenant", success: null });
+          displayWarning("Tenant admin cần được gán ít nhất một tenant");
           return;
         }
         payload.tenantIds = formState.tenantIds;
@@ -566,14 +560,13 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
       }
     } else {
       if (formState.tenantIds.length === 0) {
-        setFeedback({ error: "Bạn phải gán ít nhất một tenant", success: null });
+        displayWarning("Bạn phải gán ít nhất một tenant");
         return;
       }
       payload.tenantIds = formState.tenantIds;
     }
 
     setSaving(true);
-    setFeedback({ error: null, success: null });
 
     try {
       const url = dialogMode === "create" ? `${apiBase}/portal-users` : `${apiBase}/portal-users/${activeUser?.id}`;
@@ -592,10 +585,9 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
 
       const saved = (await response.json()) as PortalUserSummary;
       setDialogOpen(false);
-      setFeedback({
-        error: null,
-        success: dialogMode === "create" ? "Đã tạo người dùng portal thành công" : "Đã cập nhật thông tin người dùng",
-      });
+      displaySuccess(
+        dialogMode === "create" ? "Đã tạo người dùng portal thành công" : "Đã cập nhật thông tin người dùng",
+      );
       resetFormState();
       if (dialogMode === "create") {
         await fetchUsers(1, search);
@@ -606,7 +598,7 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         }
       }
     } catch (error) {
-      setFeedback({ error: (error as Error).message || "Không thể lưu người dùng", success: null });
+      displayError(error, "Không thể lưu người dùng");
     } finally {
       setSaving(false);
     }
@@ -618,16 +610,15 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
       return;
     }
     if (!passwordForm.password || passwordForm.password.trim().length < 6) {
-      setFeedback({ error: "Mật khẩu mới phải có ít nhất 6 ký tự", success: null });
+      displayWarning("Mật khẩu mới phải có ít nhất 6 ký tự");
       return;
     }
     if (passwordForm.password !== passwordForm.confirmPassword) {
-      setFeedback({ error: "Xác nhận mật khẩu không khớp", success: null });
+      displayWarning("Xác nhận mật khẩu không khớp");
       return;
     }
 
     setResetting(true);
-    setFeedback({ error: null, success: null });
     try {
       const response = await fetch(`${apiBase}/portal-users/${passwordTarget.id}/reset-password`, {
         method: "POST",
@@ -639,14 +630,14 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
         throw new Error(await extractErrorMessage(response));
       }
       const updated = (await response.json()) as PortalUserSummary;
-      setFeedback({ error: null, success: "Đã đặt lại mật khẩu thành công" });
+      displaySuccess("Đã đặt lại mật khẩu thành công");
       setPasswordDialogOpen(false);
       setPasswordForm(defaultPasswordForm);
       if (currentUserMeta && updated.id === currentUserMeta.id) {
         updatePortalUserCookie(updated);
       }
     } catch (error) {
-      setFeedback({ error: (error as Error).message || "Không thể đặt lại mật khẩu", success: null });
+      displayError(error, "Không thể đặt lại mật khẩu");
     } finally {
       setResetting(false);
     }
@@ -662,7 +653,6 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
     }
 
     setDeletingId(user.id);
-    setFeedback({ error: null, success: null });
     try {
       const response = await fetch(`${apiBase}/portal-users/${user.id}`, {
         method: "DELETE",
@@ -672,14 +662,14 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
       if (!response.ok) {
         throw new Error(await extractErrorMessage(response));
       }
-      setFeedback({ error: null, success: "Đã xoá tài khoản portal" });
+      displaySuccess("Đã xoá tài khoản portal");
       if (data.items.length === 1 && page > 1) {
         await fetchUsers(page - 1, search);
       } else {
         await fetchUsers(page, search);
       }
     } catch (error) {
-      setFeedback({ error: (error as Error).message || "Không thể xoá tài khoản", success: null });
+      displayError(error, "Không thể xoá tài khoản");
     } finally {
       setDeletingId(null);
     }
@@ -736,16 +726,6 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {feedback.error ? (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {feedback.error}
-            </div>
-          ) : null}
-          {feedback.success ? (
-            <div className="rounded-xl border border-emerald-300/40 bg-emerald-100/20 px-4 py-3 text-sm text-emerald-700">
-              {feedback.success}
-            </div>
-          ) : null}
           <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/60">
             <Table>
               <TableHeader>
@@ -890,7 +870,6 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
           setDialogOpen(open);
           if (!open) {
             resetFormState();
-            setFeedback((prev) => ({ ...prev, error: null }));
           }
         }}
       >

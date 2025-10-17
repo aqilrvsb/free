@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { displayError, displaySuccess } from "@/lib/toast";
 
 interface RecordingStorageSettingsProps {
   initialConfig: RecordingStorageConfig;
@@ -31,8 +32,6 @@ export function RecordingStorageSettings({ initialConfig }: RecordingStorageSett
     bucketName: initialConfig.aws?.bucketName ?? "",
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const isCdnMode = mode === "cdn";
 
@@ -43,8 +42,6 @@ export function RecordingStorageSettings({ initialConfig }: RecordingStorageSett
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
-    setError(null);
-    setSuccess(null);
 
     try {
       const payload: RecordingStorageConfig = { mode };
@@ -106,15 +103,11 @@ export function RecordingStorageSettings({ initialConfig }: RecordingStorageSett
         });
       }
 
-      setSuccess("Đã lưu cấu hình lưu trữ ghi âm.");
+      displaySuccess("Đã lưu cấu hình lưu trữ ghi âm.");
       router.refresh();
     } catch (err) {
       console.error("Failed to update recording storage", err);
-      if (err instanceof Error && err.message) {
-        setError(err.message);
-      } else {
-        setError("Không thể lưu cấu hình. Vui lòng kiểm tra log.");
-      }
+      displayError(err, "Không thể lưu cấu hình. Vui lòng kiểm tra log.");
     } finally {
       setLoading(false);
     }
@@ -259,9 +252,6 @@ export function RecordingStorageSettings({ initialConfig }: RecordingStorageSett
           ) : null}
         </div>
       ) : null}
-
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
 
       <div className="flex justify-end">
         <Button type="submit" disabled={loading}>

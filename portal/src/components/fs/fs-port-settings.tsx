@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { resolveClientBaseUrl } from "@/lib/browser";
 import { buildAuthHeaders } from "@/lib/client-auth";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface FsPortSettingsProps {
   initialConfig: FsPortConfig;
@@ -89,8 +90,6 @@ export function FsPortSettings({ initialConfig }: FsPortSettingsProps) {
   });
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [requiresRestart, setRequiresRestart] = useState(false);
 
   const handleChange = (field: FieldKey, value: string) => {
@@ -116,8 +115,6 @@ export function FsPortSettings({ initialConfig }: FsPortSettingsProps) {
     if (!apiBase) return;
 
     setLoading(true);
-    setError(null);
-    setSuccess(null);
     setRequiresRestart(false);
 
     try {
@@ -153,15 +150,14 @@ export function FsPortSettings({ initialConfig }: FsPortSettingsProps) {
         internalWssPort: String(result.internalWssPort),
       });
       setRequiresRestart(result.requiresRestart);
-      setSuccess(result.applied ? "Đã áp dụng cấu hình port cho FreeSWITCH." : "Đã lưu cấu hình port.");
+      displaySuccess(result.applied ? "Đã áp dụng cấu hình port cho FreeSWITCH." : "Đã lưu cấu hình port.");
+      if (result.requiresRestart) {
+        displayWarning("Cần khởi động lại FreeSWITCH để áp dụng hoàn toàn cấu hình port.");
+      }
       router.refresh();
     } catch (err) {
       console.error("Failed to update FS port config", err);
-      if (err instanceof Error && err.message) {
-        setError(err.message);
-      } else {
-        setError("Không thể lưu cấu hình. Vui lòng kiểm tra log.");
-      }
+      displayError(err, "Không thể lưu cấu hình. Vui lòng kiểm tra log.");
     } finally {
       setLoading(false);
     }
@@ -196,19 +192,9 @@ export function FsPortSettings({ initialConfig }: FsPortSettingsProps) {
         ))}
       </div>
 
-      {error ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
-      {success ? (
-        <div className="rounded-md border border-emerald-300/60 bg-emerald-100/40 px-3 py-2 text-sm text-emerald-700">
-          {success}
-          {requiresRestart ? (
-            <span className="block text-xs text-emerald-800/80">
-              Lưu ý: cần khởi động lại container FreeSWITCH để áp dụng hoàn toàn (đặc biệt với Event Socket).
-            </span>
-          ) : null}
+      {requiresRestart ? (
+        <div className="rounded-md border border-amber-300/60 bg-amber-100/30 px-3 py-2 text-sm text-amber-700">
+          Lưu ý: cần khởi động lại container FreeSWITCH để áp dụng hoàn toàn (đặc biệt với Event Socket).
         </div>
       ) : null}
 

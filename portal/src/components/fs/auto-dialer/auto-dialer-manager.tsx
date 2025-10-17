@@ -29,16 +29,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ListChecks, Loader2, Plus, RefreshCw, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface AutoDialerManagerProps {
   initialCampaigns: PaginatedResult<AutoDialerCampaign>;
   tenantOptions: TenantSummary[];
   ivrMenus: IvrMenuSummary[];
-}
-
-interface FeedbackState {
-  success: string | null;
-  error: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -104,7 +100,6 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
 
   const [campaignData, setCampaignData] = useState<PaginatedResult<AutoDialerCampaign>>(initialCampaigns);
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState<FeedbackState>({ success: null, error: null });
   const [tenantFilter, setTenantFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -136,15 +131,12 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
   const [leadInput, setLeadInput] = useState<string>("");
   const [scheduleLimit, setScheduleLimit] = useState<string>("50");
 
-  const resetFeedback = () => setFeedback({ success: null, error: null });
-
   const fetchCampaignPage = useCallback(
     async (page: number = 1) => {
       if (!apiBase) {
         return;
       }
       setLoading(true);
-      resetFeedback();
       try {
         const params = new URLSearchParams({
           page: String(Math.max(1, page)),
@@ -173,7 +165,8 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
           setActiveCampaign(payload.items[0]);
         }
       } catch (error) {
-        setFeedback({ success: null, error: (error as Error).message || "Không thể tải danh sách chiến dịch" });
+        console.error("[auto-dialer] load campaigns thất bại", error);
+        displayError(error, "Không thể tải danh sách chiến dịch");
       } finally {
         setLoading(false);
       }
@@ -249,17 +242,19 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
       if (!apiBase) {
         return;
       }
-      resetFeedback();
+      if (!createForm.tenantId || !createForm.name.trim()) {
+        displayWarning("Vui lòng nhập đầy đủ tenant và tên chiến dịch");
+        return;
+      }
+      if (createForm.dialMode === "ivr" && !createForm.ivrMenuId.trim()) {
+        displayWarning("Chọn IVR cho chế độ IVR");
+        return;
+      }
+      if (createForm.dialMode === "playback" && !createForm.audioUrl.trim()) {
+        displayWarning("Nhập URL âm thanh cho chế độ playback");
+        return;
+      }
       try {
-        if (!createForm.tenantId || !createForm.name.trim()) {
-          throw new Error("Vui lòng nhập đầy đủ tenant và tên chiến dịch");
-        }
-        if (createForm.dialMode === "ivr" && !createForm.ivrMenuId.trim()) {
-          throw new Error("Chọn IVR cho chế độ IVR");
-        }
-        if (createForm.dialMode === "playback" && !createForm.audioUrl.trim()) {
-          throw new Error("Nhập URL âm thanh cho chế độ playback");
-        }
         const payload = {
           tenantId: createForm.tenantId,
           name: createForm.name.trim(),
@@ -292,9 +287,10 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
           retryDelaySeconds: createForm.retryDelaySeconds,
         });
         await fetchCampaignPage(1);
-        setFeedback({ success: "Đã tạo chiến dịch mới", error: null });
+        displaySuccess("Đã tạo chiến dịch mới");
       } catch (error) {
-        setFeedback({ success: null, error: (error as Error).message || "Không thể tạo chiến dịch" });
+        console.error("[auto-dialer] tạo chiến dịch thất bại", error);
+        displayError(error, "Không thể tạo chiến dịch");
       }
     },
     [apiBase, buildHeaders, createForm, fetchCampaignPage],
@@ -306,7 +302,6 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
       if (!apiBase || !selectedCampaign) {
         return;
       }
-      resetFeedback();
       try {
         const numbers = Array.from(
           new Set(
@@ -317,7 +312,8 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
           ),
         );
         if (!numbers.length) {
-          throw new Error("Nhập ít nhất một số điện thoại");
+          displayWarning("Nhập ít nhất một số điện thoại");
+          return;
         }
         const payload = {
           leads: numbers.map((phone) => ({ phoneNumber: phone })),
@@ -333,13 +329,11 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
         const result = (await response.json()) as { inserted: number; duplicates: number };
         setLeadDialogOpen(false);
         setLeadInput("");
-        setFeedback({
-          success: `Đã thêm ${result.inserted} số. Trùng lặp: ${result.duplicates}`,
-          error: null,
-        });
+        displaySuccess(`Đã thêm ${result.inserted} số. Trùng lặp: ${result.duplicates}`);
         await fetchCampaignPage(campaignData.page ?? 1);
       } catch (error) {
-        setFeedback({ success: null, error: (error as Error).message || "Không thể thêm lead" });
+        console.error("[auto-dialer] thêm lead thất bại", error);
+        displayError(error, "Không thể thêm lead");
       }
     },
     [apiBase, selectedCampaign, leadInput, buildHeaders, fetchCampaignPage, campaignData.page],
@@ -351,7 +345,6 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
       if (!apiBase || !selectedCampaign) {
         return;
       }
-      resetFeedback();
       try {
         const limit = Number.parseInt(scheduleLimit, 10) || 50;
         const payload = { limit };
@@ -365,10 +358,11 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
         }
         const result = (await response.json()) as { scheduled: number };
         setScheduleDialogOpen(false);
-        setFeedback({ success: `Đã lên lịch ${result.scheduled} cuộc gọi`, error: null });
+        displaySuccess(`Đã lên lịch ${result.scheduled} cuộc gọi`);
         await fetchCampaignPage(campaignData.page ?? 1);
       } catch (error) {
-        setFeedback({ success: null, error: (error as Error).message || "Không thể lên lịch" });
+        console.error("[auto-dialer] lên lịch thất bại", error);
+        displayError(error, "Không thể lên lịch");
       }
     },
     [apiBase, selectedCampaign, scheduleLimit, buildHeaders, fetchCampaignPage, campaignData.page],
@@ -440,17 +434,6 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
           </Button>
         </div>
       </div>
-
-      {feedback.error ? (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {feedback.error}
-        </div>
-      ) : null}
-      {feedback.success ? (
-        <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600">
-          {feedback.success}
-        </div>
-      ) : null}
 
       <Card className="rounded-[28px] border border-border/60 bg-card/90 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between gap-2">

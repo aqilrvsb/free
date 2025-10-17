@@ -9,6 +9,7 @@ import { apiFetch } from "@/lib/api";
 import type { BillingChargeRecord } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface BillingChargesManagerProps {
   tenantId: string;
@@ -42,7 +43,6 @@ export function BillingChargesManager({
   const [charges, setCharges] = useState<BillingChargeRecord[]>(initialCharges);
   const [amount, setAmount] = useState("0");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingAmount, setEditingAmount] = useState("0");
@@ -64,11 +64,10 @@ export function BillingChargesManager({
     if (disabled) return;
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setStatus("Số tiền phải lớn hơn 0");
+      displayWarning("Số tiền phải lớn hơn 0");
       return;
     }
     setLoading(true);
-    setStatus(null);
     try {
       const { balanceAmount, ...created } = (await apiFetch<BillingChargeRecord & {
         balanceAmount?: number;
@@ -88,10 +87,10 @@ export function BillingChargesManager({
         onBalanceChange?.(balanceAmount);
       }
       resetForm();
-      setStatus("Đã thêm phí phát sinh");
+      displaySuccess("Đã thêm phí phát sinh");
     } catch (error) {
       console.error("Failed to create charge", error);
-      setStatus("Không thể thêm phí phát sinh");
+      displayError(error, "Không thể thêm phí phát sinh");
     } finally {
       setLoading(false);
     }
@@ -104,7 +103,6 @@ export function BillingChargesManager({
     setEditingId(record.id);
     setEditingAmount(String(record.amount));
     setEditingDescription(record.description ?? "");
-    setStatus(null);
   };
 
   const cancelEdit = () => {
@@ -118,11 +116,10 @@ export function BillingChargesManager({
     if (!editingId || disabled) return;
     const numericAmount = Number(editingAmount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setStatus("Số tiền phải lớn hơn 0");
+      displayWarning("Số tiền phải lớn hơn 0");
       return;
     }
     setLoading(true);
-    setStatus(null);
     try {
       const { balanceAmount, ...updated } = (await apiFetch<BillingChargeRecord & {
         balanceAmount?: number;
@@ -141,11 +138,11 @@ export function BillingChargesManager({
       if (typeof balanceAmount === "number") {
         onBalanceChange?.(balanceAmount);
       }
-      setStatus("Đã cập nhật phí phát sinh");
+      displaySuccess("Đã cập nhật phí phát sinh");
       cancelEdit();
     } catch (error) {
       console.error("Failed to update charge", error);
-      setStatus("Không thể cập nhật phí phát sinh");
+      displayError(error, "Không thể cập nhật phí phát sinh");
     } finally {
       setLoading(false);
     }
@@ -157,7 +154,6 @@ export function BillingChargesManager({
       return;
     }
     setLoading(true);
-    setStatus(null);
     try {
       const payload = await apiFetch<{ success: boolean; balanceAmount?: number }>(`/billing/charges/${id}`, {
         method: "DELETE",
@@ -173,10 +169,10 @@ export function BillingChargesManager({
       if (typeof payload.balanceAmount === "number") {
         onBalanceChange?.(payload.balanceAmount);
       }
-      setStatus("Đã xoá phí phát sinh");
+      displaySuccess("Đã xoá phí phát sinh");
     } catch (error) {
       console.error("Failed to delete charge", error);
-      setStatus("Không thể xoá phí phát sinh");
+      displayError(error, "Không thể xoá phí phát sinh");
     } finally {
       setLoading(false);
     }
@@ -215,7 +211,6 @@ export function BillingChargesManager({
               <Button type="submit" disabled={loading || disabled}>
                 {loading ? "Đang xử lý..." : "Thêm phí"}
               </Button>
-              {status ? <span className="text-xs text-muted-foreground">{status}</span> : null}
             </div>
           </form>
         </CardContent>

@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { displayError, displaySuccess } from "@/lib/toast";
 
 interface BillingConfigFormProps {
   tenantId: string;
@@ -32,7 +33,6 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
   const [taxPercent, setTaxPercent] = useState(String(config.taxPercent ?? 0));
   const [billingEmail, setBillingEmail] = useState(config.billingEmail ?? "");
   const [prepaidEnabled, setPrepaidEnabled] = useState(config.prepaidEnabled);
-  const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -64,7 +64,6 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
     event.preventDefault();
     if (readOnly) return;
     setLoading(true);
-    setStatus(null);
     try {
       const payload = {
         currency: currency.trim() || "VND",
@@ -91,10 +90,10 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
         setPrepaidEnabled(updated.prepaidEnabled);
         onPrepaidChange?.(updated.prepaidEnabled);
       }
-      setStatus("Đã lưu cấu hình billing");
+      displaySuccess("Đã lưu cấu hình billing");
     } catch (error) {
       console.error("Failed to save billing config", error);
-      setStatus("Không thể lưu cấu hình billing");
+      displayError(error, "Không thể lưu cấu hình billing");
     } finally {
       setLoading(false);
     }
@@ -209,8 +208,6 @@ export function BillingConfigForm({ tenantId, config, balance, onPrepaidChange, 
         </Button>
         {readOnly ? (
           <span className="text-xs text-muted-foreground">Bạn chỉ có quyền xem cấu hình billing.</span>
-        ) : status ? (
-          <span className="text-xs text-muted-foreground">{status}</span>
         ) : null}
       </div>
     </form>

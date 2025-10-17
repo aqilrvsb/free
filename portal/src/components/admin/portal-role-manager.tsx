@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PlusCircle, PencilLine, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface PortalRoleManagerProps {
   initialRoles: PortalRoleSummary[];
@@ -100,10 +101,6 @@ export function PortalRoleManager({ initialRoles }: PortalRoleManagerProps) {
   const [formState, setFormState] = useState<RoleFormState>(defaultRoleForm);
   const [saving, setSaving] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ error: string | null; success: string | null }>({
-    error: null,
-    success: null,
-  });
 
   const token = useMemo(() => getPortalToken(), []);
 
@@ -180,14 +177,13 @@ export function PortalRoleManager({ initialRoles }: PortalRoleManagerProps) {
 
     if (dialogMode === "create") {
       if (!formState.key.trim()) {
-        setFeedback({ error: "Vui lòng nhập mã role", success: null });
+        displayWarning("Vui lòng nhập mã role");
         return;
       }
       body.key = formState.key.trim().toLowerCase();
     }
 
     setSaving(true);
-    setFeedback({ error: null, success: null });
 
     try {
       const url =
@@ -207,10 +203,7 @@ export function PortalRoleManager({ initialRoles }: PortalRoleManagerProps) {
       }
       const saved = (await response.json()) as PortalRoleSummary;
       setDialogOpen(false);
-      setFeedback({
-        error: null,
-        success: dialogMode === "create" ? "Đã tạo role mới" : "Đã cập nhật role",
-      });
+      displaySuccess(dialogMode === "create" ? "Đã tạo role mới" : "Đã cập nhật role");
       setRoles((prev) => {
         const map = new Map(prev.map((role) => [role.key, role] as const));
         map.set(saved.key, saved);
@@ -218,7 +211,7 @@ export function PortalRoleManager({ initialRoles }: PortalRoleManagerProps) {
       });
       resetForm();
     } catch (error) {
-      setFeedback({ error: (error as Error).message || "Không thể lưu role", success: null });
+      displayError(error, "Không thể lưu role");
     } finally {
       setSaving(false);
     }
@@ -254,7 +247,6 @@ export function PortalRoleManager({ initialRoles }: PortalRoleManagerProps) {
       return;
     }
     setDeletingKey(role.key);
-    setFeedback({ error: null, success: null });
     try {
       const response = await fetch(`${apiBase}/portal-roles/${encodeURIComponent(role.key)}`, {
         method: "DELETE",
@@ -265,9 +257,9 @@ export function PortalRoleManager({ initialRoles }: PortalRoleManagerProps) {
         throw new Error(await extractErrorMessage(response));
       }
       setRoles((prev) => prev.filter((item) => item.key !== role.key));
-      setFeedback({ error: null, success: "Đã xoá role" });
+      displaySuccess("Đã xoá role");
     } catch (error) {
-      setFeedback({ error: (error as Error).message || "Không thể xoá role", success: null });
+      displayError(error, "Không thể xoá role");
     } finally {
       setDeletingKey(null);
     }
@@ -287,16 +279,6 @@ export function PortalRoleManager({ initialRoles }: PortalRoleManagerProps) {
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        {feedback.error ? (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {feedback.error}
-          </div>
-        ) : null}
-        {feedback.success ? (
-          <div className="rounded-xl border border-emerald-300/40 bg-emerald-100/20 px-4 py-3 text-sm text-emerald-700">
-            {feedback.success}
-          </div>
-        ) : null}
         <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/60">
           <Table>
             <TableHeader>

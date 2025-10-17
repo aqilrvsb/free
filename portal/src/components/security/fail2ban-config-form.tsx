@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buildAuthHeaders } from "@/lib/client-auth";
 import { resolveClientBaseUrl } from "@/lib/browser";
+import { displayError, displaySuccess } from "@/lib/toast";
 
 interface Fail2banConfigFormProps {
   initialConfig: Fail2banConfig | null;
@@ -85,7 +86,6 @@ export function Fail2banConfigForm({ initialConfig }: Fail2banConfigFormProps) {
   const apiBase = useMemo(() => resolveClientBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
   const [formState, setFormState] = useState<FormState>(() => buildInitialState(initialConfig));
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
 
   const updateJail = (name: string, updater: (jail: JailFormState) => JailFormState) => {
     setFormState((prev) => ({
@@ -131,7 +131,6 @@ export function Fail2banConfigForm({ initialConfig }: Fail2banConfigFormProps) {
       return;
     }
     setSaving(true);
-    setFeedback(null);
 
     const payload = {
       global: formState.global,
@@ -191,10 +190,10 @@ export function Fail2banConfigForm({ initialConfig }: Fail2banConfigFormProps) {
       }
       const updated = (await response.json()) as Fail2banConfig;
       setFormState(buildInitialState(updated));
-      setFeedback("Đã lưu cấu hình Fail2Ban.");
+      displaySuccess("Đã lưu cấu hình Fail2Ban.");
     } catch (error) {
       console.error("[fail2ban-config] update failed", error);
-      setFeedback("Không thể lưu cấu hình. Kiểm tra log agent.");
+      displayError(error, "Không thể lưu cấu hình. Kiểm tra log agent.");
     } finally {
       setSaving(false);
     }
@@ -343,10 +342,6 @@ export function Fail2banConfigForm({ initialConfig }: Fail2banConfigFormProps) {
               {saving ? "Đang lưu..." : "Lưu cấu hình"}
             </Button>
           </div>
-
-          {feedback ? (
-            <p className="text-sm text-muted-foreground">{feedback}</p>
-          ) : null}
         </form>
       </CardContent>
     </Card>

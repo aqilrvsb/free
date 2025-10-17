@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface BillingTopupHistoryProps {
   tenantId: string;
@@ -46,7 +47,6 @@ export function BillingTopupHistory({
   const [editing, setEditing] = useState(false);
   const [editAmount, setEditAmount] = useState("0");
   const [editNote, setEditNote] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const sortedRecords = useMemo(
@@ -85,7 +85,6 @@ export function BillingTopupHistory({
       return;
     }
     resetEditing();
-    setStatus(null);
     setEditing(true);
   };
 
@@ -101,11 +100,10 @@ export function BillingTopupHistory({
     }
     const numericAmount = Number(editAmount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setStatus("Số tiền nạp phải lớn hơn 0");
+      displayWarning("Số tiền nạp phải lớn hơn 0");
       return;
     }
     setLoading(true);
-    setStatus(null);
     try {
       const payload = {
         amount: numericAmount,
@@ -128,11 +126,11 @@ export function BillingTopupHistory({
           console.error("[BillingTopupHistory] Không thể tải lại danh sách nạp quỹ", error);
         }
       }
-      setStatus("Đã cập nhật giao dịch nạp quỹ gần nhất.");
+      displaySuccess("Đã cập nhật giao dịch nạp quỹ gần nhất.");
       setEditing(false);
     } catch (error) {
       console.error("Failed to update topup", error);
-      setStatus("Không thể cập nhật giao dịch nạp quỹ.");
+      displayError(error, "Không thể cập nhật giao dịch nạp quỹ.");
     } finally {
       setLoading(false);
     }
@@ -146,7 +144,6 @@ export function BillingTopupHistory({
       return;
     }
     setLoading(true);
-    setStatus(null);
     try {
       const result = await apiFetch<{ success: boolean; balanceAmount?: number }>(`/billing/topup/${tenantId}`, {
         method: "DELETE",
@@ -164,10 +161,10 @@ export function BillingTopupHistory({
           console.error("[BillingTopupHistory] Không thể tải lại danh sách nạp quỹ", error);
         }
       }
-      setStatus("Đã xoá giao dịch nạp quỹ gần nhất.");
+      displaySuccess("Đã xoá giao dịch nạp quỹ gần nhất.");
     } catch (error) {
       console.error("Failed to delete topup", error);
-      setStatus("Không thể xoá giao dịch nạp quỹ.");
+      displayError(error, "Không thể xoá giao dịch nạp quỹ.");
     } finally {
       setLoading(false);
       setEditing(false);
@@ -177,12 +174,11 @@ export function BillingTopupHistory({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Lịch sử nạp quỹ</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {status ? <p className="text-xs text-muted-foreground">{status}</p> : null}
-        {sortedRecords.length === 0 ? (
-          <p className="text-muted-foreground">Chưa có giao dịch nạp quỹ nào.</p>
+      <CardTitle>Lịch sử nạp quỹ</CardTitle>
+    </CardHeader>
+    <CardContent className="space-y-3 text-sm">
+      {sortedRecords.length === 0 ? (
+        <p className="text-muted-foreground">Chưa có giao dịch nạp quỹ nào.</p>
         ) : (
           sortedRecords.map((record, index) => {
             const isLatest = index === 0;

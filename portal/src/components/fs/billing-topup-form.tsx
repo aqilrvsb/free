@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
 interface BillingTopupFormProps {
   tenantId: string;
@@ -15,7 +16,6 @@ interface BillingTopupFormProps {
 
 export function BillingTopupForm({ tenantId, currency, disabled = false, onSuccess }: BillingTopupFormProps) {
   const [amount, setAmount] = useState("0");
-  const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const formatCurrency = (value: number) => {
@@ -35,11 +35,10 @@ export function BillingTopupForm({ tenantId, currency, disabled = false, onSucce
     if (disabled) return;
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setStatus("Số tiền nạp phải lớn hơn 0");
+      displayWarning("Số tiền nạp phải lớn hơn 0");
       return;
     }
     setLoading(true);
-    setStatus(null);
     try {
       const payload = await apiFetch<{ balanceAmount?: number }>("/billing/topup", {
         method: "POST",
@@ -51,11 +50,11 @@ export function BillingTopupForm({ tenantId, currency, disabled = false, onSucce
       if (onSuccess) {
         onSuccess(payload.balanceAmount ?? 0);
       }
-      setStatus(`Đã nạp ${formatCurrency(numericAmount)} cho tenant.`);
+      displaySuccess(`Đã nạp ${formatCurrency(numericAmount)} cho tenant.`);
       setAmount("0");
     } catch (error) {
       console.error("Failed to topup", error);
-      setStatus("Không thể nạp quỹ. Vui lòng thử lại.");
+      displayError(error, "Không thể nạp quỹ. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -78,7 +77,6 @@ export function BillingTopupForm({ tenantId, currency, disabled = false, onSucce
         <Button type="submit" disabled={loading || disabled}>
           {loading ? "Đang nạp..." : "Nạp quỹ"}
         </Button>
-        {status ? <span className="text-xs text-muted-foreground">{status}</span> : null}
       </div>
     </form>
   );
