@@ -346,6 +346,8 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
   const filterStateRef = useRef({ status: statusFilter, search: searchTerm.trim() });
   const socketRef = useRef<Socket | null>(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSnapshotAtRef = useRef<number>(Date.now());
+  const MIN_REFRESH_INTERVAL = 2000;
   const normalizedDomain = useMemo(
     () => (typeof domain === "string" && domain.trim().length > 0 ? domain.trim().toLowerCase() : null),
     [domain],
@@ -390,10 +392,20 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
     }
   }, [apiBase, wsBase]);
 
-  const fetchSnapshot = useCallback(async () => {
+  const fetchSnapshot = useCallback(async (force = false) => {
     if (!apiBase) {
       return;
     }
+    const now = Date.now();
+    if (!force) {
+      if (isRefreshingRef.current) {
+        return;
+      }
+      if (now - lastSnapshotAtRef.current < MIN_REFRESH_INTERVAL) {
+        return;
+      }
+    }
+    lastSnapshotAtRef.current = now;
     setIsRefreshing(true);
     try {
       const params = new URLSearchParams();
@@ -421,14 +433,16 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
         normalizedDomain,
       );
       setSnapshot(nextSnapshot);
+      lastSnapshotAtRef.current = Date.now();
     } catch (error) {
       console.error("Failed to refresh registrations", error);
+      lastSnapshotAtRef.current = Date.now();
     } finally {
       setIsRefreshing(false);
     }
-  }, [apiBase, normalizedDomain, profile, searchTerm, statusFilter]);
+  }, [MIN_REFRESH_INTERVAL, apiBase, normalizedDomain, profile, searchTerm, statusFilter]);
 
-  const fetchSnapshotRef = useRef<(() => Promise<void>) | null>(null);
+  const fetchSnapshotRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
 
   useEffect(() => {
     fetchSnapshotRef.current = fetchSnapshot;
@@ -443,6 +457,10 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
   }, [statusFilter, searchTerm]);
 
   const scheduleRefresh = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSnapshotAtRef.current < MIN_REFRESH_INTERVAL) {
+      return;
+    }
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
     }
@@ -452,7 +470,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
         void fetchSnapshotRef.current();
       }
     }, 350);
-  }, []);
+  }, [MIN_REFRESH_INTERVAL]);
 
   useEffect(() => {
     return () => {
@@ -478,7 +496,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
   }, []);
 
   useEffect(() => {
-    void fetchSnapshot();
+    void fetchSnapshot(true);
   }, [fetchSnapshot]);
 
   useEffect(() => {
@@ -492,8 +510,7 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
       withCredentials: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
-      upgrade: false,
-      transports: ['polling'],
+      transports: ['websocket', 'polling'],
       auth: authToken ? { token: authToken } : undefined,
       query: authToken ? { token: authToken } : undefined,
     });
