@@ -1,15 +1,25 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentEntity, TenantEntity, UserEntity } from '../entities';
+import { ConfigService } from '@nestjs/config';
 import { CreateExternalExtensionDto, ExternalExtensionResponseDto, UpdateExternalExtensionDto } from './dto';
+import { ModuleRef } from '@nestjs/core';
+import { FsManagementService } from '../freeswitch/fs-management.service';
 
 @Injectable()
 export class ExternalExtensionsService {
+  private readonly logger = new Logger(ExternalExtensionsService.name);
+  private sofiaStatusCache: { timestamp: number; profiles: Record<string, any> } | null = null;
+  private readonly SOFIA_CACHE_TTL_MS = 15_000;
+  private fsManagementServiceRef: FsManagementService | null = null;
+
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(TenantEntity) private readonly tenantRepo: Repository<TenantEntity>,
     @InjectRepository(AgentEntity) private readonly agentRepo: Repository<AgentEntity>,
+    private readonly configService: ConfigService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   async createExtension(dto: CreateExternalExtensionDto): Promise<ExternalExtensionResponseDto> {
@@ -158,9 +168,11 @@ export class ExternalExtensionsService {
     return Math.random().toString(36).slice(-12);
   }
 
-  private buildResponse(extension: UserEntity, tenant?: TenantEntity | null): ExternalExtensionResponseDto {
+  private async buildResponse(extension: UserEntity, tenant?: TenantEntity | null): Promise<ExternalExtensionResponseDto> {
     const createdAt = extension.createdAt instanceof Date ? extension.createdAt.toISOString() : new Date().toISOString();
     const updatedAt = extension.updatedAt instanceof Date ? extension.updatedAt.toISOString() : createdAt;
+    const domain = tenant?.domain?.trim()?.toLowerCase() || null;
+    const proxy = await this.resolveOutboundProxy(domain);
 
     return {
       id: extension.id,
@@ -169,8 +181,180 @@ export class ExternalExtensionsService {
       password: extension.password,
       tenantName: tenant?.name ?? null,
       tenantDomain: tenant?.domain ?? null,
+      outboundProxy: proxy,
       createdAt,
       updatedAt,
     };
+  }
+
+  private async resolveOutboundProxy(domain?: string | null): Promise<string | null> {
+    const explicitProxy = this.configService.get<string>('EXTERNAL_EXTENSIONS_PROXY');
+    if (explicitProxy && explicitProxy.trim()) {
+      const cleaned = explicitProxy.trim();
+      return cleaned.toLowerCase().startsWith('sip:') ? cleaned : `sip:${cleaned}`;
+    }
+
+    const externalSipIp = this.configService.get<string>('EXT_SIP_IP');
+    if (externalSipIp) {
+      const cleaned = externalSipIp.trim();
+      const lowered = cleaned.toLowerCase();
+      if (cleaned && lowered !== 'auto' && lowered !== 'auto-nat') {
+        return lowered.startsWith('sip:') ? cleaned : `sip:${cleaned}`;
+      }
+    }
+
+    const profiles = await this.loadSofiaProfiles();
+    if (!profiles) {
+      return null;
+    }
+
+    const preferredKeys: string[] = [];
+    if (domain) {
+      preferredKeys.push(domain.toLowerCase());
+    }
+    preferredKeys.push('internal', 'external');
+
+    for (const key of preferredKeys) {
+      if (!key) {
+        continue;
+      }
+      const profile = profiles[key];
+      const info = profile?.info || {};
+      const candidate = this.pickSipEndpoint(info);
+      if (candidate) {
+        return candidate;
+      }
+      const aliasOf = typeof info['alias-of'] === 'string' ? info['alias-of'].trim().toLowerCase() : null;
+      if (aliasOf) {
+        const aliasInfo = profiles[aliasOf]?.info;
+        const aliasCandidate = this.pickSipEndpoint(aliasInfo || {});
+        if (aliasCandidate) {
+          return aliasCandidate;
+        }
+      }
+    }
+
+    for (const value of Object.values(profiles)) {
+      const candidate = this.pickSipEndpoint((value as any)?.info || {});
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private async loadSofiaProfiles(): Promise<Record<string, any> | null> {
+    const now = Date.now();
+    if (this.sofiaStatusCache && now - this.sofiaStatusCache.timestamp < this.SOFIA_CACHE_TTL_MS) {
+      return this.sofiaStatusCache.profiles;
+    }
+
+    try {
+      const fsSvc = await this.getFsManagementService();
+      if (!fsSvc) {
+        return this.sofiaStatusCache?.profiles ?? null;
+      }
+      const status = await fsSvc.getSofiaStatus();
+      const profiles = (status?.parsed?.profiles as Record<string, any>) || null;
+      if (profiles) {
+        this.sofiaStatusCache = { timestamp: now, profiles };
+      }
+      return profiles;
+    } catch (error) {
+      this.logger.warn(`Unable to load Sofia status: ${error instanceof Error ? error.message : String(error)}`);
+      return this.sofiaStatusCache?.profiles ?? null;
+    }
+  }
+
+  private pickSipEndpoint(info: Record<string, any>): string | null {
+    if (!info || typeof info !== 'object') {
+      return null;
+    }
+    const candidates: string[] = [];
+    const extSip = typeof info['ext-sip-ip'] === 'string' ? info['ext-sip-ip'].trim() : '';
+    const sipIp = typeof info['sip-ip'] === 'string' ? info['sip-ip'].trim() : '';
+    const bindUrl = typeof info['bind-url'] === 'string' ? info['bind-url'].trim() : '';
+    const url = typeof info['url'] === 'string' ? info['url'].trim() : '';
+
+    if (extSip && extSip.toLowerCase() !== 'n/a') {
+      candidates.push(extSip);
+    }
+    if (sipIp && sipIp.toLowerCase() !== 'n/a') {
+      candidates.push(sipIp);
+    }
+    const parsedUrlHost = this.extractHostFromSipUrl(bindUrl) || this.extractHostFromSipUrl(url);
+    if (parsedUrlHost) {
+      candidates.push(parsedUrlHost);
+    }
+
+    for (const candidate of candidates) {
+      const normalized = this.normalizeEndpointHost(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+    return null;
+  }
+
+  private extractHostFromSipUrl(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    const match = value.match(/sip:[^@]+@([^;>/]+)/i);
+    if (match && match[1]) {
+      return match[1];
+    }
+    const direct = value.match(/sip:([^;>/]+)/i);
+    if (direct && direct[1]) {
+      const hostPort = direct[1];
+      const atIndex = hostPort.indexOf('@');
+      if (atIndex >= 0) {
+        return hostPort.slice(atIndex + 1);
+      }
+      return hostPort;
+    }
+    return null;
+  }
+
+  private normalizeEndpointHost(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    let cleaned = value.trim();
+    if (!cleaned) {
+      return null;
+    }
+    cleaned = cleaned.replace(/^<|>$/g, '');
+    if (cleaned.toLowerCase().startsWith('sip:')) {
+      cleaned = cleaned.slice(4);
+    }
+    if (cleaned.includes('@')) {
+      cleaned = cleaned.split('@').pop() || '';
+    }
+    cleaned = cleaned.split(';')[0] || '';
+    const hostOnly = cleaned.split(':')[0]?.trim() || '';
+    if (!hostOnly) {
+      return null;
+    }
+    return hostOnly;
+  }
+
+  private async getFsManagementService(): Promise<FsManagementService | null> {
+    if (this.fsManagementServiceRef) {
+      return this.fsManagementServiceRef;
+    }
+    try {
+      const service = this.moduleRef.get(FsManagementService, { strict: false });
+      if (service) {
+        this.fsManagementServiceRef = service;
+      }
+      return service ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `Unable to resolve FsManagementService: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 }

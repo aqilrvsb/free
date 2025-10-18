@@ -19,6 +19,13 @@ export class ExternalExtensionResponseDto {
   @ApiProperty({ description: 'Domain tenant', example: 'tenant1.local', nullable: true })
   tenantDomain!: string | null;
 
+  @ApiProperty({
+    description: 'Proxy SIP sử dụng để đăng ký (ví dụ SIP IP hoặc domain)',
+    example: 'sip:tenant1.local',
+    nullable: true,
+  })
+  outboundProxy!: string | null;
+
   @ApiProperty({ description: 'Thời điểm tạo (ISO-8601)', example: '2024-07-21T00:12:34.000Z' })
   createdAt!: string;
 

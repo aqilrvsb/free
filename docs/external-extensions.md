@@ -33,6 +33,7 @@ Phản hồi `201 Created`:
   "password": "p@ssW0rd",
   "tenantName": "Tenant One",
   "tenantDomain": "tenant1.local",
+  "outboundProxy": "203.0.113.10"
   "createdAt": "2024-10-16T03:10:53.000Z",
   "updatedAt": "2024-10-16T03:10:53.000Z"
 }
@@ -116,6 +117,7 @@ curl -X DELETE "https://api.example.com/external/extensions/1001?tenantId=tenant
 
 ## Lưu ý
 
+- `outboundProxy` ưu tiên đọc từ biến môi trường `EXTERNAL_EXTENSIONS_PROXY`. Nếu biến này trống, hệ thống sử dụng `EXT_SIP_IP` (khi giá trị không phải `auto/auto-nat`). Trong trường hợp các biến đều thiết lập `auto`, hệ thống đọc trực tiếp IP đang được FreeSWITCH công bố (qua `sofia jsonstatus`). Giá trị được chuẩn hoá về dạng host thuần, ví dụ `42.96.18.238`.
 - Nếu cùng một `id` tồn tại ở nhiều tenant, bắt buộc truyền `tenantId` hoặc `tenantDomain` để xác định chính xác bản ghi.
 - Các lỗi phổ biến:
   * `409 Conflict` – extension đã tồn tại trong tenant
