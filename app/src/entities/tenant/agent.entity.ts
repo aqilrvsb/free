@@ -37,10 +37,7 @@ export class AgentEntity {
   extensionId?: string | null;
 
   @ManyToOne(() => UserEntity, { nullable: true, onDelete: 'RESTRICT' })
-  @JoinColumn([
-    { name: 'extension_id', referencedColumnName: 'id' },
-    { name: 'tenant_id', referencedColumnName: 'tenantId' },
-  ])
+  @JoinColumn({ name: 'extension_id', referencedColumnName: 'id' })
   extension?: UserEntity | null;
 
   @Column({ name: 'group_id', type: 'char', length: 36, nullable: true })
