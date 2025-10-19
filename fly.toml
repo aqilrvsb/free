@@ -1,51 +1,23 @@
-# Fly.io configuration for FreeSWITCH Lab - NestJS App
-# This deploys only the backend API service
-# Note: FreeSWITCH and security-agent require a VPS with host networking
+# fly.toml app configuration file generated for free-a--lma on 2025-10-19T14:58:53Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
 app = 'free-a--lma'
 primary_region = 'sin'
 
 [build]
 
-[env]
-  NODE_ENV = "production"
-  APP_PORT = "3000"
-  TZ = "Asia/Ho_Chi_Minh"
-  DB_PORT = "3306"
-  DB_USER = "fsapp"
-  DB_NAME = "freeswitch"
-  DB_LOGGING = "false"
-  DB_SYNC = "true"
-  SEED_DEMO_DATA = "false"  # Set to true only for initial deployment
-  FS_ESL_PORT = "8021"
-  RECORDINGS_DIR = "/recordings"
-  SECURITY_AGENT_TIMEOUT_MS = "3000"
-
 [http_service]
-  internal_port = 3000
+  internal_port = 8080
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0  # Scale to zero when idle
-
-[[http_service.checks]]
-  grace_period = "10s"
-  interval = "30s"
-  method = "GET"
-  timeout = "5s"
-  path = "/health"
+  min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-
-# You'll need to set these secrets using:
-# fly secrets set DB_HOST=your-mysql-host
-# fly secrets set DB_PASSWORD=your-db-password
-# fly secrets set PORTAL_JWT_SECRET=your-secret-key
-# fly secrets set PORTAL_ADMIN_PASSWORD=your-admin-password
-# fly secrets set FS_ESL_HOST=your-freeswitch-host (if using external FS)
-# fly secrets set FS_ESL_PASSWORD=ClueCon
-# fly secrets set SECURITY_AGENT_URL=http://your-agent-url:9000
-# fly secrets set SECURITY_AGENT_TOKEN=your-token
+  memory_mb = 1024
