@@ -6,7 +6,7 @@ app = 'freeswitch-lab-app'  # Change this to your desired app name
 primary_region = 'sin'  # Change to your preferred region (sin=Singapore, iad=US East, etc.)
 
 [build]
-  dockerfile = "docker/app.Dockerfile"
+  dockerfile = "../docker/app.Dockerfile"
   context = "app"
 
 [env]
