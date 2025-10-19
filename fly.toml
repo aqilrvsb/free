@@ -10,17 +10,20 @@ primary_region = 'sin'
 
 [env]
   APP_PORT = '3000'
+  DB_TYPE = 'postgres'
+  DB_HOST = 'ahexnoaazbveiyhplfrc.supabase.co'
+  DB_PORT = '5432'
+  DB_NAME = 'postgres'
+  DB_USER = 'postgres'
   DB_LOGGING = 'false'
-  DB_NAME = 'freeswitch'
-  DB_PORT = '3306'
-  DB_SYNC = 'true'
-  DB_USER = 'fsapp'
+  DB_SYNC = 'false'
   FS_ESL_PORT = '8021'
   NODE_ENV = 'production'
   RECORDINGS_DIR = '/recordings'
   SECURITY_AGENT_TIMEOUT_MS = '3000'
   SEED_DEMO_DATA = 'false'
-  TZ = 'Asia/Ho_Chi_Minh'
+  TZ = 'Asia/Kuala_Lumpur'
+  SUPABASE_URL = 'https://ahexnoaazbveiyhplfrc.supabase.co'
 
 [http_service]
   internal_port = 3000
