@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Download, Play } from "lucide-react";
 
 interface RecordingsTableProps {
   recordings: RecordingMetadata[];
@@ -94,18 +96,37 @@ export function RecordingsTable({ recordings, apiBaseUrl, storageConfig }: Recor
                   <TableCell>{formatSize(recording.size)}</TableCell>
                   <TableCell>{formatDate(recording.modifiedAt)}</TableCell>
                   <TableCell className="flex items-center justify-end gap-2">
-                    <DialogTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handlePreview(recording)}
-                      >
-                        Nghe
-                      </Button>
-                    </DialogTrigger>
-                    <Button asChild size="sm" variant="outline">
-                      <a href={downloadUrl}>Tải xuống</a>
-                    </Button>
+                    <Tooltip delayDuration={150}>
+                      <TooltipTrigger asChild>
+                        <DialogTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="rounded-full text-muted-foreground hover:text-foreground"
+                            onClick={() => handlePreview(recording)}
+                            aria-label={`Nghe ${recording.name}`}
+                          >
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Nghe ghi âm</TooltipContent>
+                    </Tooltip>
+                    <Tooltip delayDuration={150}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          asChild
+                          size="icon"
+                          variant="ghost"
+                          className="rounded-full text-muted-foreground hover:text-foreground"
+                        >
+                          <a href={downloadUrl} download aria-label={`Tải xuống ${recording.name}`}>
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Tải xuống</TooltipContent>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               );

@@ -26,6 +26,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { displayError, displaySuccess } from "@/lib/toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Loader2, PencilLine, Power, Trash2 } from "lucide-react";
 
 export interface OutboundCallerIdManagerProps {
   tenants: TenantSummary[];
@@ -274,26 +276,63 @@ export function OutboundCallerIdManager({
                       </Badge>
                     </TableCell>
                     <TableCell>{item.label || <span className="text-muted-foreground">-</span>}</TableCell>
-                    <TableCell className="space-x-2 text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void toggleActive(item, !item.active)}
-                        disabled={loading === `toggle-${item.id}`}
-                      >
-                        {item.active ? "Tắt" : "Bật"}
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleOpenEdit(item)}>
-                        Sửa
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => void deleteCallerId(item)}
-                        disabled={loading === `delete-${item.id}`}
-                      >
-                        Xóa
-                      </Button>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => void toggleActive(item, !item.active)}
+                              disabled={loading === `toggle-${item.id}`}
+                              className={`rounded-full ${item.active ? "text-emerald-600 hover:text-emerald-700" : "text-muted-foreground hover:text-emerald-500"}`}
+                              aria-label={item.active ? `Tắt Caller ID ${item.callerIdNumber}` : `Bật Caller ID ${item.callerIdNumber}`}
+                            >
+                              {loading === `toggle-${item.id}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Power className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>
+                            {item.active ? "Tạm tắt Caller ID" : "Kích hoạt Caller ID"}
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-full text-muted-foreground hover:text-foreground"
+                              onClick={() => handleOpenEdit(item)}
+                              aria-label={`Chỉnh sửa ${item.callerIdNumber}`}
+                            >
+                              <PencilLine className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Chỉnh sửa Caller ID</TooltipContent>
+                        </Tooltip>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-full text-destructive hover:text-destructive"
+                              onClick={() => void deleteCallerId(item)}
+                              disabled={loading === `delete-${item.id}`}
+                              aria-label={`Xoá ${item.callerIdNumber}`}
+                            >
+                              {loading === `delete-${item.id}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Xoá Caller ID</TooltipContent>
+                        </Tooltip>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

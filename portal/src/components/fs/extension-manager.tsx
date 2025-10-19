@@ -14,7 +14,8 @@ import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 import Image from "next/image";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import QRCode from "qrcode";
-import { Clipboard, Check } from "lucide-react";
+import { Clipboard, Check, Loader2, PencilLine, QrCode, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ExtensionManagerProps {
   initialExtensions: PaginatedResult<ExtensionSummary>;
@@ -542,7 +543,7 @@ export function ExtensionManager({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="max-h-[420px] overflow-y-auto pr-2">
+          <div className="pr-2">
             {extensionLoading ? (
               <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                 Đang tải extension...
@@ -577,26 +578,59 @@ export function ExtensionManager({
                         <TableCell>{extension.displayName || '-'}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => void openQrDialog(extension)}>
-                          QR
-                        </Button>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="rounded-full text-muted-foreground hover:text-foreground"
+                              onClick={() => void openQrDialog(extension)}
+                              aria-label={`Xem QR cho extension ${extension.id}`}
+                            >
+                              <QrCode className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Xem mã QR</TooltipContent>
+                        </Tooltip>
                         {canManageExtensions ? (
                           <>
-                            <Button size="sm" variant="outline" onClick={() => openEditExtension(extension)}>
-                              Chỉnh sửa
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => void deleteExtension(extension)}
-                              disabled={loading === `extension-delete-${extension.id}`}
-                            >
-                              Xóa
-                            </Button>
+                            <Tooltip delayDuration={150}>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="rounded-full text-muted-foreground hover:text-foreground"
+                                  onClick={() => openEditExtension(extension)}
+                                  aria-label={`Chỉnh sửa extension ${extension.id}`}
+                                >
+                                  <PencilLine className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={6}>Chỉnh sửa extension</TooltipContent>
+                            </Tooltip>
+                            <Tooltip delayDuration={150}>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="rounded-full text-destructive hover:text-destructive"
+                                  onClick={() => void deleteExtension(extension)}
+                                  disabled={loading === `extension-delete-${extension.id}`}
+                                  aria-label={`Xoá extension ${extension.id}`}
+                                >
+                                  {loading === `extension-delete-${extension.id}` ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={6}>Xoá extension</TooltipContent>
+                            </Tooltip>
                           </>
                         ) : null}
                       </div>
-                        </TableCell>
+                    </TableCell>
                       </TableRow>
                     ))
                   )}

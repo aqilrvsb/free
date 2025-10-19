@@ -955,6 +955,7 @@ export class AgentsService {
       groupName: agent.group?.name ?? null,
       portalUserId: agent.portalUserId ?? null,
       portalUserEmail: agent.portalUser?.email ?? null,
+      portalUserDisplayName: agent.portalUser?.displayName ?? null,
       parentAgentId: agent.parentAgentId ?? null,
       parentAgentName: agent.parentAgent?.displayName ?? null,
       kpiTalktimeEnabled: agent.kpiTalktimeEnabled ?? false,

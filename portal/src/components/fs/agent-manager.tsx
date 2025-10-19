@@ -23,7 +23,8 @@ import type {
   TenantLookupItem,
 } from "@/lib/types";
 import { formatDistance } from "date-fns";
-import { Edit2, Plus, RefreshCw, Target, Trash2 } from "lucide-react";
+import { Edit2, Loader2, Plus, RefreshCw, Target, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface AgentManagerProps {
   initialAgents: PaginatedResult<AgentSummary>;
@@ -177,6 +178,7 @@ export function AgentManager({
   const [ownerError, setOwnerError] = useState<string | null>(null);
 
   const [extensionOptions, setExtensionOptions] = useState<ExtensionSummary[]>([]);
+  const [extensionAssignments, setExtensionAssignments] = useState<Record<string, AgentSummary | undefined>>({});
   const [extensionLoading, setExtensionLoading] = useState(false);
   const [extensionError, setExtensionError] = useState<string | null>(null);
 
@@ -436,31 +438,52 @@ export function AgentManager({
     async (tenantId: string | null | undefined) => {
       if (!apiBase || !tenantId) {
         setExtensionOptions([]);
+        setExtensionAssignments({});
         return;
       }
       setExtensionLoading(true);
       setExtensionError(null);
       try {
-        const params = new URLSearchParams({
-          page: "1",
-          pageSize: String(MAX_EXTENSION_FETCH),
-          tenantId,
-        });
-        const response = await fetch(`${apiBase}/extensions?${params.toString()}`, {
-          method: "GET",
-          headers: buildHeaders(),
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          throw new Error(await response.text());
+        const params = new URLSearchParams({ page: "1", pageSize: String(MAX_EXTENSION_FETCH), tenantId });
+        const agentParams = new URLSearchParams({ page: "1", pageSize: String(MAX_AGENT_FETCH), tenantId });
+        const [extensionsResponse, agentsResponse] = await Promise.all([
+          fetch(`${apiBase}/extensions?${params.toString()}`, {
+            method: "GET",
+            headers: buildHeaders(),
+            cache: "no-store",
+          }),
+          fetch(`${apiBase}/agents?${agentParams.toString()}`, {
+            method: "GET",
+            headers: buildHeaders(),
+            cache: "no-store",
+          }),
+        ]);
+        if (!extensionsResponse.ok) {
+          throw new Error(await extensionsResponse.text());
         }
-        const payload = (await response.json()) as PaginatedResult<ExtensionSummary> | ExtensionSummary[];
-        const list = Array.isArray(payload) ? payload : payload.items ?? [];
-        setExtensionOptions(list);
+        const extensionsPayload = (await extensionsResponse.json()) as PaginatedResult<ExtensionSummary> | ExtensionSummary[];
+        const extensionList = Array.isArray(extensionsPayload) ? extensionsPayload : extensionsPayload.items ?? [];
+        setExtensionOptions(extensionList);
+
+        if (agentsResponse.ok) {
+          const agentsPayload = (await agentsResponse.json()) as PaginatedResult<AgentSummary> | AgentSummary[];
+          const agentList = Array.isArray(agentsPayload) ? agentsPayload : agentsPayload.items ?? [];
+          const assignmentMap: Record<string, AgentSummary> = {};
+          agentList.forEach((agent) => {
+            if (agent.extensionId) {
+              assignmentMap[agent.extensionId] = agent;
+            }
+          });
+          setExtensionAssignments(assignmentMap);
+        } else {
+          console.warn("[agents] Unable to fetch agent assignments for extensions");
+          setExtensionAssignments({});
+        }
       } catch (error) {
         console.error("[agents] Failed to fetch extensions", error);
         setExtensionError("Không thể tải danh sách extension");
         setExtensionOptions([]);
+        setExtensionAssignments({});
       } finally {
         setExtensionLoading(false);
       }
@@ -832,10 +855,11 @@ export function AgentManager({
                   <TableHead>Tên agent</TableHead>
                   <TableHead>Tenant</TableHead>
                   <TableHead>Extension</TableHead>
-                  <TableHead>Nhóm</TableHead>
-                  <TableHead>KPI talktime</TableHead>
-                  <TableHead>Cập nhật</TableHead>
-                  {canManageAgents ? <TableHead className="text-right">Thao tác</TableHead> : null}
+          <TableHead>Portal user</TableHead>
+          <TableHead>Nhóm</TableHead>
+          <TableHead>KPI talktime</TableHead>
+          <TableHead>Cập nhật</TableHead>
+          {canManageAgents ? <TableHead className="text-right">Thao tác</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -853,6 +877,15 @@ export function AgentManager({
                               <div className="text-xs text-muted-foreground">{agent.extensionDisplayName}</div>
                             ) : null}
                           </div>
+                        ) : (
+                          <span className="text-muted-foreground">Chưa gán</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {agent.portalUserDisplayName || agent.portalUserEmail ? (
+                          <span className="text-sm font-medium">
+                            {agent.portalUserDisplayName || agent.portalUserEmail}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">Chưa gán</span>
                         )}
@@ -884,19 +917,37 @@ export function AgentManager({
                       </TableCell>
                       {canManageAgents ? (
                         <TableCell className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditAgent(agent)}>
-                            <Edit2 className="mr-1 size-4" />
-                            Sửa
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => void handleDeleteAgent(agent)}
-                            disabled={agentAction === `agent-delete-${agent.id}`}
-                          >
-                            <Trash2 className="mr-1 size-4" />
-                            Xoá
-                          </Button>
+                          <Tooltip delayDuration={150}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-full text-muted-foreground hover:text-foreground"
+                                onClick={() => openEditAgent(agent)}
+                                aria-label={`Sửa ${agent.displayName}`}
+                              >
+                                <Edit2 className="size-4" />
+                                <span className="sr-only">Sửa</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>Chỉnh sửa agent</TooltipContent>
+                          </Tooltip>
+                          <Tooltip delayDuration={150}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-full text-destructive hover:text-destructive"
+                                onClick={() => void handleDeleteAgent(agent)}
+                                disabled={agentAction === `agent-delete-${agent.id}`}
+                                aria-label={`Xoá ${agent.displayName}`}
+                              >
+                                <Trash2 className="size-4" />
+                                <span className="sr-only">Xoá</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>Xoá agent</TooltipContent>
+                          </Tooltip>
                         </TableCell>
                       ) : null}
                     </TableRow>
@@ -904,7 +955,7 @@ export function AgentManager({
                 })}
                 {agentData.items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={canManageAgents ? 7 : 6} className="text-center text-muted-foreground">
+                    <TableCell colSpan={canManageAgents ? 8 : 7} className="text-center text-muted-foreground">
                       Không có agent nào.
                     </TableCell>
                   </TableRow>
@@ -995,17 +1046,39 @@ export function AgentManager({
                     </TableCell>
                     {canManageAgents ? (
                       <TableCell className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openEditGroup(group)}>
-                          <Edit2 className="mr-1 size-4" />Sửa
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => void handleDeleteGroup(group)}
-                          disabled={agentAction === `group-delete-${group.id}`}
-                        >
-                          <Trash2 className="mr-1 size-4" />Xoá
-                        </Button>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-full text-muted-foreground hover:text-foreground"
+                              onClick={() => openEditGroup(group)}
+                              aria-label={`Chỉnh sửa nhóm ${group.name}`}
+                            >
+                              <Edit2 className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Chỉnh sửa nhóm</TooltipContent>
+                        </Tooltip>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-full text-destructive hover:text-destructive"
+                              onClick={() => void handleDeleteGroup(group)}
+                              disabled={agentAction === `group-delete-${group.id}`}
+                              aria-label={`Xoá nhóm ${group.name}`}
+                            >
+                              {agentAction === `group-delete-${group.id}` ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="size-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Xoá nhóm</TooltipContent>
+                        </Tooltip>
                       </TableCell>
                     ) : null}
                   </TableRow>
@@ -1239,9 +1312,43 @@ export function AgentManager({
                 <SelectContent>
                   <SelectItem value={NO_EXTENSION_VALUE}>Không</SelectItem>
                   {extensionOptions.map((extension) => (
-                    <SelectItem key={extension.id} value={extension.id}>
-                      {extension.id}
-                      {extension.displayName ? ` · ${extension.displayName}` : ""}
+                    <SelectItem
+                      key={extension.id}
+                      value={extension.id}
+                      disabled={
+                        (() => {
+                          const assigned = extensionAssignments[extension.id];
+                          if (!assigned) return false;
+                          if (editingAgent && assigned.id === editingAgent.id) {
+                            return false;
+                          }
+                          return true;
+                        })()
+                      }
+                    >
+                      <div className="flex flex-col">
+                        <span>
+                          {extension.id}
+                          {extension.displayName ? ` · ${extension.displayName}` : ""}
+                        </span>
+                        {(() => {
+                          const assigned = extensionAssignments[extension.id];
+                          if (!assigned) {
+                            return null;
+                          }
+                          const isCurrent = editingAgent && assigned.id === editingAgent.id;
+                          return (
+                            <span
+                              className={cn(
+                                "text-xs",
+                                isCurrent ? "text-emerald-600" : "text-muted-foreground",
+                              )}
+                            >
+                              {isCurrent ? "Đang gán cho agent này" : `Đã gán: ${assigned.displayName}`}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ListChecks, Loader2, Plus, RefreshCw, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
@@ -492,22 +493,40 @@ export function AutoDialerManager({ initialCampaigns, tenantOptions, ivrMenus }:
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openLeadDialog(campaign)}
-                      >
-                        <Upload className="mr-2 size-4" />
-                        Thêm lead
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => openScheduleDialog(campaign)}
-                      >
-                        <ListChecks className="mr-2 size-4" />
-                        Lên lịch
-                      </Button>
+                      <Tooltip delayDuration={150}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="rounded-full text-muted-foreground hover:text-foreground"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openLeadDialog(campaign);
+                            }}
+                            aria-label={`Thêm lead cho ${campaign.name}`}
+                          >
+                            <Upload className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>Thêm lead</TooltipContent>
+                      </Tooltip>
+                      <Tooltip delayDuration={150}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="rounded-full text-primary hover:text-primary"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openScheduleDialog(campaign);
+                            }}
+                            aria-label={`Lên lịch cho ${campaign.name}`}
+                          >
+                            <ListChecks className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>Lên lịch quay số</TooltipContent>
+                      </Tooltip>
                     </div>
                   </TableCell>
                 </TableRow>

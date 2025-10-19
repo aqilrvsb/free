@@ -3,15 +3,35 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { endOfDay, format, startOfDay, subDays } from "date-fns";
-import { CalendarIcon, Clock, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { startOfMonth, endOfMonth, subMonths } from "date-fns";
+import {
+  CalendarIcon,
+  Clock,
+  ChevronDown,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { AgentGroupSummary, AgentSummary, TenantLookupItem } from "@/lib/types";
+import type {
+  AgentGroupSummary,
+  AgentSummary,
+  TenantLookupItem,
+} from "@/lib/types";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const DIRECTION_OPTIONS = [
   { value: "", label: "Tất cả" },
@@ -103,6 +123,46 @@ const PRESET_RANGES: PresetRange[] = [
       };
     },
   },
+  {
+    id: "yesterday",
+    label: "Hôm qua",
+    getRange: () => {
+      const yesterday = subDays(new Date(), 1);
+      const fromDate = startOfDay(yesterday);
+      const toDate = endOfDay(yesterday);
+      return {
+        from: { date: fromDate, time: format(fromDate, "HH:mm") },
+        to: { date: toDate, time: format(toDate, "HH:mm") },
+      };
+    },
+  },
+  {
+    id: "thisMonth",
+    label: "Tháng này",
+    getRange: () => {
+      const now = new Date();
+      const fromDate = startOfMonth(now);
+      const toDate = endOfMonth(now);
+      return {
+        from: { date: fromDate, time: "00:00" },
+        to: { date: toDate, time: "23:59" },
+      };
+    },
+  },
+  {
+    id: "lastMonth",
+    label: "Tháng trước",
+    getRange: () => {
+      const now = new Date();
+      const lastMonth = subMonths(now, 1);
+      const fromDate = startOfMonth(lastMonth);
+      const toDate = endOfMonth(lastMonth);
+      return {
+        from: { date: fromDate, time: "00:00" },
+        to: { date: toDate, time: "23:59" },
+      };
+    },
+  },
 ];
 
 function toSelectValue(value: string) {
@@ -130,7 +190,9 @@ function extractTimeFromIso(value?: string | null) {
 }
 
 function applyTime(date: Date, time: string) {
-  const [hours, minutes] = time.split(":").map((part) => Number.parseInt(part, 10) || 0);
+  const [hours, minutes] = time
+    .split(":")
+    .map((part) => Number.parseInt(part, 10) || 0);
   const patched = new Date(date);
   patched.setHours(hours, minutes, 0, 0);
   return patched;
@@ -147,18 +209,26 @@ export function CdrFilter({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const initialParams = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
+  const initialParams = useMemo(
+    () => new URLSearchParams(searchParams.toString()),
+    [searchParams]
+  );
 
   const initialFromIso = searchParams.get("from");
   const initialToIso = searchParams.get("to");
   const initialFromDate = parseIsoDate(initialFromIso);
   const initialToDate = parseIsoDate(initialToIso);
-  const initialFromTime = extractTimeFromIso(initialFromIso) ?? DEFAULT_FROM_TIME;
+  const initialFromTime =
+    extractTimeFromIso(initialFromIso) ?? DEFAULT_FROM_TIME;
   const initialToTime = extractTimeFromIso(initialToIso) ?? DEFAULT_TO_TIME;
 
   const [callUuid, setCallUuid] = useState(searchParams.get("callUuid") ?? "");
-  const [direction, setDirection] = useState(searchParams.get("direction") ?? "");
-  const [fromNumber, setFromNumber] = useState(searchParams.get("fromNumber") ?? "");
+  const [direction, setDirection] = useState(
+    searchParams.get("direction") ?? ""
+  );
+  const [fromNumber, setFromNumber] = useState(
+    searchParams.get("fromNumber") ?? ""
+  );
   const [toNumber, setToNumber] = useState(searchParams.get("toNumber") ?? "");
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
   const [fromDate, setFromDate] = useState<Date | undefined>(initialFromDate);
@@ -167,10 +237,19 @@ export function CdrFilter({
   const [toTime, setToTime] = useState(initialToTime);
   const [tenantId, setTenantId] = useState(searchParams.get("tenantId") ?? "");
   const [agentId, setAgentId] = useState(searchParams.get("agentId") ?? "");
-  const [agentGroupId, setAgentGroupId] = useState(searchParams.get("agentGroupId") ?? "");
-  const [agentExtension, setAgentExtension] = useState(searchParams.get("agentExtension") ?? "");
+  const [agentGroupId, setAgentGroupId] = useState(
+    searchParams.get("agentGroupId") ?? ""
+  );
+  const [agentExtension, setAgentExtension] = useState(
+    searchParams.get("agentExtension") ?? ""
+  );
   const initialAdvancedOpen = useMemo(() => {
-    const candidateKeys = ["fromNumber", "toNumber", "agentGroupId", "agentExtension"];
+    const candidateKeys = [
+      "fromNumber",
+      "toNumber",
+      "agentGroupId",
+      "agentExtension",
+    ];
     return candidateKeys.some((key) => {
       const value = searchParams.get(key);
       return Boolean(value && value.trim());
@@ -184,9 +263,9 @@ export function CdrFilter({
         (fromNumber && fromNumber.trim()) ||
           (toNumber && toNumber.trim()) ||
           agentGroupId ||
-          (agentExtension && agentExtension.trim()),
+          (agentExtension && agentExtension.trim())
       ),
-    [agentExtension, agentGroupId, fromNumber, toNumber],
+    [agentExtension, agentGroupId, fromNumber, toNumber]
   );
 
   const fromTimeOptions = useMemo(() => buildTimeOptions(fromTime), [fromTime]);
@@ -279,7 +358,10 @@ export function CdrFilter({
     }
 
     if (fromDate) {
-      const isoFrom = applyTime(fromDate, fromTime || DEFAULT_FROM_TIME).toISOString();
+      const isoFrom = applyTime(
+        fromDate,
+        fromTime || DEFAULT_FROM_TIME
+      ).toISOString();
       params.set("from", isoFrom);
     } else {
       params.delete("from");
@@ -346,95 +428,9 @@ export function CdrFilter({
       onSubmit={handleSubmit}
       className={cn(
         "space-y-6 rounded-3xl border border-border/60 bg-background/70 p-6 shadow-sm backdrop-blur",
-        className,
+        className
       )}
     >
-      <div
-        className={cn(
-          "grid gap-4 sm:grid-cols-2",
-          showTenantFilter ? "xl:grid-cols-5" : "xl:grid-cols-4",
-        )}
-      >
-        <div className="space-y-2">
-          <Label htmlFor="callUuid">Call UUID</Label>
-          <Input
-            id="callUuid"
-            placeholder="Nhập Call UUID"
-            value={callUuid}
-            onChange={(event) => setCallUuid(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="direction">Chiều cuộc gọi</Label>
-          <Select value={toSelectValue(direction)} onValueChange={(value) => setDirection(fromSelectValue(value))}>
-            <SelectTrigger id="direction" className="rounded-xl">
-              <SelectValue placeholder="Tất cả" />
-            </SelectTrigger>
-            <SelectContent>
-              {DIRECTION_OPTIONS.map((option) => (
-                <SelectItem key={option.value || "__all__"} value={toSelectValue(option.value)}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="status">Trạng thái</Label>
-          <Select value={toSelectValue(status)} onValueChange={(value) => setStatus(fromSelectValue(value))}>
-            <SelectTrigger id="status" className="rounded-xl">
-              <SelectValue placeholder="Tất cả" />
-            </SelectTrigger>
-            <SelectContent className="max-h-64">
-              {STATUS_OPTIONS.map((option) => (
-                <SelectItem key={option.value || "__all__"} value={toSelectValue(option.value)}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="cdr-agent">Agent phụ trách</Label>
-          <Select value={toSelectValue(agentId)} onValueChange={(value) => setAgentId(fromSelectValue(value))}>
-            <SelectTrigger id="cdr-agent" className="rounded-xl">
-              <SelectValue placeholder="Tất cả agent" />
-            </SelectTrigger>
-            <SelectContent className="max-h-64">
-              <SelectItem value="__all__">Tất cả</SelectItem>
-              {agentOptions.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {agent.displayName}
-                  {agent.extensionId ? ` · ${agent.extensionId}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {showTenantFilter ? (
-          <div className="space-y-2">
-            <Label htmlFor="tenantId">Tenant / Domain</Label>
-            <Select value={toSelectValue(tenantId)} onValueChange={(value) => setTenantId(fromSelectValue(value))}>
-              <SelectTrigger id="tenantId" className="rounded-xl">
-                <SelectValue placeholder="Tất cả domain" />
-              </SelectTrigger>
-              <SelectContent className="max-h-64">
-                <SelectItem value="__all__">Tất cả</SelectItem>
-                {tenantOptions.map((tenant) => (
-                  <SelectItem key={tenant.id} value={tenant.domain || tenant.id}>
-                    {tenant.domain || tenant.name || tenant.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-      </div>
-
       <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <Popover>
@@ -443,7 +439,7 @@ export function CdrFilter({
                 variant="outline"
                 className={cn(
                   "h-11 min-w-[180px] justify-start rounded-xl border-border/60 bg-background/80 font-normal",
-                  !fromDate && "text-muted-foreground",
+                  !fromDate && "text-muted-foreground"
                 )}
                 id="cdr-from-date"
               >
@@ -452,7 +448,12 @@ export function CdrFilter({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto rounded-3xl border border-border/60 bg-card/95 p-3 shadow-lg">
-              <Calendar mode="single" selected={fromDate} onSelect={handleFromDateChange} initialFocus />
+              <Calendar
+                mode="single"
+                selected={fromDate}
+                onSelect={handleFromDateChange}
+                initialFocus
+              />
             </PopoverContent>
           </Popover>
           <Select value={fromTime} onValueChange={handleFromTimeChange}>
@@ -476,7 +477,7 @@ export function CdrFilter({
                 variant="outline"
                 className={cn(
                   "h-11 min-w-[180px] justify-start rounded-xl border-border/60 bg-background/80 font-normal",
-                  !toDate && "text-muted-foreground",
+                  !toDate && "text-muted-foreground"
                 )}
                 id="cdr-to-date"
               >
@@ -485,7 +486,12 @@ export function CdrFilter({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto rounded-3xl border border-border/60 bg-card/95 p-3 shadow-lg">
-              <Calendar mode="single" selected={toDate} onSelect={handleToDateChange} initialFocus />
+              <Calendar
+                mode="single"
+                selected={toDate}
+                onSelect={handleToDateChange}
+                initialFocus
+              />
             </PopoverContent>
           </Popover>
           <Select value={toTime} onValueChange={handleToTimeChange}>
@@ -504,14 +510,21 @@ export function CdrFilter({
           <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
             <Clock className="size-3.5" />
             <span>
-              {fromDate ? `${format(fromDate, "dd/MM/yyyy")} ${fromTime}` : "Chưa chọn"} →{" "}
-              {toDate ? `${format(toDate, "dd/MM/yyyy")} ${toTime}` : "Chưa chọn"}
+              {fromDate
+                ? `${format(fromDate, "dd/MM/yyyy")} ${fromTime}`
+                : "Chưa chọn"}{" "}
+              →{" "}
+              {toDate
+                ? `${format(toDate, "dd/MM/yyyy")} ${toTime}`
+                : "Chưa chọn"}
             </span>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 pt-4">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">Nhanh:</span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            Nhanh:
+          </span>
           {PRESET_RANGES.map((preset) => (
             <Button
               key={preset.id}
@@ -520,7 +533,7 @@ export function CdrFilter({
               variant={activePreset === preset.id ? "default" : "secondary"}
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                activePreset === preset.id ? "shadow-sm" : "bg-muted",
+                activePreset === preset.id ? "shadow-sm" : "bg-muted"
               )}
               disabled={isPending}
               onClick={() => applyPresetRange(preset.id)}
@@ -534,12 +547,14 @@ export function CdrFilter({
       <div className="rounded-2xl border border-dashed border-border/50 bg-background/40">
         <button
           type="button"
-          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm cursor-pointer font-semibold text-foreground transition hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           onClick={() => setAdvancedOpen((prev) => !prev)}
           disabled={isPending}
         >
           <span className="flex items-center gap-2">
-            <SlidersHorizontal className={cn("size-4", hasAdvancedFilters && "text-primary")} />
+            <SlidersHorizontal
+              className={cn("size-4", hasAdvancedFilters && "text-primary")}
+            />
             Bộ lọc nâng cao
             {hasAdvancedFilters ? (
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
@@ -547,70 +562,194 @@ export function CdrFilter({
               </span>
             ) : null}
           </span>
-          <ChevronDown className={cn("size-4 transition-transform", advancedOpen && "rotate-180")} />
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform",
+              advancedOpen && "rotate-180"
+            )}
+          />
         </button>
         {advancedOpen ? (
-          <div className="grid gap-4 border-t border-border/40 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="space-y-2">
-              <Label htmlFor="fromNumber">Số máy gọi</Label>
-              <Input
-                id="fromNumber"
-                placeholder="Ví dụ 1001"
-                value={fromNumber}
-                onChange={(event) => {
-                  setFromNumber(event.target.value);
-                }}
-              />
+          <>
+            <div
+              className={cn(
+                "grid gap-4 sm:grid-cols-2 px-4",
+                showTenantFilter ? "xl:grid-cols-5" : "xl:grid-cols-4"
+              )}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="callUuid">Call UUID</Label>
+                <Input
+                  id="callUuid"
+                  placeholder="Nhập Call UUID"
+                  value={callUuid}
+                  onChange={(event) => setCallUuid(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="direction">Chiều cuộc gọi</Label>
+                <Select
+                  value={toSelectValue(direction)}
+                  onValueChange={(value) =>
+                    setDirection(fromSelectValue(value))
+                  }
+                >
+                  <SelectTrigger id="direction" className="rounded-xl">
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DIRECTION_OPTIONS.map((option) => (
+                      <SelectItem
+                        key={option.value || "__all__"}
+                        value={toSelectValue(option.value)}
+                      >
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="status">Trạng thái</Label>
+                <Select
+                  value={toSelectValue(status)}
+                  onValueChange={(value) => setStatus(fromSelectValue(value))}
+                >
+                  <SelectTrigger id="status" className="rounded-xl">
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {STATUS_OPTIONS.map((option) => (
+                      <SelectItem
+                        key={option.value || "__all__"}
+                        value={toSelectValue(option.value)}
+                      >
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cdr-agent">Agent phụ trách</Label>
+                <Select
+                  value={toSelectValue(agentId)}
+                  onValueChange={(value) => setAgentId(fromSelectValue(value))}
+                >
+                  <SelectTrigger id="cdr-agent" className="rounded-xl">
+                    <SelectValue placeholder="Tất cả agent" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    <SelectItem value="__all__">Tất cả</SelectItem>
+                    {agentOptions.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.displayName}
+                        {agent.extensionId ? ` · ${agent.extensionId}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {showTenantFilter ? (
+                <div className="space-y-2">
+                  <Label htmlFor="tenantId">Tenant / Domain</Label>
+                  <Select
+                    value={toSelectValue(tenantId)}
+                    onValueChange={(value) =>
+                      setTenantId(fromSelectValue(value))
+                    }
+                  >
+                    <SelectTrigger id="tenantId" className="rounded-xl">
+                      <SelectValue placeholder="Tất cả domain" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64">
+                      <SelectItem value="__all__">Tất cả</SelectItem>
+                      {tenantOptions.map((tenant) => (
+                        <SelectItem
+                          key={tenant.id}
+                          value={tenant.domain || tenant.id}
+                        >
+                          {tenant.domain || tenant.name || tenant.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="toNumber">Số bị gọi</Label>
-              <Input
-                id="toNumber"
-                placeholder="Ví dụ 098xxx"
-                value={toNumber}
-                onChange={(event) => {
-                  setToNumber(event.target.value);
-                }}
-              />
+
+            <div className="grid gap-4 border-t border-border/40 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="fromNumber">Số máy gọi</Label>
+                <Input
+                  id="fromNumber"
+                  placeholder="Ví dụ 1001"
+                  value={fromNumber}
+                  onChange={(event) => {
+                    setFromNumber(event.target.value);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="toNumber">Số bị gọi</Label>
+                <Input
+                  id="toNumber"
+                  placeholder="Ví dụ 098xxx"
+                  value={toNumber}
+                  onChange={(event) => {
+                    setToNumber(event.target.value);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cdr-agent-group">Nhóm agent</Label>
+                <Select
+                  value={toSelectValue(agentGroupId)}
+                  onValueChange={(value) => {
+                    setAgentGroupId(fromSelectValue(value));
+                  }}
+                >
+                  <SelectTrigger id="cdr-agent-group" className="rounded-xl">
+                    <SelectValue placeholder="Tất cả nhóm" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    <SelectItem value="__all__">Tất cả</SelectItem>
+                    {agentGroupOptions.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agentExtension">Extension agent</Label>
+                <Input
+                  id="agentExtension"
+                  placeholder="Ví dụ 1010"
+                  value={agentExtension}
+                  onChange={(event) => {
+                    setAgentExtension(event.target.value);
+                  }}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="cdr-agent-group">Nhóm agent</Label>
-              <Select
-                value={toSelectValue(agentGroupId)}
-                onValueChange={(value) => {
-                  setAgentGroupId(fromSelectValue(value));
-                }}
-              >
-                <SelectTrigger id="cdr-agent-group" className="rounded-xl">
-                  <SelectValue placeholder="Tất cả nhóm" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  <SelectItem value="__all__">Tất cả</SelectItem>
-                  {agentGroupOptions.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="agentExtension">Extension agent</Label>
-              <Input
-                id="agentExtension"
-                placeholder="Ví dụ 1010"
-                value={agentExtension}
-                onChange={(event) => {
-                  setAgentExtension(event.target.value);
-                }}
-              />
-            </div>
-          </div>
+          </>
         ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/50 pt-4">
-        <Button type="button" variant="outline" onClick={handleReset} disabled={isPending} className="rounded-xl">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleReset}
+          disabled={isPending}
+          className="rounded-xl"
+        >
           Xóa lọc
         </Button>
         <Button type="submit" disabled={isPending} className="rounded-xl">

@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Loader2, PencilLine, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PaginatedResult, TenantSummary } from "@/lib/types";
 import { resolveClientBaseUrl } from "@/lib/browser";
@@ -270,7 +272,7 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="max-h-[420px] overflow-y-auto pr-2">
+          <div className="pr-2">
             {tenantLoading ? (
               <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                 Đang tải domain...
@@ -286,22 +288,44 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
                         <div className="text-sm text-muted-foreground">{tenant.domain}</div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEditTenant(tenant)}
-                          disabled={loading === `tenant-update-${tenant.id}`}
-                        >
-                          Chỉnh sửa
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => void deleteTenant(tenant)}
-                          disabled={loading === `tenant-delete-${tenant.id}`}
-                        >
-                          Xóa
-                        </Button>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-full text-muted-foreground hover:text-foreground"
+                              onClick={() => openEditTenant(tenant)}
+                              disabled={loading === `tenant-update-${tenant.id}`}
+                              aria-label={`Chỉnh sửa tenant ${tenant.name}`}
+                            >
+                              {loading === `tenant-update-${tenant.id}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <PencilLine className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Chỉnh sửa domain</TooltipContent>
+                        </Tooltip>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-full text-destructive hover:text-destructive"
+                              onClick={() => void deleteTenant(tenant)}
+                              disabled={loading === `tenant-delete-${tenant.id}`}
+                              aria-label={`Xoá tenant ${tenant.name}`}
+                            >
+                              {loading === `tenant-delete-${tenant.id}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Xoá domain</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                     <Separator className="my-3" />

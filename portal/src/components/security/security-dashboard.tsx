@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RefreshCw, ShieldAlert, ShieldCheck, Trash2, X, Plus } from "lucide-react";
 import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
@@ -621,15 +622,21 @@ export function SecurityDashboard({
                         <span>Tạo lúc: {formatRelative(rule.createdAt)}</span>
                       </div>
                       <div className="mt-3 flex justify-end">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => removeRule(rule)}
-                          disabled={actionTarget === `rule-${rule.id}`}
-                          className="size-8 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => removeRule(rule)}
+                              disabled={actionTarget === `rule-${rule.id}`}
+                              className="size-8 rounded-full text-muted-foreground hover:text-destructive"
+                              aria-label={`Xóa rule ${rule.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Xoá rule firewall</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   ))}
@@ -673,15 +680,21 @@ export function SecurityDashboard({
                       <TableCell>{formatRelative(ban.createdAt)}</TableCell>
                       <TableCell>{ban.expiresAt ? formatRelative(ban.expiresAt) : 'Không giới hạn'}</TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => removeBan(ban)}
-                          className="size-8 text-muted-foreground hover:text-destructive"
-                          disabled={actionTarget === `ban-${ban.id || ban.ip}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                        <Tooltip delayDuration={150}>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => removeBan(ban)}
+                              className="size-8 rounded-full text-muted-foreground hover:text-destructive"
+                              disabled={actionTarget === `ban-${ban.id || ban.ip}`}
+                              aria-label={`Gỡ chặn ${ban.ip}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Gỡ chặn IP</TooltipContent>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))

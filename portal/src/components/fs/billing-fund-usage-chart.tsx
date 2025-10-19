@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/chart"
 import { Pie, PieChart, Cell } from "recharts"
 
-type FundSliceKey = "spent" | "remaining" | "overdrawn"
+type FundSliceKey = "usage" | "charges" | "remaining" | "overdrawn"
 
 interface FundSlice {
   key: FundSliceKey
@@ -41,9 +41,13 @@ function formatPercent(value: number) {
 export function BillingFundUsageChart({ slices, currency }: BillingFundUsageChartProps) {
   const filtered = useMemo(() => slices.filter((slice) => slice.value > 0), [slices])
   const chartConfig: ChartConfig = {
-    spent: {
-      label: "Đã sử dụng",
+    usage: {
+      label: "Cước dịch vụ",
       color: "hsl(17 88% 56%)",
+    },
+    charges: {
+      label: "Phí phát sinh",
+      color: "hsl(31 90% 60%)",
     },
     remaining: {
       label: "Còn lại",
@@ -55,12 +59,14 @@ export function BillingFundUsageChart({ slices, currency }: BillingFundUsageChar
     },
   }
 
-  const { total, spentSlice } = useMemo(() => {
-    const totalValue = filtered.reduce((sum, slice) => sum + slice.value, 0)
-    const spent = filtered.find((slice) => slice.key === "spent") || null
+  const { total, consumptionValue } = useMemo(() => {
+    const totalValue = Math.max(0, filtered.reduce((sum, slice) => sum + slice.value, 0))
+    const consumption = filtered
+      .filter((slice) => slice.key === "usage" || slice.key === "charges")
+      .reduce((sum, slice) => sum + slice.value, 0)
     return {
       total: totalValue,
-      spentSlice: spent,
+      consumptionValue: consumption,
     }
   }, [filtered])
 
@@ -72,7 +78,7 @@ export function BillingFundUsageChart({ slices, currency }: BillingFundUsageChar
     )
   }
 
-  const percentSpent = spentSlice ? (spentSlice.value / total) * 100 : 0
+  const percentSpent = total > 0 ? (consumptionValue / total) * 100 : 0
 
   return (
     <div className="flex flex-col items-center gap-6">
@@ -123,7 +129,7 @@ export function BillingFundUsageChart({ slices, currency }: BillingFundUsageChar
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-center">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Đã sử dụng</span>
           <span className="text-2xl font-semibold text-foreground">
-            {formatCurrency(spentSlice?.value ?? 0, currency)}
+            {formatCurrency(consumptionValue ?? 0, currency)}
           </span>
           <span className="text-xs text-muted-foreground">{formatPercent(percentSpent)} quỹ</span>
         </div>

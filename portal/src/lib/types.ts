@@ -253,6 +253,7 @@ export interface AgentSummary {
   groupName?: string | null;
   portalUserId?: string | null;
   portalUserEmail?: string | null;
+  portalUserDisplayName?: string | null;
   parentAgentId?: string | null;
   parentAgentName?: string | null;
   kpiTalktimeEnabled: boolean;

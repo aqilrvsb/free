@@ -29,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import { Loader2, PencilLine, PlusCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { displayError, displaySuccess, displayWarning } from "@/lib/toast";
 
@@ -795,40 +796,55 @@ export function PortalUserManager({ initialUsers, roles }: PortalUserManagerProp
                         </TableCell>
                         <TableCell className="align-middle text-sm text-muted-foreground">{lastLoginLabel}</TableCell>
                         <TableCell className="align-middle text-sm text-muted-foreground">{createdLabel}</TableCell>
-                        <TableCell className="align-middle text-right">
+                        <TableCell className="align-middle">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="rounded-lg"
-                              onClick={() => handleOpenEdit(user)}
-                            >
-                              <PencilLine className="mr-1 h-4 w-4" />
-                              Sửa
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="rounded-lg"
-                              onClick={() => openPasswordDialog(user)}
-                            >
-                              <RefreshCw className="mr-1 h-4 w-4" />
-                              Mật khẩu
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="rounded-lg text-destructive hover:text-destructive"
-                              onClick={() => handleDelete(user)}
-                              disabled={deletingId === user.id}
-                            >
-                              {deletingId === user.id ? (
-                                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="mr-1 h-4 w-4" />
-                              )}
-                              Xoá
-                            </Button>
+                            <Tooltip delayDuration={150}>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="rounded-full text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleOpenEdit(user)}
+                                  aria-label={`Sửa ${user.email}`}
+                                >
+                                  <PencilLine className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={6}>Chỉnh sửa tài khoản</TooltipContent>
+                            </Tooltip>
+                            <Tooltip delayDuration={150}>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="rounded-full text-muted-foreground hover:text-foreground"
+                                  onClick={() => openPasswordDialog(user)}
+                                  aria-label={`Đặt lại mật khẩu cho ${user.email}`}
+                                >
+                                  <RefreshCw className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={6}>Đặt lại mật khẩu</TooltipContent>
+                            </Tooltip>
+                            <Tooltip delayDuration={150}>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="rounded-full text-destructive hover:text-destructive"
+                                  onClick={() => handleDelete(user)}
+                                  disabled={deletingId === user.id}
+                                  aria-label={`Xoá ${user.email}`}
+                                >
+                                  {deletingId === user.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={6}>Xoá tài khoản</TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableCell>
                       </TableRow>

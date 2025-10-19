@@ -8,17 +8,19 @@ import type {
 } from "@/lib/types";
 import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { BillingFilters } from "@/components/fs/billing-filters";
 import { BillingTenantPanel } from "@/components/fs/billing-tenant-panel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { BadgeDollarSign, PhoneCall, Timer, TrendingUp } from "lucide-react";
+import { BadgeDollarSign, Download, PhoneCall, Receipt, Timer, TrendingUp } from "lucide-react";
 import type { ChartConfig } from "@/components/ui/chart";
 import { BillingByDayChart, type BillingChartPoint } from "@/components/fs/billing-by-day-chart";
 import { BillingFundUsageChart } from "@/components/fs/billing-fund-usage-chart";
 import { cookies } from "next/headers";
 import { parsePortalUserCookie } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +66,29 @@ function formatDayLabel(day: string) {
   } catch {
     return day;
   }
+}
+
+type FundSlice = {
+  key: "usage" | "charges" | "remaining" | "overdrawn";
+  label: string;
+  value: number;
+};
+
+function buildFundSlices(serviceCost: number, chargesTotal: number, balance: number): FundSlice[] {
+  const slices: FundSlice[] = [];
+  if (serviceCost > 0) {
+    slices.push({ key: "usage", label: "Cước dịch vụ", value: serviceCost });
+  }
+  if (chargesTotal > 0) {
+    slices.push({ key: "charges", label: "Phí phát sinh", value: chargesTotal });
+  }
+  if (balance > 0) {
+    slices.push({ key: "remaining", label: "Còn lại", value: balance });
+  }
+  if (balance < 0) {
+    slices.push({ key: "overdrawn", label: "Âm quỹ", value: Math.abs(balance) });
+  }
+  return slices;
 }
 
 interface BillingPageProps {
@@ -158,6 +183,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
   }
 
   const summaryPath = `/billing/summary${query.toString() ? `?${query.toString()}` : ""}`;
+  const exportHref = `/api/billing/export${query.toString() ? `?${query.toString()}` : ""}`;
 
   const summary = await apiFetch<BillingSummaryResponse>(summaryPath, {
     cache: "no-store",
@@ -187,8 +213,10 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
   const currency = summary.totals.currency || config?.currency || "VND";
   const currentBalance = summary.balance ?? config?.balanceAmount ?? 0;
   const charges = summary.charges ?? [];
-  const chargesTotal = summary.chargesTotal ?? charges.reduce((acc, item) => acc + item.amount, 0);
-  const overallCost = summary.totals.totalCost + chargesTotal;
+  const serviceCost = Math.max(summary.totals.totalCost, 0);
+  const chargesTotal = Math.max(summary.chargesTotal ?? charges.reduce((acc, item) => acc + item.amount, 0), 0);
+  const chargesCount = charges.length;
+  const overallCost = serviceCost + chargesTotal;
   const byDay = summary.byDay.slice(-14);
   const chartData: BillingChartPoint[] = byDay.map((item) => ({
     day: formatDayLabel(item.day),
@@ -196,28 +224,10 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     cost: Number(item.totalCost.toFixed(2)),
     calls: Number(item.totalCalls.toFixed(2)),
   }));
-  let fundUsageSlices: Array<{ key: "spent" | "remaining" | "overdrawn"; label: string; value: number }> = [];
-  if (selectedTenantId && selectedTenantId !== "all") {
-    fundUsageSlices = [
-      {
-        key: "spent",
-        label: "Đã sử dụng",
-        value: Math.max(overallCost, 0),
-      },
-      {
-        key: "remaining",
-        label: "Còn lại",
-        value: Math.max(currentBalance, 0),
-      },
-    ];
-    if (currentBalance < 0) {
-      fundUsageSlices.push({
-        key: "overdrawn",
-        label: "Âm quỹ",
-        value: Math.abs(currentBalance),
-      });
-    }
-  }
+  const fundUsageSlices =
+    selectedTenantId && selectedTenantId !== "all"
+      ? buildFundSlices(serviceCost, chargesTotal, currentBalance)
+      : [];
   const chartConfig: ChartConfig = {
     cost: {
       label: "Chi phí",
@@ -239,16 +249,23 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     {
       title: "Tổng chi phí",
       value: formatCurrency(overallCost, currency),
-      helper: `Bao gồm phụ phí ${formatCurrency(chargesTotal, currency)}`,
+      helper: `Dịch vụ ${formatCurrency(serviceCost, currency)} · Phụ phí ${formatCurrency(chargesTotal, currency)}`,
       icon: <TrendingUp className="size-5 text-primary" />,
       gradient: "from-primary/25 via-primary/10 to-transparent",
     },
     {
-      title: "Cước outbound",
-      value: formatCurrency(summary.totals.totalCost, currency),
+      title: "Cước dịch vụ",
+      value: formatCurrency(serviceCost, currency),
       helper: `${formatNumber(summary.totals.totalBillMinutes)} phút tính cước`,
       icon: <BadgeDollarSign className="size-5 text-orange-500" />,
       gradient: "from-orange-500/25 via-orange-500/10 to-transparent",
+    },
+    {
+      title: "Phí phát sinh",
+      value: formatCurrency(chargesTotal, currency),
+      helper: `${chargesCount} ghi nhận`,
+      icon: <Receipt className="size-5 text-amber-500" />,
+      gradient: "from-amber-500/25 via-amber-500/10 to-transparent",
     },
     {
       title: "Tổng cuộc gọi",
@@ -294,6 +311,15 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
         initialTo={to ?? undefined}
         canSelectAll={isSuperAdmin}
       />
+
+      <div className="flex justify-end">
+        <Button asChild variant="outline" className="gap-2 rounded-xl">
+          <Link href={exportHref} prefetch={false}>
+            <Download className="size-4" />
+            Xuất Excel
+          </Link>
+        </Button>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {heroMetrics.map((metric) => (

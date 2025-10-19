@@ -10,6 +10,7 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { CdrFilter } from "@/components/cdr/cdr-filter";
 import { PaginationControls } from "@/components/common/pagination";
@@ -20,6 +21,8 @@ import { formatWithTimezone } from "@/lib/timezone";
 import { cookies } from "next/headers";
 import { parsePortalUserCookie } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { Download } from "lucide-react";
+import { CdrPageSizeSelect } from "@/components/cdr/page-size-select";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +50,26 @@ function getSearchParamValue(value: string | string[] | undefined): string | und
     return value[0];
   }
   return value;
+}
+
+function searchParamsToQuery(params: Record<string, string | string[]>) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (key === "page" || key === "pageSize") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (entry !== undefined && entry !== "") {
+          query.append(key, entry);
+        }
+      });
+    } else if (value !== undefined && value !== "") {
+      query.set(key, value);
+    }
+  });
+  const str = query.toString();
+  return str ? `?${str}` : "";
 }
 
 function formatCost(cost?: string, currency?: string | null) {
@@ -131,7 +154,9 @@ function buildTimeDisplay(
 export default async function CdrPage({ searchParams }: CdrPageProps) {
   const resolvedSearchParams = (await (searchParams ?? Promise.resolve({}))) as Record<string, string | string[]>;
   const pageParam = getSearchParamValue(resolvedSearchParams.page) ?? "1";
+  const pageSizeParam = getSearchParamValue(resolvedSearchParams.pageSize) ?? "25";
   const page = Math.max(1, Number.parseInt(pageParam, 10) || 1);
+  const pageSize = Math.min(200, Math.max(10, Number.parseInt(pageSizeParam, 10) || 25));
   const direction = getSearchParamValue(resolvedSearchParams.direction) ?? "";
   const callUuid = getSearchParamValue(resolvedSearchParams.callUuid) ?? "";
   const fromNumber = getSearchParamValue(resolvedSearchParams.fromNumber) ?? "";
@@ -144,7 +169,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
   const toTime = getSearchParamValue(resolvedSearchParams.to) ?? "";
   const tenantIdFilter = getSearchParamValue(resolvedSearchParams.tenantId) ?? "";
 
-  const query = new URLSearchParams({ page: String(page), pageSize: "25" });
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (direction) {
     query.set("direction", direction);
   }
@@ -183,7 +208,7 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
     items: [],
     total: 0,
     page,
-    pageSize: 25,
+    pageSize,
   };
 
   const cookieStore = await cookies();
@@ -271,7 +296,21 @@ export default async function CdrPage({ searchParams }: CdrPageProps) {
       <Card>
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <CardTitle>Danh sách CDR</CardTitle>
-          <PaginationControls page={currentPage} pageSize={currentPageSize} total={totalRecords} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" className="gap-2 rounded-xl">
+              <Link href={`/api/cdr/export${searchParamsToQuery(resolvedSearchParams)}`} prefetch={false}>
+                <Download className="size-4" />
+                Xuất Excel
+              </Link>
+            </Button>
+            <div className="flex items-center gap-2">
+              <label htmlFor="cdr-page-size" className="text-xs text-muted-foreground">
+                Hiển thị
+              </label>
+              <CdrPageSizeSelect pageSize={pageSize} searchParams={resolvedSearchParams} />
+            </div>
+            <PaginationControls page={currentPage} pageSize={currentPageSize} total={totalRecords} />
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="overflow-x-auto">
