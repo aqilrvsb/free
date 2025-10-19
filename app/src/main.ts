@@ -48,8 +48,8 @@ async function bootstrap() {
   });
 
   const port = process.env.APP_PORT ? parseInt(process.env.APP_PORT, 10) : 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   // eslint-disable-next-line no-console
-  console.log(`FS XML service is running on port ${port}`);
+  console.log(`FS XML service is running on 0.0.0.0:${port}`);
 }
 bootstrap();
