@@ -2,13 +2,10 @@
 # This deploys only the backend API service
 # Note: FreeSWITCH and security-agent require a VPS with host networking
 
-app = 'freeswitch-lab-app'  # Change this to your desired app name
-primary_region = 'sin'  # Change to your preferred region (sin=Singapore, iad=US East, etc.)
+app = 'free-a--lma'
+primary_region = 'sin'
 
 [build]
-  build-target = "runtime"
-  [build.args]
-    NODE_ENV = "production"
 
 [env]
   NODE_ENV = "production"
@@ -42,10 +39,6 @@ primary_region = 'sin'  # Change to your preferred region (sin=Singapore, iad=US
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-
-[mounts]
-  source = "recordings"
-  destination = "/recordings"
 
 # You'll need to set these secrets using:
 # fly secrets set DB_HOST=your-mysql-host
