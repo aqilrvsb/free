@@ -2,6 +2,31 @@
 
 This repo contains a **FreeSWITCH** container configured to fetch **dialplan & directory** over HTTP from a **NestJS** backend, enabling **dynamic extensions** per tenant.
 
+## Deployment Options
+
+### 🚀 Option 1: Fly.io Deployment (Recommended for API/Portal)
+
+Deploy the NestJS backend and Portal to Fly.io for easy scaling and management. See [FLYIO_DEPLOYMENT.md](FLYIO_DEPLOYMENT.md) for detailed instructions.
+
+**Quick Deploy:**
+```bash
+# Install Fly CLI
+curl -L https://fly.io/install.sh | sh  # Mac/Linux
+# or
+iwr https://fly.io/install.ps1 -useb | iex  # Windows PowerShell
+
+# Deploy
+cd <project-directory>
+flyctl launch  # First time setup
+flyctl deploy  # Subsequent deployments
+```
+
+**Live Demo:** The NestJS backend can be deployed at URLs like `https://your-app.fly.dev`
+
+> **Note:** FreeSWITCH and security-agent require host networking and are better suited for VPS deployment (see Option 2).
+
+### 🐳 Option 2: Docker Compose (Full Stack)
+
 ## Quick start
 
 ```bash
@@ -154,3 +179,70 @@ Advanced Fail2Ban configuration API:
 The portal UI calls these endpoints directly via the Nest backend, so the agent stays fully isolated from the browser. When the agent is unreachable the UI falls back to read-only placeholders and displays the last known state.
 
 When `FS_ESL_*` variables are provided, the agent connects to FreeSWITCH's Event Socket to flush affected registrations immediately after a ban or new firewall rule. In addition, the agent wipes relevant conntrack entries so banned IPs cannot reuse existing SIP sessions.
+
+---
+
+## Production Deployment Architecture
+
+### Recommended Setup:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Fly.io                              │
+│  ┌──────────────────┐         ┌──────────────────┐         │
+│  │  NestJS Backend  │◄────────┤  NextJS Portal   │         │
+│  │  (API + XML)     │         │  (Admin UI)      │         │
+│  └────────┬─────────┘         └──────────────────┘         │
+│           │                                                 │
+│           │ HTTP/REST API                                   │
+└───────────┼─────────────────────────────────────────────────┘
+            │
+            │
+┌───────────▼─────────────────────────────────────────────────┐
+│                      VPS/Dedicated Server                    │
+│  ┌──────────────────┐         ┌──────────────────┐         │
+│  │   FreeSWITCH     │◄────────┤ Security Agent   │         │
+│  │   (SIP/RTP)      │         │  (Fail2Ban)      │         │
+│  └──────────────────┘         └──────────────────┘         │
+│           │                                                 │
+│           │ mod_xml_curl                                    │
+│           └────────► Calls NestJS API for dialplan/directory│
+└─────────────────────────────────────────────────────────────┘
+            │
+            │
+┌───────────▼─────────────────────────────────────────────────┐
+│              MySQL Database (Managed Service)                │
+│  • PlanetScale / Fly Postgres / AWS RDS / DigitalOcean      │
+│  • Stores: Tenants, Users, CDRs, Routing Config             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Why This Architecture?
+
+- **Fly.io** (Backend/Portal): Auto-scaling, global CDN, easy deployments, cost-effective
+- **VPS** (FreeSWITCH): Requires host networking for SIP/RTP, needs static IP
+- **Managed DB**: High availability, automated backups, no maintenance
+
+### Deployment Steps:
+
+1. **Deploy Backend to Fly.io**: `flyctl deploy` (see [FLYIO_DEPLOYMENT.md](FLYIO_DEPLOYMENT.md))
+2. **Deploy FreeSWITCH to VPS**: Use Docker Compose or native installation
+3. **Configure FreeSWITCH**: Point `XML_CURL_GATEWAY_URL` to your Fly.io backend
+4. **Set up Database**: Use managed MySQL/Postgres service
+
+---
+
+## Quick Links
+
+- 📖 [Fly.io Deployment Guide](FLYIO_DEPLOYMENT.md) - Complete guide for deploying to Fly.io
+- 🔧 [Environment Configuration](env.example) - Example environment variables
+- 📚 [API Documentation](https://your-app.fly.dev/docs) - Swagger/OpenAPI docs (after deployment)
+- 🚨 [Security Setup](#security-agent-fail2ban--nftables) - Fail2Ban integration
+
+---
+
+## Support & Contributing
+
+Found a bug or have a feature request? Please open an issue on GitHub!
+
+**Repository:** [https://github.com/aqilrvsb/free](https://github.com/aqilrvsb/free)

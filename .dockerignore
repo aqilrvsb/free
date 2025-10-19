@@ -1,0 +1,83 @@
+# flyctl launch added from .gitignore
+# Node/Nest app
+**\app\node_modules
+**\app\dist
+**\app\package-lock.json
+**\security-agent\node_modules
+
+# FreeSWITCH runtime data
+**\data\log
+**\data\lib
+**\data\recordings
+**\data\security-agent
+
+# Environment & secrets
+**\.env
+**\**\.env
+**\*.env.local
+**\*.env.development
+**\*.env.production
+**\*.env.test
+!**\.env.example
+!**\*\.env.example
+
+
+# Docker artifacts
+**\*.tar
+
+# macOS / editor clutter
+**\.DS_Store
+**\.idea
+**\.vscode
+
+# Logs
+**\*.log
+
+# FreeSWITCH data
+**\freeswitch\conf\sip_profiles\internal
+**\freeswitch\conf\sip_profiles\external
+
+# flyctl launch added from portal\.gitignore
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+portal\node_modules
+portal\.pnp
+portal\**\.pnp.*
+portal\**\.yarn\*
+!portal\**\.yarn\patches
+!portal\**\.yarn\plugins
+!portal\**\.yarn\releases
+!portal\**\.yarn\versions
+
+# testing
+portal\coverage
+
+# next.js
+portal\.next
+portal\out
+
+# production
+portal\build
+
+# misc
+portal\**\.DS_Store
+portal\**\*.pem
+
+# debug
+portal\**\npm-debug.log*
+portal\**\yarn-debug.log*
+portal\**\yarn-error.log*
+portal\**\.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+portal\**\.env*
+!portal\**\.env.example
+
+# vercel
+portal\**\.vercel
+
+# typescript
+portal\**\*.tsbuildinfo
+portal\**\next-env.d.ts
+fly.toml
