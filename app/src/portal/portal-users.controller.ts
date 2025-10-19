@@ -13,6 +13,7 @@ import {
   ResetPortalUserPasswordDto,
   UpdatePortalUserDto,
 } from './dto';
+import { resolveEffectivePermissions } from '../common/portal-permissions.util';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -36,21 +37,7 @@ export class PortalUsersController {
     const rawRole = req?.user?.role || null;
     const role = rawRole === 'admin' ? 'super_admin' : rawRole;
     const tenantIds = Array.isArray(req?.user?.tenantIds) ? req!.user!.tenantIds : [];
-    const permissionSources: string[] = [];
-    if (Array.isArray(req?.user?.permissions)) {
-      permissionSources.push(...req!.user!.permissions);
-    }
-    if (Array.isArray(req?.user?.rolePermissions)) {
-      permissionSources.push(...req!.user!.rolePermissions);
-    }
-    const allowedPermissions = Array.from(
-      new Set(
-        permissionSources
-          .filter((perm): perm is string => typeof perm === 'string')
-          .map((perm) => perm.trim())
-          .filter((perm) => perm.length > 0),
-      ),
-    );
+    const allowedPermissions = resolveEffectivePermissions(req?.user);
     return {
       isSuperAdmin: role === 'super_admin',
       tenantIds,

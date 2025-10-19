@@ -131,6 +131,20 @@ const ROLE_MATRIX: Record<string, Partial<PermissionSet>> = {
   },
 };
 
+function applyPermissionList(target: PermissionSet, list: string[] | undefined | null) {
+  if (!Array.isArray(list) || list.length === 0) {
+    return false;
+  }
+  let applied = false;
+  for (const key of list) {
+    if (key in target) {
+      target[key as PermissionKey] = true;
+      applied = true;
+    }
+  }
+  return applied;
+}
+
 export function resolvePermissions(user: PortalUserSummary | null | undefined): PermissionSet {
   const result: PermissionSet = { ...BASE_PERMISSIONS };
 
@@ -138,25 +152,18 @@ export function resolvePermissions(user: PortalUserSummary | null | undefined): 
     return result;
   }
 
+  const personalApplied = applyPermissionList(result, user.permissions);
+  if (personalApplied) {
+    return result;
+  }
+
   if (Array.isArray(user.rolePermissions) && user.rolePermissions.length > 0) {
-    for (const key of user.rolePermissions) {
-      if (key in result) {
-        result[key as PermissionKey] = true;
-      }
-    }
+    applyPermissionList(result, user.rolePermissions);
   } else if (user.role) {
     const matrix = ROLE_MATRIX[user.role] || ROLE_MATRIX.viewer;
     Object.entries(matrix).forEach(([key, value]) => {
       result[key as PermissionKey] = Boolean(value);
     });
-  }
-
-  if (Array.isArray(user.permissions)) {
-    for (const key of user.permissions) {
-      if (key in result) {
-        result[key as PermissionKey] = true;
-      }
-    }
   }
 
   return result;

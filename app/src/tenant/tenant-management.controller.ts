@@ -16,6 +16,7 @@ import {
   UpdateExtensionDto,
   UpdateTenantDto,
 } from './dto';
+import { resolveEffectivePermissions } from '../common/portal-permissions.util';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -38,21 +39,7 @@ export class TenantManagementController {
     const user = req?.user;
     const role = user?.role || null;
     const tenantIds = Array.isArray(user?.tenantIds) ? user!.tenantIds : [];
-    const permissionSources: string[] = [];
-    if (Array.isArray(user?.permissions)) {
-      permissionSources.push(...user!.permissions);
-    }
-    if (Array.isArray(user?.rolePermissions)) {
-      permissionSources.push(...user!.rolePermissions);
-    }
-    const allowedPermissions = Array.from(
-      new Set(
-        permissionSources
-          .filter((perm): perm is string => typeof perm === 'string')
-          .map((perm) => perm.trim())
-          .filter((perm) => perm.length > 0),
-      ),
-    );
+    const allowedPermissions = resolveEffectivePermissions(user);
     return {
       isSuperAdmin: role === 'super_admin',
       tenantIds,

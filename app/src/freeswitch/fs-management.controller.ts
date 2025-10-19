@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Request } from 'express';
 import { PortalUsersService } from '../portal/portal-users.service';
 import { TenantManagementService } from '../tenant/tenant-management.service';
+import { buildAllowedPermissionSet } from '../common/portal-permissions.util';
 
 @ApiTags(SwaggerTags.FreeSWITCH)
 @Controller('fs')
@@ -104,7 +105,7 @@ export class FsManagementController {
     }
     const access = await this.portalUsersService.resolveRealtimeAccess(authUser.id || authUser.sub);
     const allowedPermissions = this.extractAllowedPermissions(authUser);
-    if (!access.isSuperAdmin && !allowedPermissions.has('view_calls')) {
+    if (!access.isSuperAdmin && !allowedPermissions.has('view_channels')) {
       throw new ForbiddenException('Không có quyền truy cập dữ liệu cuộc gọi');
     }
     return this.fsManagementService.getChannels();
@@ -118,21 +119,6 @@ export class FsManagementController {
   }
 
   private extractAllowedPermissions(user: any): Set<string> {
-    const permissions = new Set<string>();
-    if (Array.isArray(user?.permissions)) {
-      for (const perm of user.permissions) {
-        if (typeof perm === 'string' && perm.trim()) {
-          permissions.add(perm.trim());
-        }
-      }
-    }
-    if (Array.isArray(user?.rolePermissions)) {
-      for (const perm of user.rolePermissions) {
-        if (typeof perm === 'string' && perm.trim()) {
-          permissions.add(perm.trim());
-        }
-      }
-    }
-    return permissions;
+    return buildAllowedPermissionSet(user);
   }
 }
