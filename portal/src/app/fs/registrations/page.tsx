@@ -1,9 +1,12 @@
 import { apiFetch } from "@/lib/api";
 import { parsePortalUserCookie } from "@/lib/auth";
 import type { CommandResult, PortalUserSummary, TenantLookupItem } from "@/lib/types";
-import { RegistrationFilter } from "@/components/fs/registration-filter";
 import { PageHeader } from "@/components/common/page-header";
-import { RegistrationsRealtime } from "@/components/fs/registrations-realtime";
+import {
+  RegistrationsControlsProvider,
+  RegistrationsHeaderActions,
+  RegistrationsRealtime,
+} from "@/components/fs/registrations-realtime";
 import { buildSnapshot, type RegistrationSnapshot, type SofiaRegistrationsPayload } from "@/lib/registrations";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -159,21 +162,23 @@ export default async function RegistrationsPage({
   );
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={`Đăng ký SIP (${profile})`}
-        description="Giám sát thiết bị đăng ký vào profile FreeSWITCH với cập nhật realtime."
-        actions={
-          <RegistrationFilter
-            profiles={availableProfiles}
-            currentProfile={profile}
-            currentDomain={effectiveDomain}
-            tenantOptions={tenantOptions}
-            allowAllDomains={isSuperAdmin}
-          />
-        }
-      />
-      <RegistrationsRealtime profile={profile} domain={effectiveDomain} initialSnapshot={initialSnapshot} />
-    </div>
+    <RegistrationsControlsProvider>
+      <div className="space-y-6">
+        <PageHeader
+          title={`Đăng ký SIP (${profile})`}
+          description="Giám sát thiết bị đăng ký vào profile FreeSWITCH với cập nhật realtime."
+          actions={
+            <RegistrationsHeaderActions
+              profiles={availableProfiles}
+              currentProfile={profile}
+              currentDomain={effectiveDomain}
+              tenantOptions={tenantOptions}
+              allowAllDomains={isSuperAdmin}
+            />
+          }
+        />
+        <RegistrationsRealtime profile={profile} domain={effectiveDomain} initialSnapshot={initialSnapshot} />
+      </div>
+    </RegistrationsControlsProvider>
   );
 }

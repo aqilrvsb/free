@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { io, type Socket } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { RegistrationFilter } from "@/components/fs/registration-filter";
 import {
   buildSnapshot,
   extractRegistrations,
@@ -17,25 +18,54 @@ import {
   type ExtensionPresence,
 } from "@/lib/registrations";
 import type { LucideIcon } from "lucide-react";
-import {
-  Activity,
-  Clock,
-  Layers,
-  Loader2,
-  Monitor,
-  Phone,
-  RefreshCw,
-  Signal,
-  Timer,
-  Wifi,
-} from "lucide-react";
+import { Clock, Loader2, Monitor, Phone, RefreshCw, Timer, Wifi } from "lucide-react";
 import { resolveClientBaseUrl, resolveClientWsUrl } from "@/lib/browser";
 import { buildAuthHeaders, getPortalToken } from "@/lib/client-auth";
+import type { TenantLookupItem } from "@/lib/types";
 
 interface RegistrationsRealtimeProps {
   profile: string;
   domain?: string | null;
   initialSnapshot: RegistrationSnapshot;
+}
+
+interface RegistrationsControls {
+  refresh: (force?: boolean) => Promise<void>;
+  isRefreshing: boolean;
+  showRaw: boolean;
+  toggleRaw: () => void;
+}
+
+interface RegistrationsControlsContextValue {
+  controls: RegistrationsControls | null;
+  setControls: (value: RegistrationsControls | null) => void;
+}
+
+const RegistrationsControlsContext = createContext<RegistrationsControlsContextValue | null>(null);
+
+export function RegistrationsControlsProvider({ children }: { children: ReactNode }) {
+  const [controls, setControls] = useState<RegistrationsControls | null>(null);
+  const value = useMemo(
+    () => ({ controls, setControls }),
+    [controls],
+  );
+  return <RegistrationsControlsContext.Provider value={value}>{children}</RegistrationsControlsContext.Provider>;
+}
+
+export function useRegistrationsControls() {
+  const context = useContext(RegistrationsControlsContext);
+  if (!context) {
+    throw new Error("useRegistrationsControls phải được sử dụng trong RegistrationsControlsProvider");
+  }
+  return context.controls;
+}
+
+export function useRegistrationsControlsUpdater() {
+  const context = useContext(RegistrationsControlsContext);
+  if (!context) {
+    throw new Error("useRegistrationsControlsUpdater phải được sử dụng trong RegistrationsControlsProvider");
+  }
+  return context.setControls;
 }
 
 const dateTimeFormatter = new Intl.DateTimeFormat('vi-VN', {
@@ -147,6 +177,59 @@ function DetailBlock({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+interface RegistrationsHeaderActionsProps {
+  profiles: string[];
+  currentProfile: string;
+  currentDomain?: string | null;
+  tenantOptions: TenantLookupItem[];
+  allowAllDomains: boolean;
+}
+
+export function RegistrationsHeaderActions({
+  profiles,
+  currentProfile,
+  currentDomain = null,
+  tenantOptions,
+  allowAllDomains,
+}: RegistrationsHeaderActionsProps) {
+  const controls = useRegistrationsControls();
+  const isRefreshing = controls?.isRefreshing ?? false;
+  const showRaw = controls?.showRaw ?? false;
+
+  return (
+    <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+      <RegistrationFilter
+        profiles={profiles}
+        currentProfile={currentProfile}
+        currentDomain={currentDomain}
+        tenantOptions={tenantOptions}
+        allowAllDomains={allowAllDomains}
+      />
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!controls || isRefreshing}
+          onClick={() => controls?.refresh()}
+          className="gap-2"
+        >
+          {isRefreshing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          Tải lại dữ liệu
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={!controls}
+          onClick={() => controls?.toggleRaw()}
+          className="gap-2"
+        >
+          {showRaw ? "Ẩn phản hồi raw" : "Xem phản hồi raw"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -499,6 +582,34 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
     void fetchSnapshot(true);
   }, [fetchSnapshot]);
 
+  const setControls = useRegistrationsControlsUpdater();
+
+  const refresh = useCallback(
+    (force: boolean = false) => fetchSnapshot(force),
+    [fetchSnapshot],
+  );
+
+  const toggleRaw = useCallback(() => {
+    setShowRaw((prev) => !prev);
+  }, [setShowRaw]);
+
+  const controlsValue = useMemo(
+    () => ({
+      refresh,
+      isRefreshing,
+      showRaw,
+      toggleRaw,
+    }),
+    [refresh, isRefreshing, showRaw, toggleRaw],
+  );
+
+  useEffect(() => {
+    setControls(controlsValue);
+    return () => {
+      setControls(null);
+    };
+  }, [controlsValue, setControls]);
+
   useEffect(() => {
     if (!socketTarget || !authToken) {
       setConnected(false);
@@ -709,86 +820,6 @@ export function RegistrationsRealtime({ profile, domain = null, initialSnapshot 
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white shadow-2xl">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(129,140,248,0.35),_transparent_60%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.25),_transparent_60%)]" />
-        <div className="relative flex flex-col gap-6 p-8 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-              <Badge
-                variant="outline"
-                className={cn(
-                  "flex items-center gap-2 rounded-full border-white/30 bg-white/10 px-3 py-1 text-white backdrop-blur",
-                  connected ? "border-emerald-400/50 text-emerald-100" : "border-orange-400/50 text-orange-100",
-                )}
-              >
-                <Signal className="size-4" />
-                {connected ? "Realtime đã kết nối" : "Đang chờ kết nối"}
-              </Badge>
-              {lastActionLabel ? (
-                <Badge className="flex items-center gap-2 rounded-full border-white/20 bg-white/5 px-3 py-1 text-white/80 backdrop-blur">
-                  <Wifi className="size-4" />
-                  {lastActionLabel}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="space-y-3">
-              <h2 className="text-3xl font-semibold leading-tight sm:text-4xl">Giám sát đăng ký SIP</h2>
-              <p className="max-w-xl text-sm text-indigo-100/80">
-                Toàn cảnh trạng thái realtime của profile <span className="font-semibold text-white">{profile}</span>,
-                giúp bạn theo dõi thiết bị, tình trạng online/offline và sự kiện đăng ký chỉ trong một màn hình.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-indigo-100/85">
-              <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                <Activity className="size-4" />
-                Trạng thái: {profileData?.status?.state ?? "Không rõ"}
-              </span>
-              <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                <Clock className="size-4" />
-                Cập nhật: {formatDate(snapshot.generatedAt)}
-              </span>
-              {normalizedDomain ? (
-                <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                  <Layers className="size-4" />
-                  Domain: {normalizedDomain}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={isRefreshing}
-              onClick={() => void fetchSnapshot()}
-              className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-            >
-              {isRefreshing ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 size-4" />
-              )}
-              Tải lại dữ liệu
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowRaw((prev) => !prev)}
-              className="border-white/25 bg-transparent text-white/80 hover:bg-white/15 hover:text-white"
-            >
-              {showRaw ? "Ẩn phản hồi raw" : "Xem phản hồi raw"}
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatItem label="Tổng đăng ký" value={stats.total} icon={Layers} tone="default" />
-        <StatItem label="Đang online" value={stats.online} icon={UserCheck} tone="success" />
-        <StatItem label="Offline" value={stats.offline} icon={UserX} tone="muted" />
-        <StatItem label="Người dùng duy nhất" value={stats.uniqueUsers} icon={Users} tone="default" />
-      </div> */}
-
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/95 backdrop-blur lg:col-span-2">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_60%)]" />
