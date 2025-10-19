@@ -25,6 +25,15 @@ export class CreateTenantDto {
   @ApiPropertyOptional({ description: 'Danh sách codec ưu tiên', example: 'PCMU,PCMA,G722' })
   codecString?: string;
 
+  @ApiPropertyOptional({ description: 'Chỉ ghi âm cuộc gọi nội bộ sau khi nghe máy', default: false })
+  recordInternalOnAnswer?: boolean;
+
+  @ApiPropertyOptional({ description: 'Chỉ ghi âm cuộc gọi outbound qua gateway sau khi nghe máy', default: false })
+  recordOutboundOnAnswer?: boolean;
+
+  @ApiPropertyOptional({ description: 'Chỉ ghi âm cuộc gọi inbound từ gateway sau khi nghe máy', default: false })
+  recordInboundOnAnswer?: boolean;
+
   @ApiPropertyOptional({
     description: 'Giới hạn số extension cho tenant (để trống nghĩa là không giới hạn)',
     example: 50,

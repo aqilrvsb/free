@@ -30,6 +30,9 @@ const defaultTenantForm = {
   pstnGateway: "",
   enableE164: true,
   codecString: "",
+  recordInternalOnAnswer: false,
+  recordOutboundOnAnswer: false,
+  recordInboundOnAnswer: false,
 };
 
 export function DomainManager({ initialTenants }: DomainManagerProps) {
@@ -135,6 +138,9 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
       pstnGateway: tenant.routing?.pstnGateway || "",
       enableE164: tenant.routing?.enableE164 ?? true,
       codecString: tenant.routing?.codecString || "",
+      recordInternalOnAnswer: tenant.routing?.recordInternalOnAnswer ?? false,
+      recordOutboundOnAnswer: tenant.routing?.recordOutboundOnAnswer ?? false,
+      recordInboundOnAnswer: tenant.routing?.recordInboundOnAnswer ?? false,
     });
     setTenantDialogOpen(true);
   };
@@ -162,8 +168,14 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
       pstnGateway?: string;
       enableE164: boolean;
       codecString?: string;
+      recordInternalOnAnswer?: boolean;
+      recordOutboundOnAnswer?: boolean;
+      recordInboundOnAnswer?: boolean;
     } = {
       enableE164: Boolean(tenantForm.enableE164),
+      recordInternalOnAnswer: Boolean(tenantForm.recordInternalOnAnswer),
+      recordOutboundOnAnswer: Boolean(tenantForm.recordOutboundOnAnswer),
+      recordInboundOnAnswer: Boolean(tenantForm.recordInboundOnAnswer),
     };
 
     if (tenantForm.id.trim()) payload.id = tenantForm.id.trim();
@@ -342,6 +354,15 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
                       <Badge variant="secondary">Gateway: {tenant.routing?.pstnGateway || '-'}</Badge>
                       <Badge variant="secondary">E164: {tenant.routing?.enableE164 ? 'Bật' : 'Tắt'}</Badge>
                       <Badge variant="secondary">Codec: {tenant.routing?.codecString || '-'}</Badge>
+                      <Badge variant="secondary">
+                        Ghi âm nội bộ: {tenant.routing?.recordInternalOnAnswer ? 'Sau khi nghe' : 'Ngay khi quay'}
+                      </Badge>
+                      <Badge variant="secondary">
+                        Ghi âm outbound: {tenant.routing?.recordOutboundOnAnswer ? 'Sau khi nghe' : 'Ngay khi quay'}
+                      </Badge>
+                      <Badge variant="secondary">
+                        Ghi âm inbound: {tenant.routing?.recordInboundOnAnswer ? 'Sau khi nghe' : 'Ngay khi quay'}
+                      </Badge>
                     </div>
                   </div>
                 ))}
@@ -459,16 +480,43 @@ export function DomainManager({ initialTenants }: DomainManagerProps) {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <input
-                id="tenant-enable-e164"
-                type="checkbox"
-                className="h-4 w-4"
-                checked={tenantForm.enableE164}
-                onChange={(event) => handleTenantInput("enableE164", event.target.checked)}
-              />
-              <Label htmlFor="tenant-enable-e164" className="cursor-pointer">
+            <div className="space-y-2 text-sm">
+              <Label className="flex items-center gap-2">
+                <input
+                  id="tenant-enable-e164"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={tenantForm.enableE164}
+                  onChange={(event) => handleTenantInput("enableE164", event.target.checked)}
+                />
                 Cho phép quay số E164 qua PSTN
+              </Label>
+              <Label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={tenantForm.recordInternalOnAnswer}
+                  onChange={(event) => handleTenantInput("recordInternalOnAnswer", event.target.checked)}
+                />
+                Ghi âm cuộc gọi nội bộ khi đã nghe máy
+              </Label>
+              <Label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={tenantForm.recordOutboundOnAnswer}
+                  onChange={(event) => handleTenantInput("recordOutboundOnAnswer", event.target.checked)}
+                />
+                Ghi âm outbound qua gateway khi đã nghe máy
+              </Label>
+              <Label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={tenantForm.recordInboundOnAnswer}
+                  onChange={(event) => handleTenantInput("recordInboundOnAnswer", event.target.checked)}
+                />
+                Ghi âm inbound từ gateway khi đã nghe máy
               </Label>
             </div>
             <DialogFooter className="gap-2">

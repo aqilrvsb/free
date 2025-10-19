@@ -198,6 +198,9 @@ export interface RoutingConfig {
   pstnGateway?: string;
   enableE164?: boolean;
   codecString?: string | null;
+  recordInternalOnAnswer?: boolean;
+  recordOutboundOnAnswer?: boolean;
+  recordInboundOnAnswer?: boolean;
   updatedAt?: string;
 }
 

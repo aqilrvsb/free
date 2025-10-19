@@ -25,6 +25,15 @@ export class RoutingConfigEntity {
   @Column({ name: 'codec_string', type: 'varchar', length: 255, nullable: true })
   codecString?: string | null;
 
+  @Column({ name: 'record_internal_on_answer', type: 'tinyint', width: 1, default: () => '0' })
+  recordInternalOnAnswer!: boolean;
+
+  @Column({ name: 'record_outbound_on_answer', type: 'tinyint', width: 1, default: () => '0' })
+  recordOutboundOnAnswer!: boolean;
+
+  @Column({ name: 'record_inbound_on_answer', type: 'tinyint', width: 1, default: () => '0' })
+  recordInboundOnAnswer!: boolean;
+
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 }

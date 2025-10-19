@@ -83,12 +83,15 @@ export class FsService {
       this.routingRepo.findOne({ where: { tenantId } }),
       this.billingRepo.findOne({ where: { tenantId } }),
     ]);
-    const routeCfg = routing || {
-      internalPrefix: '9',
-      voicemailPrefix: '*9',
-      pstnGateway: 'pstn',
-      enableE164: true,
-      codecString: 'PCMU,PCMA,G722,OPUS',
+    const routeCfg = {
+      internalPrefix: routing?.internalPrefix ?? '9',
+      voicemailPrefix: routing?.voicemailPrefix ?? '*9',
+      pstnGateway: routing?.pstnGateway ?? 'pstn',
+      enableE164: routing?.enableE164 ?? true,
+      codecString: routing?.codecString ?? 'PCMU,PCMA,G722,OPUS',
+      recordInternalOnAnswer: Boolean(routing?.recordInternalOnAnswer),
+      recordOutboundOnAnswer: Boolean(routing?.recordOutboundOnAnswer),
+      recordInboundOnAnswer: Boolean(routing?.recordInboundOnAnswer),
     };
 
     const codecString = this.pickCodecString(routeCfg?.codecString);
@@ -111,6 +114,7 @@ export class FsService {
           codecString,
           fallbackDomain,
           baseActions,
+          recordOnAnswer: routeCfg.recordInboundOnAnswer,
         });
       }
 
@@ -134,7 +138,13 @@ export class FsService {
             (action.app === 'set' && action.data?.startsWith('execute_on_answer')),
         );
         if (shouldAutoRecord && !hasCustomRecording) {
-          actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString, customExecuteOnAnswer));
+          const deferCustomRecording =
+            matchedCustom.rule.kind === 'external'
+              ? routeCfg.recordOutboundOnAnswer
+              : routeCfg.recordInternalOnAnswer;
+          actions.push(
+            ...this.buildRecordingActions(dest || tenantId || 'dest', codecString, customExecuteOnAnswer, deferCustomRecording),
+          );
         }
         if (customExecuteOnAnswer.length > 0) {
           actions.push({ app: 'set', data: `execute_on_answer=${customExecuteOnAnswer[0]}` });
@@ -340,7 +350,8 @@ export class FsService {
           });
         }
       }
-      actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString, executeOnAnswer, true));
+      const deferRecording = isGatewayBridge ? routeCfg.recordOutboundOnAnswer : routeCfg.recordInternalOnAnswer;
+      actions.push(...this.buildRecordingActions(dest || tenantId || 'dest', codecString, executeOnAnswer, deferRecording));
       if (executeOnAnswer.length > 0) {
         actions.push({ app: 'set', data: `execute_on_answer=${executeOnAnswer[0]}` });
         for (let index = 1; index < executeOnAnswer.length; index += 1) {
@@ -480,8 +491,9 @@ export class FsService {
     codecString: string;
     fallbackDomain: string;
     baseActions: Array<{ app: string; data?: string }>;
+    recordOnAnswer: boolean;
   }): Promise<string> {
-    const { route, destination, context, codecString, fallbackDomain, baseActions } = params;
+    const { route, destination, context, codecString, fallbackDomain, baseActions, recordOnAnswer } = params;
 
     if (route.destinationType === 'ivr') {
       const menu = await this.ivrMenuRepo.findOne({ where: { id: route.destinationValue }, relations: ['options'] });
@@ -496,7 +508,16 @@ export class FsService {
           ],
         });
       }
-      return this.buildIvrDialplan({ route, menu, destination, context, baseActions, fallbackDomain, codecString });
+      return this.buildIvrDialplan({
+        route,
+        menu,
+        destination,
+        context,
+        baseActions,
+        fallbackDomain,
+        codecString,
+        recordOnAnswer,
+      });
     }
 
     const actions: Array<{ app: string; data?: string }> = [...baseActions];
@@ -505,12 +526,12 @@ export class FsService {
     switch (route.destinationType) {
       case 'extension': {
         const ext = route.destinationValue;
-        actions.push(...this.buildRecordingActions(ext, codecString, executeOnAnswer));
+        actions.push(...this.buildRecordingActions(ext, codecString, executeOnAnswer, recordOnAnswer));
         actions.push({ app: 'bridge', data: `user/${ext}@${fallbackDomain}` });
         break;
       }
       case 'sip_uri': {
-        actions.push(...this.buildRecordingActions(route.destinationValue, codecString, executeOnAnswer));
+        actions.push(...this.buildRecordingActions(route.destinationValue, codecString, executeOnAnswer, recordOnAnswer));
         actions.push({ app: 'bridge', data: route.destinationValue });
         break;
       }
@@ -550,8 +571,9 @@ export class FsService {
     baseActions: Array<{ app: string; data?: string }>;
     fallbackDomain: string;
     codecString: string;
+    recordOnAnswer: boolean;
   }): string {
-    const { route, menu, destination, context, baseActions, fallbackDomain, codecString } = params;
+    const { route, menu, destination, context, baseActions, fallbackDomain, codecString, recordOnAnswer } = params;
     const doc = create({ version: '1.0' });
     const documentNode = doc.ele('document', { type: 'freeswitch/xml' });
     const sectionNode = documentNode.ele('section', { name: 'dialplan' });
@@ -570,7 +592,7 @@ export class FsService {
 
     const executeOnAnswer: string[] = [];
     const recordingTarget = destination || route.destinationValue || route.id;
-    const recordingActions = this.buildRecordingActions(recordingTarget, codecString, executeOnAnswer);
+    const recordingActions = this.buildRecordingActions(recordingTarget, codecString, executeOnAnswer, recordOnAnswer);
     for (const action of recordingActions) {
       if (action.data) {
         mainCondition.ele('action', { application: action.app, data: action.data }).up();

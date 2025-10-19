@@ -598,13 +598,23 @@ export class TenantManagementService {
     return tenant ? this.sanitizeTenant(tenant) : null;
   }
 
-  private async upsertRouting(tenantId: string, dto: Partial<CreateTenantDto>) {
+  private async upsertRouting(
+    tenantId: string,
+    dto: Partial<CreateTenantDto> & {
+      recordInternalOnAnswer?: boolean;
+      recordOutboundOnAnswer?: boolean;
+      recordInboundOnAnswer?: boolean;
+    },
+  ) {
     if (
       dto.internalPrefix === undefined &&
       dto.voicemailPrefix === undefined &&
       dto.pstnGateway === undefined &&
       dto.enableE164 === undefined &&
-      dto.codecString === undefined
+      dto.codecString === undefined &&
+      dto.recordInternalOnAnswer === undefined &&
+      dto.recordOutboundOnAnswer === undefined &&
+      dto.recordInboundOnAnswer === undefined
     ) {
       return;
     }
@@ -617,6 +627,9 @@ export class TenantManagementService {
     if (dto.pstnGateway !== undefined) entity.pstnGateway = dto.pstnGateway;
     if (dto.enableE164 !== undefined) entity.enableE164 = dto.enableE164;
     if (dto.codecString !== undefined) entity.codecString = dto.codecString;
+    if (dto.recordInternalOnAnswer !== undefined) entity.recordInternalOnAnswer = Boolean(dto.recordInternalOnAnswer);
+    if (dto.recordOutboundOnAnswer !== undefined) entity.recordOutboundOnAnswer = Boolean(dto.recordOutboundOnAnswer);
+    if (dto.recordInboundOnAnswer !== undefined) entity.recordInboundOnAnswer = Boolean(dto.recordInboundOnAnswer);
 
     await this.routingRepo.save(entity);
   }
@@ -649,6 +662,9 @@ export class TenantManagementService {
         pstnGateway: routing.pstnGateway,
         enableE164: routing.enableE164,
         codecString: routing.codecString,
+        recordInternalOnAnswer: routing.recordInternalOnAnswer,
+        recordOutboundOnAnswer: routing.recordOutboundOnAnswer,
+        recordInboundOnAnswer: routing.recordInboundOnAnswer,
         updatedAt: routing.updatedAt,
       };
     } else {
