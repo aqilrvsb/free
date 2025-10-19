@@ -287,7 +287,7 @@ async function writeFilterConfig(filter) {
   lines.push('');
 
   const payload = `${lines.join('\n')}\n`;
-  await fs.writeFile(targetPath, payload, 'utf8');
+  await writeAndMirror(targetPath, payload);
 }
 
 function normalizeJailSection(name, settings) {
